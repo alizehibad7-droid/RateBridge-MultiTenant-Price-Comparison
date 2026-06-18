@@ -1,0 +1,109 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    function uid() {
+      return request.auth.uid;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(uid())).data;
+    }
+
+    function userExists() {
+      return exists(/databases/$(database)/documents/users/$(uid()));
+    }
+
+    function isAdmin() {
+      return isAuth() && userExists() && getUserData().role == "admin";
+    }
+
+    function isCEO() {
+      return isAuth() && userExists() && (getUserData().role == "ceo" || getUserData().role == "CEO");
+    }
+
+    // USERS
+    match /users/{userId} {
+      allow read: if isAuth() &&
+        (uid() == userId || isAdmin() || (isCEO() && resource.data.companyId == getUserData().companyId));
+
+      allow create: if isAuth() && (uid() == userId);
+
+      allow update: if isAdmin() || (isCEO() && (resource.data.role == "field_user" || resource.data.role == "fieldUser") && resource.data.companyId == getUserData().companyId);
+
+      allow update: if isAuth() &&
+        uid() == userId &&
+        request.resource.data.role == resource.data.role &&
+        request.resource.data.status == resource.data.status &&
+        request.resource.data.approved == resource.data.approved;
+
+      allow delete: if isAdmin();
+    }
+
+    // COMPANIES
+    match /companies/{companyId} {
+      // Allow read (get + list) so users can find company by inviteCode during registration
+      allow read: if true; 
+      allow write: if isAuth();
+
+      match /{document=**} {
+        allow read, write: if isAuth();
+      }
+    }
+    
+    // Explicitly allow list on companies collection for the invite code query
+    match /companies {
+      allow list: if true;
+    }
+
+    // MATERIALS
+    match /materials/{materialId} {
+      allow read, write: if isAuth();
+    }
+
+    // ORDERS
+    match /orders/{orderId} {
+      allow read, write: if isAuth();
+    }
+
+    // JOIN REQUESTS
+    match /joinRequests/{requestId} {
+      allow read, write: if isAuth();
+    }
+
+    // INVITES
+    match /invitations/{inviteId} {
+      allow read: if true;
+      allow write: if isAuth();
+    }
+    
+    match /invitations {
+      allow list: if true;
+    }
+
+    // CATEGORIES
+    match /categories/{categoryId} {
+      allow read: if isAuth();
+      allow write: if isAdmin();
+    }
+
+    // NOTIFICATIONS
+    match /notifications/{notificationId} {
+      allow read, write: if isAuth();
+    }
+
+    // CHATS
+    match /chats/{chatId} {
+      allow read, write: if isAuth();
+    }
+
+    // SUBSCRIPTIONS
+    match /subscriptions/{subId} {
+      allow read, write: if isAuth();
+    }
+  }
+}
