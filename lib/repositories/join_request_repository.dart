@@ -7,10 +7,9 @@ import '../constants/app_constants.dart';
 import '../utils/app_exception.dart';
 
 class JoinRequestRepository {
-  final FirestoreService _firestoreService;
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  JoinRequestRepository(this._firestoreService);
+  JoinRequestRepository(FirestoreService _);
 
   Future<String> createJoinRequest(
     String supplierUid,
@@ -53,7 +52,7 @@ class JoinRequestRepository {
           .limit(AppConstants.paginationLimit)
           .snapshots()
           .map((s) => s.docs.map((d) =>
-            JoinRequestModel.fromMap(d.id, d.data() as Map<String, dynamic>)).toList());
+            JoinRequestModel.fromMap(d.id, d.data())).toList());
     } on FirebaseException catch (e) {
       throw AppException('Failed to watch pending requests: ${e.message}');
     }

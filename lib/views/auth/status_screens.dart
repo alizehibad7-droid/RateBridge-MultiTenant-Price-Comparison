@@ -1,11 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:go_router/go_router.dart';
 import '../../viewmodels/auth_viewmodel.dart';
 import '../../constants/app_colors.dart';
 
 class PendingApprovalView extends StatelessWidget {
-  const PendingApprovalView({super.key});
+  final String title;
+  final String message;
+
+  const PendingApprovalView({
+    super.key,
+    this.title = 'Account Pending Approval',
+    this.message =
+        'Your account is pending admin approval. Please wait until an administrator reviews your request.',
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -17,16 +24,16 @@ class PendingApprovalView extends StatelessWidget {
           children: [
             const Icon(Icons.hourglass_empty_rounded, size: 80, color: AppColors.warning),
             const SizedBox(height: 24),
-            const Text(
-              "Account Pending Approval",
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            Text(
+              title,
+              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),
-            const Text(
-              "Your account is pending admin approval. Please wait until an administrator reviews your request.",
+            Text(
+              message,
               textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 16),
+              style: const TextStyle(color: AppColors.textSecondary, fontSize: 16),
             ),
             const SizedBox(height: 40),
             SizedBox(

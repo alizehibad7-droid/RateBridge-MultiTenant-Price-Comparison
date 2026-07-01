@@ -8,10 +8,9 @@ import '../constants/app_constants.dart';
 import '../utils/app_exception.dart';
 
 class InvitationRepository {
-  final FirestoreService _firestoreService;
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  InvitationRepository(this._firestoreService);
+  InvitationRepository(FirestoreService _);
 
   /// Generates a random alphanumeric code: RB-XXXXXX
   String _generateShortCode() {

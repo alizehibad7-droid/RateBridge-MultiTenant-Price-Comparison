@@ -150,7 +150,7 @@ class _AdminSubscriptionViewState extends State<AdminSubscriptionView> {
             child: _loadingCompanies
                 ? const Center(child: CircularProgressIndicator())
                 : _filtered.isEmpty
-                    ? const Center(
+                    ? Center(
                         child: Text('No companies found',
                             style: AppTextStyles.bodyMuted))
                     : RefreshIndicator(
@@ -361,7 +361,7 @@ class _AdminSubscriptionViewState extends State<AdminSubscriptionView> {
                 );
               }
             },
-            child: const Text('Revoke', style: AppTextStyles.button),
+            child: Text('Revoke', style: AppTextStyles.button),
           ),
         ],
       ),

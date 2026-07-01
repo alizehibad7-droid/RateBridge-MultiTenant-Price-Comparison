@@ -1,96 +1,150 @@
-import 'dart:io';
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+
 import '../models/chat_message_model.dart';
+import '../models/chat_thread_model.dart';
+import '../repositories/chat_repository.dart';
+import '../utils/chat_image_utils.dart';
 
+/// Real-time chat thread messaging backed by Firestore.
 class ChatViewModel extends ChangeNotifier {
-  List<ChatMessageModel> _messages = [];
-  bool _isSending = false;
-  bool _isLoading = false;
-  bool _isChatLocked = false;
+  final ChatRepository _chatRepo;
 
-  ChatViewModel() {
-    _loadMockChats();
-  }
+  StreamSubscription<List<ChatMessageModel>>? _messagesSubscription;
+  StreamSubscription<List<ChatThreadModel>>? _threadsSubscription;
+  String? _activeChatId;
+
+  List<ChatMessageModel> _messages = [];
+  List<ChatThreadModel> _threads = [];
+  bool _isLoading = false;
+  bool _isLoadingMessages = false;
+  bool _isSending = false;
+  String? _errorMessage;
+
+  ChatViewModel(this._chatRepo);
 
   List<ChatMessageModel> get messages => _messages;
-  bool get isSending => _isSending;
+  List<ChatThreadModel> get threads => _threads;
   bool get isLoading => _isLoading;
-  bool get isChatLocked => _isChatLocked;
+  bool get isLoadingMessages => _isLoadingMessages;
+  bool get isSending => _isSending;
+  bool get isChatLocked => false;
+  String? get errorMessage => _errorMessage;
 
-  void _loadMockChats() {
-    _messages = [
-      ChatMessageModel(
-        id: 'MSG-001',
-        senderId: 'FU-51',
-        senderName: 'Raza Jamil',
-        receiverId: 'SU-402',
-        content: 'Salam. Can you confirm if you have 15 Tons of ASTM A615 Grade 60 Rebar available in Lahore warehouse for immediate transit?',
-        timestamp: DateTime.now().subtract(const Duration(hours: 4)),
-      ),
-      ChatMessageModel(
-        id: 'MSG-002',
-        senderId: 'SU-402',
-        senderName: 'Amreli Steel Mill Distributor',
-        receiverId: 'FU-51',
-        content: 'Walaikum Assalam. Yes, the stock is active and fully approved by QA lab testings. Sourcing lead time is 3 days max.',
-        timestamp: DateTime.now().subtract(const Duration(hours: 3)),
-      ),
-    ];
-    notifyListeners();
-  }
+  int get unreadMessageCount =>
+      _threads.fold(0, (total, thread) => total + thread.unreadSupplier);
 
-  Future<void> loadSupplierChats(String supplierUid) async {
+  void watchSupplierThreads(String supplierId) {
+    _threadsSubscription?.cancel();
     _isLoading = true;
+    _errorMessage = null;
     notifyListeners();
-    // Logic to load chat threads for a supplier
-    await Future.delayed(const Duration(milliseconds: 500));
-    _isLoading = false;
-    notifyListeners();
-  }
 
-  Future<void> openChatThread(String orderId, String currentUserUid) async {
-    _isLoading = true;
-    notifyListeners();
-    // Logic to reset unread count and load thread
-    await Future.delayed(const Duration(milliseconds: 500));
-    _isLoading = false;
-    notifyListeners();
-  }
-
-  Future<void> sendMessage(String orderId, String text) async {
-    // Implementation for sending text message
-    final msg = ChatMessageModel(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      senderId: 'me', // Placeholder
-      senderName: 'Me',
-      receiverId: 'other',
-      content: text,
-      timestamp: DateTime.now(),
+    _threadsSubscription = _chatRepo.watchSupplierThreads(supplierId).listen(
+      (data) {
+        _threads = data;
+        _isLoading = false;
+        notifyListeners();
+      },
+      onError: (e) {
+        _errorMessage = e.toString();
+        _isLoading = false;
+        notifyListeners();
+      },
     );
-    _messages.add(msg);
+  }
+
+  Future<void> openChatThread(String chatId, String currentUserUid) async {
+    await startListening(chatId, currentUserId: currentUserUid);
+  }
+
+  /// Subscribes to `/chats/{chatId}/messages` ordered by timestamp ascending.
+  Future<void> startListening(String chatId, {required String currentUserId}) async {
+    if (_activeChatId == chatId && _messagesSubscription != null) return;
+
+    _messagesSubscription?.cancel();
+    _activeChatId = chatId;
+    _messages = [];
+    _isLoadingMessages = true;
+    _errorMessage = null;
     notifyListeners();
-  }
 
-  Future<void> sendImage(String orderId, File imageFile) async {
-    // Implementation for sending image message
-  }
+    await markRead(chatId, currentUserId);
 
-  Future<void> dispatchMessage(String text, String senderId, String senderName, String receiverId) async {
-    final newMessage = ChatMessageModel(
-      id: 'MSG-${DateTime.now().millisecondsSinceEpoch}',
-      senderId: senderId,
-      senderName: senderName,
-      receiverId: receiverId,
-      content: text,
-      timestamp: DateTime.now(),
+    _messagesSubscription = _chatRepo.watchThreadMessages(chatId).listen(
+      (data) {
+        _messages = data;
+        _isLoadingMessages = false;
+        notifyListeners();
+      },
+      onError: (e) {
+        _errorMessage = e.toString();
+        _isLoadingMessages = false;
+        notifyListeners();
+      },
     );
+  }
 
-    _messages = [..._messages, newMessage];
+  Future<bool> sendMessage(
+    String chatId,
+    String text, [
+    String senderId = '',
+    String senderName = '',
+    String receiverId = '',
+    String? companyId,
+    String? attachmentUrl,
+  ]) async {
+    final trimmed = text.trim();
+    final hasImage = attachmentUrl != null && attachmentUrl.isNotEmpty;
+    if (trimmed.isEmpty && !hasImage) return false;
+
     _isSending = true;
+    _errorMessage = null;
     notifyListeners();
-    
-    await Future.delayed(const Duration(milliseconds: 300));
-    _isSending = false;
-    notifyListeners();
+
+    try {
+      final message = ChatMessageModel(
+        id: '',
+        chatId: chatId,
+        companyId: companyId,
+        senderId: senderId,
+        senderName: senderName,
+        receiverId: receiverId,
+        content: trimmed,
+        timestamp: DateTime.now(),
+        attachmentUrl: attachmentUrl,
+        isRead: false,
+      );
+      await _chatRepo.sendChatMessage(message);
+      return true;
+    } catch (e) {
+      _errorMessage = e.toString();
+      return false;
+    } finally {
+      _isSending = false;
+      notifyListeners();
+    }
+  }
+
+  static String threadPreview({required String text, bool hasImage = false}) =>
+      ChatImageUtils.threadPreview(text: text, hasImage: hasImage);
+
+  Future<void> markRead(String chatId, String currentUserId) async {
+    await _chatRepo.markMessagesRead(chatId, currentUserId);
+  }
+
+  void stopListening() {
+    _messagesSubscription?.cancel();
+    _messagesSubscription = null;
+    _activeChatId = null;
+    _messages = [];
+  }
+
+  @override
+  void dispose() {
+    _messagesSubscription?.cancel();
+    _threadsSubscription?.cancel();
+    super.dispose();
   }
 }

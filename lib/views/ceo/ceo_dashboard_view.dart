@@ -228,7 +228,7 @@ class _CeoDashboardViewState extends State<CeoDashboardView> {
                       const SizedBox(height: 24),
 
                       // Quick Actions
-                      const Text('Quick Actions', style: AppTextStyles.h3),
+                      Text('Quick Actions', style: AppTextStyles.h3),
                       const SizedBox(height: 12),
                       GridView.count(
                         crossAxisCount: 2,
@@ -271,15 +271,15 @@ class _CeoDashboardViewState extends State<CeoDashboardView> {
 
                       // Recent orders
                       const SizedBox(height: 24),
-                      const Text('Recent Orders', style: AppTextStyles.h3),
+                      Text('Recent Orders', style: AppTextStyles.h3),
                       const SizedBox(height: 8),
                       StreamBuilder<List<OrderModel>>(
                         stream: vm.watchCompanyOrders(companyId, 'All'),
                         builder: (context, snap) {
                           final orders = (snap.data ?? []).take(5).toList();
                           if (orders.isEmpty) {
-                            return const Padding(
-                              padding: EdgeInsets.symmetric(vertical: 16),
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 16),
                               child: Text('No orders yet',
                                   style: AppTextStyles.bodyMuted),
                             );

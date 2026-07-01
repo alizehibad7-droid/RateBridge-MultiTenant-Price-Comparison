@@ -5,7 +5,12 @@ admin.initializeApp();
 const { onOrderConfirmed } = require('./commission');
 const { stripeWebhook, createCheckoutSession, createPortalSession } = require('./stripe_webhook');
 const { onInviteAccepted } = require('./invite_system');
-const { onMessageSent, onNewCEORegistration, onOrderStatusChange } = require('./notifications');
+const {
+  onMessageSent,
+  onNewCEORegistration,
+  onOrderStatusChange,
+  onNotificationCreated,
+} = require('./notifications');
 
 exports.onOrderConfirmed = onOrderConfirmed;
 exports.stripeWebhook = stripeWebhook;
@@ -15,3 +20,4 @@ exports.onInviteAccepted = onInviteAccepted;
 exports.onMessageSent = onMessageSent;
 exports.onNewCEORegistration = onNewCEORegistration;
 exports.onOrderStatusChange = onOrderStatusChange;
+exports.onNotificationCreated = onNotificationCreated;

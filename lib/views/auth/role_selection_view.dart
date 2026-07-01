@@ -134,7 +134,7 @@ class _RoleSelectionViewState extends State<RoleSelectionView>
                     const SizedBox(height: 10),
                     FadeTransition(
                       opacity: _fade(0),
-                      child: const Text(
+                      child: Text(
                         'Select the profile that best describes your daily '
                         'activities to personalize your dashboard experience.',
                         textAlign: TextAlign.center,
@@ -162,7 +162,7 @@ class _RoleSelectionViewState extends State<RoleSelectionView>
                       opacity: _fade(_roles.length + 1),
                       child: Column(
                         children: [
-                          const Text(
+                          Text(
                             'Not sure which one to pick?',
                             style: AppTextStyles.bodyMuted,
                           ),

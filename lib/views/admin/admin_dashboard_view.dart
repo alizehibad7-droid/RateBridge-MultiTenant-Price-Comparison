@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 import '../../constants/app_colors.dart';
 import '../../constants/route_names.dart';
 import '../../viewmodels/auth_viewmodel.dart';
 import '../../viewmodels/admin_viewmodel.dart';
+import '../../viewmodels/notification_viewmodel.dart';
+import '../../widgets/notification_badge_icon.dart';
 
 import 'admin_categories_view.dart';
-import 'admin_payment_queue_view.dart';
+import 'admin_finance_view.dart';
 import 'admin_ceo_management_view.dart';
 import 'admin_supplier_management_view.dart';
 
@@ -36,7 +38,7 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
       _AdminHomeOverview(onAction: _onTabTapped),
       const AdminSupplierManagementView(),
       const _PlaceholderView(title: "Global Orders Monitor"),
-      const AdminPaymentQueueView(),
+      const AdminFinanceView(),
       const AdminCeoManagementView(),
       const _AdminProfileView(),
     ];
@@ -45,6 +47,7 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
   @override
   Widget build(BuildContext context) {
     final isLoading = context.watch<AdminViewModel>().isLoading;
+    final notifVM = context.watch<NotificationViewModel>();
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -60,9 +63,10 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
           child: LinearProgressIndicator(minHeight: 2, backgroundColor: Colors.transparent, valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary)),
         ) : null,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.notifications_none_rounded, color: AppColors.textPrimary),
-            onPressed: () {},
+          NotificationBadgeIcon(
+            unreadCount: notifVM.unreadCount,
+            iconColor: AppColors.textPrimary,
+            onPressed: () => context.push(RouteNames.adminNotifications),
           ),
           const SizedBox(width: 8),
         ],
@@ -182,7 +186,7 @@ class _AdminHomeOverview extends StatelessWidget {
                     _buildActionCard("Review\nCEOs", Icons.person_add_alt_1_outlined, () => onAction(4)),
                     _buildActionCard("Review\nSuppliers", Icons.store_outlined, () => onAction(1)),
                     _buildActionCard("Global\nOrders", Icons.monitor_heart_outlined, () => onAction(2)),
-                    _buildActionCard("Finance\nQueue", Icons.account_balance_wallet_outlined, () => onAction(3)),
+                    _buildActionCard("Commission\nLedger", Icons.receipt_long_outlined, () => onAction(3)),
                     _buildActionCard("Admin\nProfile", Icons.person_outline, () => onAction(5)),
                     _buildActionCard("Manage\nTaxonomy", Icons.category_outlined, () {
                       Navigator.push(context, MaterialPageRoute(builder: (context) => const AdminCategoriesView()));

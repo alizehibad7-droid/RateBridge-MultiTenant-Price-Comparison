@@ -4,15 +4,19 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/user_model.dart';
 import '../models/order_model.dart';
-import '../models/join_request_model.dart';
+import '../models/partnership_request_model.dart';
 import '../models/company_model.dart';
 import '../models/supplier_model.dart';
 import '../repositories/order_repository.dart';
-import '../repositories/join_request_repository.dart';
+import '../repositories/partnership_request_repository.dart';
 import '../repositories/user_repository.dart';
 import '../repositories/company_repository.dart';
 import '../repositories/invitation_repository.dart';
 import '../services/cloud_function_service.dart';
+import '../services/notification_service.dart';
+import '../constants/app_constants.dart';
+import '../constants/firestore_paths.dart';
+import '../utils/app_exception.dart';
 import '../utils/invite_code_generator.dart';
 
 class CeoViewModel extends ChangeNotifier {
@@ -20,11 +24,12 @@ class CeoViewModel extends ChangeNotifier {
   final String _name;
 
   final FirebaseFirestore _db = FirebaseFirestore.instance;
-  final OrderRepository _orderRepo;
-  final JoinRequestRepository _joinRepo;
+  final PartnershipRequestRepository _partnershipRepo;
   final UserRepository _userRepo;
   final CompanyRepository _companyRepo;
   final InvitationRepository _invitationRepo;
+  final OrderRepository _orderRepo;
+  final NotificationService _notificationService;
 
   bool _isLoading = false;
   String? _errorMessage;
@@ -32,14 +37,26 @@ class CeoViewModel extends ChangeNotifier {
   CompanyModel? _company;
   List<SupplierModel> _marketplaceSuppliers = [];
 
+  String? _partnershipWatchCompanyId;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>?
+      _partnershipRequestsSub;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>?
+      _linkedSuppliersSub;
+  final Map<String, PartnershipRequestModel> _latestPartnershipBySupplierId = {};
+  final Set<String> _activePartnerSupplierIds = {};
+  List<PartnershipRequestModel> _receivedPartnershipRequests = [];
+  List<PartnershipRequestModel> _sentPartnershipRequests = [];
+  bool _partnershipRequestsReady = false;
+
   CeoViewModel(
       this._uid,
       this._name,
       this._orderRepo,
-      this._joinRepo,
+      this._partnershipRepo,
       this._userRepo,
       this._companyRepo,
-      this._invitationRepo, [
+      this._invitationRepo,
+      this._notificationService, [
         CloudFunctionService? cloudFunctionService
       ]) {
     if (_uid != null) {
@@ -54,6 +71,15 @@ class CeoViewModel extends ChangeNotifier {
   String? get successMessage => _successMessage;
   CompanyModel? get company => _company;
   List<SupplierModel> get marketplaceSuppliers => _marketplaceSuppliers;
+  bool get partnershipRequestsReady => _partnershipRequestsReady;
+  List<PartnershipRequestModel> get receivedPartnershipRequests =>
+      List<PartnershipRequestModel>.unmodifiable(_receivedPartnershipRequests);
+  List<PartnershipRequestModel> get sentPartnershipRequests =>
+      List<PartnershipRequestModel>.unmodifiable(_sentPartnershipRequests);
+  List<PartnershipRequestModel> get pendingReceivedPartnershipRequests =>
+      _receivedPartnershipRequests
+          .where((r) => r.status == 'pending')
+          .toList(growable: false);
 
   Future<void> _loadCompanyData() async {
     final uid = _uid;
@@ -92,9 +118,13 @@ class CeoViewModel extends ChangeNotifier {
 
       if (companyDoc != null) {
         _company = companyDoc;
-        if (_company!.inviteCode == null ||
-            _company!.inviteCode!.isEmpty ||
-            _company!.inviteCode == 'RB-XXXXXX') {
+        ensurePartnershipStatusWatch(companyDoc.id);
+        final companyActive =
+            _company!.status.toLowerCase() == 'active';
+        if (companyActive &&
+            (_company!.inviteCode == null ||
+                _company!.inviteCode!.isEmpty ||
+                _company!.inviteCode == 'RB-XXXXXX')) {
           await regenerateInviteCode();
         }
       } else {
@@ -155,6 +185,134 @@ class CeoViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  @override
+  void dispose() {
+    _stopPartnershipStatusWatch();
+    super.dispose();
+  }
+
+  void ensurePartnershipStatusWatch(String companyId) {
+    if (companyId.isEmpty) return;
+    if (_partnershipWatchCompanyId == companyId &&
+        _partnershipRequestsSub != null) {
+      return;
+    }
+
+    _stopPartnershipStatusWatch();
+    _partnershipWatchCompanyId = companyId;
+
+    _partnershipRequestsSub = _db
+        .collection(FirestorePaths.partnershipRequestsCol)
+        .where('companyId', isEqualTo: companyId)
+        .snapshots()
+        .listen(
+      (snap) {
+        final all = snap.docs
+            .map((doc) => PartnershipRequestModel.fromMap(doc.id, doc.data()))
+            .toList();
+
+        _latestPartnershipBySupplierId.clear();
+        final grouped = <String, List<PartnershipRequestModel>>{};
+        for (final req in all) {
+          grouped.putIfAbsent(req.supplierId, () => []).add(req);
+        }
+        for (final entry in grouped.entries) {
+          entry.value.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          _latestPartnershipBySupplierId[entry.key] = entry.value.first;
+        }
+
+        _receivedPartnershipRequests = _sortPartnershipRequestsNewest(
+          all.where((r) => r.initiatedBy == 'supplier'),
+        );
+        _sentPartnershipRequests = _sortPartnershipRequestsNewest(
+          all.where((r) => r.initiatedBy == 'ceo'),
+        );
+        _partnershipRequestsReady = true;
+        notifyListeners();
+      },
+      onError: (_) {
+        _partnershipRequestsReady = true;
+        _errorMessage = 'Failed to load partnership requests.';
+        notifyListeners();
+      },
+    );
+
+    _linkedSuppliersSub = _db
+        .collection(FirestorePaths.companiesCol)
+        .doc(companyId)
+        .collection('suppliers')
+        .snapshots()
+        .listen(
+      (snap) {
+        _activePartnerSupplierIds
+          ..clear()
+          ..addAll(
+            snap.docs.where((doc) {
+              final status =
+                  (doc.data()['status'] as String?)?.toLowerCase() ?? 'active';
+              return status == 'active' || status == 'approved';
+            }).map((doc) => doc.id),
+          );
+        notifyListeners();
+      },
+      onError: (_) {
+        notifyListeners();
+      },
+    );
+  }
+
+  void _stopPartnershipStatusWatch() {
+    _partnershipRequestsSub?.cancel();
+    _linkedSuppliersSub?.cancel();
+    _partnershipRequestsSub = null;
+    _linkedSuppliersSub = null;
+    _partnershipWatchCompanyId = null;
+    _latestPartnershipBySupplierId.clear();
+    _activePartnerSupplierIds.clear();
+    _receivedPartnershipRequests = [];
+    _sentPartnershipRequests = [];
+    _partnershipRequestsReady = false;
+  }
+
+  List<PartnershipRequestModel> _sortPartnershipRequestsNewest(
+    Iterable<PartnershipRequestModel> requests,
+  ) {
+    return List<PartnershipRequestModel>.from(requests)
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  }
+
+  String? linkRejectionReasonFor(String supplierId) {
+    if (supplierId.isEmpty) return null;
+    final request = _latestPartnershipBySupplierId[supplierId];
+    if (request?.status == 'rejected') {
+      return request!.rejectionReason;
+    }
+    return null;
+  }
+
+  String linkStatusFor(String supplierId) {
+    if (supplierId.isEmpty) return 'Not Invited';
+    if (_activePartnerSupplierIds.contains(supplierId)) {
+      return 'Already Partners';
+    }
+
+    final request = _latestPartnershipBySupplierId[supplierId];
+    if (request == null) return 'Not Invited';
+
+    switch (request.status) {
+      case 'pending':
+        return 'Request Pending';
+      case 'accepted':
+        return 'Already Partners';
+      case 'rejected':
+        return 'Request Rejected';
+      case 'removed':
+        return 'Not Invited';
+      default:
+        return 'Not Invited';
+    }
+  }
+
   // --- Real-time Streams ---
 
   Stream<UserModel?> watchCeoStatus() {
@@ -172,7 +330,12 @@ class CeoViewModel extends ChangeNotifier {
 
       final suppliers = await _db.collection('companies').doc(companyId).collection('suppliers').where('status', isEqualTo: 'active').get();
       final team = await _db.collection('users').where('companyId', isEqualTo: companyId).where('role', isEqualTo: 'field_user').get();
-      final joinRequests = await _db.collection('joinRequests').where('companyId', isEqualTo: companyId).where('status', isEqualTo: 'pending').get();
+      final partnershipPending = await _db
+          .collection('partnershipRequests')
+          .where('companyId', isEqualTo: companyId)
+          .where('status', isEqualTo: 'pending')
+          .where('initiatedBy', isEqualTo: 'supplier')
+          .get();
 
       final pendingApprovals = await _db.collection('orders')
           .where('companyId', isEqualTo: companyId)
@@ -183,7 +346,7 @@ class CeoViewModel extends ChangeNotifier {
       final plan = sub.exists ? (sub.data()?['plan'] ?? 'Free') : 'Free';
       final expiresAt = sub.exists ? (sub.data()?['expiresAt'] as Timestamp?)?.toDate() : null;
 
-      final companyData = doc.data() as Map<String, dynamic>?;
+      final companyData = doc.data();
 
       return {
         'companyName': companyData?['name'] ?? 'Workspace',
@@ -191,7 +354,7 @@ class CeoViewModel extends ChangeNotifier {
         'plan': plan,
         'activeSupplierCount': suppliers.docs.length,
         'fieldUserCount': team.docs.length,
-        'pendingJoinCount': joinRequests.docs.length,
+        'pendingJoinCount': partnershipPending.docs.length,
         'pendingOrderApprovals': pendingApprovals.docs.length,
         'expiresAt': expiresAt,
       };
@@ -199,37 +362,172 @@ class CeoViewModel extends ChangeNotifier {
   }
 
   Stream<List<OrderModel>> watchCompanyOrders(String companyId, String status) {
-    Query query = _db.collection('orders').where('companyId', isEqualTo: companyId);
-    if (status != 'All') {
-      query = query.where('status', isEqualTo: status.toLowerCase().replaceAll(' ', '_'));
+    if (companyId.isEmpty) {
+      return Stream.value(const []);
     }
-    query = query.orderBy('createdAt', descending: true);
 
-    return query.snapshots().map((snap) => snap.docs.map((doc) =>
-        OrderModel.fromMap(doc.id, doc.data() as Map<String, dynamic>)).toList());
+    Query<Map<String, dynamic>> buildQuery({required bool withOrderBy}) {
+      Query<Map<String, dynamic>> query =
+          _db.collection('orders').where('companyId', isEqualTo: companyId);
+      if (status != 'All') {
+        query = query.where('status', isEqualTo: _orderStatusForTab(status));
+      }
+      if (withOrderBy) {
+        query = query.orderBy('createdAt', descending: true);
+      }
+      return query;
+    }
+
+    return buildQuery(withOrderBy: true).snapshots().transform(
+      StreamTransformer.fromHandlers(
+        handleData: (snap, sink) {
+          final orders = snap.docs
+              .map((doc) => OrderModel.fromMap(doc.id, doc.data()))
+              .toList()
+            ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          sink.add(orders);
+        },
+        handleError: (error, stackTrace, sink) async {
+          if (error is FirebaseException &&
+              error.code == 'failed-precondition') {
+            try {
+              final snap = await buildQuery(withOrderBy: false).get();
+              sink.add(
+                snap.docs
+                    .map((doc) => OrderModel.fromMap(doc.id, doc.data()))
+                    .toList()
+                  ..sort((a, b) => b.createdAt.compareTo(a.createdAt)),
+              );
+              return;
+            } catch (_) {}
+          }
+          sink.addError(error, stackTrace);
+        },
+      ),
+    );
+  }
+
+  String _orderStatusForTab(String tabLabel) {
+    switch (tabLabel) {
+      case 'Awaiting Approval':
+        return AppConstants.statusPendingApproval;
+      case 'Pending':
+        return AppConstants.statusPending;
+      case 'In Progress':
+        return AppConstants.statusInProgress;
+      default:
+        return tabLabel.toLowerCase().replaceAll(' ', '_');
+    }
+  }
+
+  Future<void> approveOrder(OrderModel order) async {
+    _errorMessage = null;
+    _successMessage = null;
+    notifyListeners();
+    try {
+      if (order.status != AppConstants.statusPendingApproval) {
+        throw Exception('Only orders awaiting approval can be approved.');
+      }
+      await _orderRepo.updateStatus(
+        order.orderId,
+        order.companyId,
+        AppConstants.statusPending,
+      );
+      await _notificationService.notifyNewOrder(
+        supplierId: order.supplierId,
+        orderId: order.orderId,
+        companyId: order.companyId,
+        materialName: order.materialName,
+        fieldUserName: order.fieldUserName,
+      );
+      _successMessage = 'Order approved and sent to supplier.';
+    } catch (e) {
+      _errorMessage = 'Failed to approve order: $e';
+    }
+    notifyListeners();
+  }
+
+  Future<void> rejectOrder(OrderModel order, {String reason = ''}) async {
+    _errorMessage = null;
+    _successMessage = null;
+    notifyListeners();
+    try {
+      if (order.status != AppConstants.statusPendingApproval) {
+        throw Exception('Only orders awaiting approval can be rejected.');
+      }
+      await _orderRepo.updateStatus(
+        order.orderId,
+        order.companyId,
+        AppConstants.statusRejected,
+        reason: reason.trim().isEmpty ? 'Rejected by CEO' : reason.trim(),
+      );
+      await _notificationService.notifyOrderRejected(
+        fieldUserUid: order.fieldUserUid,
+        orderId: order.orderId,
+        companyId: order.companyId,
+        materialName: order.materialName,
+        supplierName: order.supplierName,
+        reason: reason.trim().isEmpty ? 'Rejected by company approval' : reason.trim(),
+      );
+      _successMessage = 'Order rejected.';
+    } catch (e) {
+      _errorMessage = 'Failed to reject order: $e';
+    }
+    notifyListeners();
   }
 
   // --- Marketplace Implementation ---
 
-  final List<String> _marketplaceStatuses = ['Active', 'active', 'pending'];
+  final List<String> _marketplaceStatuses = ['Active', 'active'];
+
+  bool _isActiveMarketplaceSupplier(String status) {
+    final normalized = status.trim().toLowerCase();
+    return normalized == 'active';
+  }
+
+  List<SupplierModel> _suppliersFromDocs(Iterable<QueryDocumentSnapshot> docs) {
+    final suppliers = <SupplierModel>[];
+    for (final doc in docs) {
+      try {
+        final raw = doc.data();
+        if (raw is! Map) continue;
+        final data = Map<String, dynamic>.from(raw);
+        data['id'] = doc.id;
+        final supplier = SupplierModel.fromMap(data);
+        if (_isActiveMarketplaceSupplier(supplier.status)) {
+          suppliers.add(supplier);
+        }
+      } catch (_) {}
+    }
+    return suppliers;
+  }
+
+  Future<List<SupplierModel>> _fetchMarketplaceSuppliers() async {
+    try {
+      final snap = await _db
+          .collection('suppliers')
+          .where('status', whereIn: _marketplaceStatuses)
+          .get();
+      return _suppliersFromDocs(snap.docs);
+    } catch (_) {
+      final snap = await _db.collection('suppliers').get();
+      return _suppliersFromDocs(snap.docs);
+    }
+  }
 
   Future<void> loadMarketplace() async {
+    final companyId = _company?.id;
+    if (companyId != null && companyId.isNotEmpty) {
+      ensurePartnershipStatusWatch(companyId);
+    }
+
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
     try {
-      final snap = await _db.collection('suppliers')
-          .where('status', whereIn: _marketplaceStatuses)
-          .get();
-      _marketplaceSuppliers = snap.docs
-          .map((doc) {
-            final data = doc.data() as Map<String, dynamic>;
-            data['id'] = doc.id;
-            return SupplierModel.fromMap(data);
-          })
-          .toList();
+      _marketplaceSuppliers = await _fetchMarketplaceSuppliers();
     } catch (e) {
-      _errorMessage = "Failed to load marketplace: $e";
+      _errorMessage = 'Failed to load marketplace. Please try again.';
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -257,15 +555,13 @@ class CeoViewModel extends ChangeNotifier {
       }
 
       final snap = await query.get();
-      _marketplaceSuppliers = snap.docs
-          .map((doc) {
-            final data = doc.data() as Map<String, dynamic>;
-            data['id'] = doc.id;
-            return SupplierModel.fromMap(data);
-          })
-          .toList();
-    } catch (e) {
-      _errorMessage = "Search failed. Note: Searching by name is case-sensitive.";
+      _marketplaceSuppliers = _suppliersFromDocs(snap.docs);
+    } catch (_) {
+      try {
+        _marketplaceSuppliers = await _fetchMarketplaceSuppliers();
+      } catch (_) {
+        _errorMessage = 'Search failed. Note: Searching by name is case-sensitive.';
+      }
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -289,15 +585,25 @@ class CeoViewModel extends ChangeNotifier {
       }
 
       final snap = await query.get();
-      _marketplaceSuppliers = snap.docs
-          .map((doc) {
-            final data = doc.data() as Map<String, dynamic>;
-            data['id'] = doc.id;
-            return SupplierModel.fromMap(data);
-          })
-          .toList();
-    } catch (e) {
-      _errorMessage = "Failed to apply filters: $e";
+      _marketplaceSuppliers = _suppliersFromDocs(snap.docs);
+    } catch (_) {
+      try {
+        final all = await _fetchMarketplaceSuppliers();
+        _marketplaceSuppliers = all.where((supplier) {
+          if (city != null && city != 'All' && supplier.city != city) {
+            return false;
+          }
+          if (category != null &&
+              category != 'All' &&
+              supplier.materialType != category) {
+            return false;
+          }
+          if (verifiedOnly == true && !supplier.isVerified) return false;
+          return true;
+        }).toList();
+      } catch (_) {
+        _errorMessage = 'Failed to apply filters. Please try again.';
+      }
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -313,92 +619,130 @@ class CeoViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  Stream<String> watchLinkStatus(String companyId, String supplierId) {
-    if (companyId.isEmpty || supplierId.isEmpty) return Stream.value('Not Invited');
-
-    return _db.collection('joinRequests')
-        .where('companyId', isEqualTo: companyId)
-        .where('supplierUid', isEqualTo: supplierId)
-        .orderBy('createdAt', descending: true)
-        .limit(1)
-        .snapshots()
-        .map((snap) {
-      if (snap.docs.isEmpty) return 'Not Invited';
-      final data = snap.docs.first.data() as Map<String, dynamic>;
-      final status = data['status'] as String? ?? 'pending';
-      if (status == 'accepted') return 'Linked';
-      if (status == 'rejected') return 'Rejected';
-      return 'Invited';
-    });
-  }
-
-  Future<void> sendInvitation(String supplierId) async {
+  Future<void> sendPartnershipRequest(
+    String supplierId, {
+    String? message,
+  }) async {
     final company = _company;
     if (company == null || supplierId.isEmpty) return;
     try {
-      final supplierDoc = await _db.collection('suppliers').doc(supplierId).get();
+      final supplierDoc =
+          await _db.collection('suppliers').doc(supplierId).get();
       if (!supplierDoc.exists) return;
       final supplierData = supplierDoc.data()!;
 
-      await _joinRepo.createJoinRequest(
-          supplierId,
-          company.id,
-          supplierData['name'] ?? supplierData['businessName'] ?? '',
-          supplierData['city'] ?? '',
-          [], 
-          (supplierData['rating'] as num? ?? 0.0).toDouble(),
-          "Company ${company.name} wants to link with you.",
-          initiatedBy: 'company'
+      final requestId = await _partnershipRepo.createRequest(
+        companyId: company.id,
+        companyName: company.name,
+        supplierId: supplierId,
+        supplierName:
+            supplierData['name'] ?? supplierData['businessName'] ?? 'Supplier',
+        initiatedBy: 'ceo',
+        message: message,
+        supplierEmail: supplierData['email'] as String?,
+        supplierCity: supplierData['city'] as String?,
+        supplierCategories: supplierData['categories'] is List
+            ? List<String>.from(supplierData['categories'])
+            : const [],
+        supplierRating: (supplierData['rating'] as num? ?? 0).toDouble(),
       );
 
-      _successMessage = "Invitation sent successfully.";
+      await _notificationService.notifyPartnershipInvitation(
+        supplierId: supplierId,
+        companyName: company.name,
+        requestId: requestId,
+        companyId: company.id,
+      );
+
+      _successMessage = 'Partnership request sent successfully.';
+    } on AppException catch (e) {
+      _errorMessage = e.message;
     } catch (e) {
-      _errorMessage = "Failed to send invitation: $e";
+      _errorMessage = 'Failed to send partnership request. Please try again.';
     }
     notifyListeners();
   }
 
-  // --- Join Requests ---
+  @Deprecated('Use sendPartnershipRequest')
+  Future<void> sendInvitation(String supplierId) =>
+      sendPartnershipRequest(supplierId);
 
-  Stream<List<JoinRequestModel>> watchJoinRequests(String companyId, String type) {
-    if (companyId.isEmpty) return Stream.value([]);
-    
-    Query query = _db.collection('joinRequests').where('companyId', isEqualTo: companyId);
-
-    if (type == 'Sent') {
-      query = query.where('initiatedBy', isEqualTo: 'company');
-    } else {
-      query = query.where('initiatedBy', isEqualTo: 'supplier');
-    }
-
-    return query.orderBy('createdAt', descending: true).snapshots().map((snap) =>
-        snap.docs.map((doc) => JoinRequestModel.fromMap(doc.id, doc.data() as Map<String, dynamic>)).toList());
+  @Deprecated('Use receivedPartnershipRequests / sentPartnershipRequests')
+  Stream<List<PartnershipRequestModel>> watchPartnershipRequests(
+    String companyId,
+    String type,
+  ) {
+    if (companyId.isEmpty) return Stream.value(const []);
+    ensurePartnershipStatusWatch(companyId);
+    final list = type == 'Sent'
+        ? _sentPartnershipRequests
+        : _receivedPartnershipRequests;
+    return Stream.value(List<PartnershipRequestModel>.from(list));
   }
 
-  Future<void> deleteInvitation(String reqId) async {
-    await _db.collection('joinRequests').doc(reqId).delete();
+  @Deprecated('Use receivedPartnershipRequests / sentPartnershipRequests')
+  Stream<List<PartnershipRequestModel>> watchJoinRequests(
+    String companyId,
+    String type,
+  ) =>
+      watchPartnershipRequests(companyId, type);
+
+  Future<void> acceptPartnershipRequest(String reqId) async {
+    try {
+      final reqSnap = await _db
+          .collection(FirestorePaths.partnershipRequestsCol)
+          .doc(reqId)
+          .get();
+      final reqData = reqSnap.data();
+      await _partnershipRepo.acceptRequest(reqId);
+      if (reqData != null &&
+          PartnershipRequestModel.fromMap(reqId, reqData).isSupplierInitiated) {
+        await _notificationService.notifyPartnershipAccepted(
+          supplierId: reqData['supplierId'] as String,
+          companyName: _company?.name ?? reqData['companyName'] as String? ?? '',
+          companyId: reqData['companyId'] as String,
+        );
+      }
+      _successMessage = 'Partnership accepted.';
+    } on AppException catch (e) {
+      _errorMessage = e.message;
+    } catch (_) {
+      _errorMessage = 'Failed to accept partnership. Please try again.';
+    }
+    notifyListeners();
   }
 
   Future<void> acceptJoinRequest(String reqId, String supplierUid) async {
-    await _joinRepo.updateRequestStatus(reqId, 'accepted');
-    final company = _company;
-    if (company != null) {
-      final supplierDoc = await _db.collection('users').doc(supplierUid).get();
-      if (supplierDoc.exists) {
-        final data = supplierDoc.data()!;
-        await _db.collection('companies').doc(company.id).collection('suppliers').doc(supplierUid).set({
-          'name': data['name'],
-          'city': data['city'],
-          'materialType': data['businessType'] ?? 'General',
-          'status': 'active',
-          'linkedAt': FieldValue.serverTimestamp(),
-        });
+    await acceptPartnershipRequest(reqId);
+  }
+
+  Future<void> rejectPartnershipRequest(String reqId, String reason) async {
+    try {
+      final reqSnap = await _db
+          .collection(FirestorePaths.partnershipRequestsCol)
+          .doc(reqId)
+          .get();
+      final reqData = reqSnap.data();
+      await _partnershipRepo.rejectRequest(reqId, reason);
+      if (reqData != null &&
+          PartnershipRequestModel.fromMap(reqId, reqData).isSupplierInitiated) {
+        await _notificationService.notifyPartnershipDeclined(
+          supplierId: reqData['supplierId'] as String,
+          companyName: _company?.name ?? reqData['companyName'] as String? ?? '',
+          companyId: reqData['companyId'] as String,
+        );
       }
+      _successMessage = 'Partnership request rejected.';
+    } on AppException catch (e) {
+      _errorMessage = e.message;
+    } catch (_) {
+      _errorMessage = 'Failed to reject partnership. Please try again.';
     }
+    notifyListeners();
   }
 
   Future<void> rejectJoinRequest(String reqId, String reason) async {
-    await _joinRepo.updateRequestStatus(reqId, 'rejected', reason: reason);
+    await rejectPartnershipRequest(reqId, reason);
   }
 
   Stream<List<Map<String, dynamic>>> watchMySuppliers(String companyId) {
@@ -409,7 +753,21 @@ class CeoViewModel extends ChangeNotifier {
   Future<void> removeSupplier(String supplierId) async {
     final company = _company;
     if (company == null) return;
-    await _db.collection('companies').doc(company.id).collection('suppliers').doc(supplierId).delete();
+    try {
+      await _partnershipRepo.removePartnership(
+        companyId: company.id,
+        supplierId: supplierId,
+      );
+      await _notificationService.notifyPartnershipRemoved(
+        supplierId: supplierId,
+        companyName: company.name,
+        companyId: company.id,
+      );
+      _successMessage = 'Partnership removed.';
+    } catch (e) {
+      _errorMessage = 'Failed to remove partnership: $e';
+    }
+    notifyListeners();
   }
 
   Future<void> reactivateFieldUser(String uid) async {

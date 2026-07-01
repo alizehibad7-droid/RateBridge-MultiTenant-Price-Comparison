@@ -32,7 +32,14 @@ class PriceHistoryModel {
     changePercent: (map['changePercent'] as num?)?.toDouble(),
     timestamp: map['timestamp'] is Timestamp 
         ? (map['timestamp'] as Timestamp).toDate() 
-        : DateTime.tryParse(map['timestamp']?.toString() ?? '') ?? DateTime.now(),
+        : map['recordedAt'] is Timestamp
+            ? (map['recordedAt'] as Timestamp).toDate()
+            : DateTime.tryParse(
+                  map['timestamp']?.toString() ??
+                      map['recordedAt']?.toString() ??
+                      '',
+                ) ??
+                DateTime.now(),
   );
 
   Map<String, dynamic> toMap() => {

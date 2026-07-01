@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
-import '../../models/invitation_model.dart';
 import '../../models/company_model.dart';
 import '../../viewmodels/auth_viewmodel.dart';
 import '../../viewmodels/invite_viewmodel.dart';

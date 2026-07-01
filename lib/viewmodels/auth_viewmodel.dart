@@ -1,12 +1,16 @@
 import 'dart:async';
+import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import '../models/user_model.dart';
 import '../services/firebase_auth_service.dart';
+import '../services/cloudinary_service.dart';
 import '../repositories/user_repository.dart';
+import '../services/category_seed_service.dart';
 import '../utils/invite_code_generator.dart';
+import '../utils/pakistan_validators.dart';
 
 enum AuthStatus { loading, authenticated, unauthenticated, error }
 
@@ -58,13 +62,14 @@ class AuthViewModel extends ChangeNotifier {
         _startUserSubscription(user.uid);
         notifyListeners();
         await updateFcmToken(user.uid);
+        await CategorySeedService(_firestore).seedIfEmpty();
       } else {
         _status = AuthStatus.unauthenticated;
         notifyListeners();
       }
     } catch (e) {
       _status = AuthStatus.unauthenticated;
-      _errorMessage = e.toString();
+      _errorMessage = _mapAuthError(e);
       notifyListeners();
     }
   }
@@ -92,9 +97,11 @@ class AuthViewModel extends ChangeNotifier {
     notifyListeners();
     try {
       final userCredential = await _authService.signIn(email, password);
-      final uid = userCredential.user?.uid;
+      final firebaseUser = userCredential.user;
+      final uid = firebaseUser?.uid;
       if (uid == null) throw Exception("Authentication failed");
-      
+
+      await firebaseUser!.getIdToken(true);
       _user = await _userRepo.getUserDoc(uid);
       _status = AuthStatus.authenticated;
       _startUserSubscription(uid);
@@ -115,16 +122,28 @@ class AuthViewModel extends ChangeNotifier {
     required String password,
     required String phone,
     required String companyName,
+    required String companyType,
+    required int yearsInOperation,
+    String? registrationNumber,
+    required String designation,
+    required String cnic,
     required String city,
     required String address,
+    required String estimatedMonthlyVolume,
+    required int activeSitesCount,
+    required Uint8List cnicFrontBytes,
+    required Uint8List cnicBackBytes,
+    Uint8List? registrationCertBytes,
+    Uint8List? officePhotoBytes,
   }) async {
     _status = AuthStatus.loading;
     _errorMessage = null;
     isRegistered = false;
     notifyListeners();
 
+    UserCredential? cred;
     try {
-      final cred = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+      cred = await FirebaseAuth.instance.createUserWithEmailAndPassword(
         email: email.trim(),
         password: password,
       );
@@ -132,15 +151,69 @@ class AuthViewModel extends ChangeNotifier {
 
       final companyRef = _firestore.collection('companies').doc();
       final companyId = companyRef.id;
+      final uploadFolder = 'ratebridge/companies/$companyId';
+
+      final cnicFrontUrl = await CloudinaryService.uploadImageBytes(
+        bytes: cnicFrontBytes,
+        folder: uploadFolder,
+        filename: 'cnic_front.jpg',
+      );
+      final cnicBackUrl = await CloudinaryService.uploadImageBytes(
+        bytes: cnicBackBytes,
+        folder: uploadFolder,
+        filename: 'cnic_back.jpg',
+      );
+
+      if (cnicFrontUrl == null || cnicBackUrl == null) {
+        await cred.user?.delete();
+        _status = AuthStatus.error;
+        _errorMessage =
+            'Could not upload CNIC photos. Please check your connection and try again.';
+        return;
+      }
+
+      String? registrationCertUrl;
+      String? officePhotoUrl;
+
+      if (registrationCertBytes != null) {
+        registrationCertUrl = await CloudinaryService.uploadImageBytes(
+          bytes: registrationCertBytes,
+          folder: uploadFolder,
+          filename: 'registration_cert.jpg',
+        );
+      }
+      if (officePhotoBytes != null) {
+        officePhotoUrl = await CloudinaryService.uploadImageBytes(
+          bytes: officePhotoBytes,
+          folder: uploadFolder,
+          filename: 'office_photo.jpg',
+        );
+      }
+
+      final normalizedPhone = PakistanValidators.normalizePhone(phone);
+      final normalizedCnic = PakistanValidators.digitsOnly(cnic);
+      final trimmedRegNo = registrationNumber?.trim() ?? '';
 
       await companyRef.set({
         'id': companyId,
         'name': companyName.trim(),
-        'companyName': companyName.trim(), 
-        'registrationNumber': '', 
+        'companyName': companyName.trim(),
+        'registrationNumber': trimmedRegNo,
+        'companyType': companyType,
+        'yearsInOperation': yearsInOperation,
+        'ceoFullName': fullName.trim(),
+        'designation': designation,
+        'cnicNumber': normalizedCnic,
+        'cnicFrontUrl': cnicFrontUrl,
+        'cnicBackUrl': cnicBackUrl,
         'city': city.trim(),
         'address': address.trim(),
-        'phone': phone.trim(),
+        'phone': normalizedPhone,
+        'estimatedMonthlyVolume': estimatedMonthlyVolume,
+        'activeSitesCount': activeSitesCount,
+        if (registrationCertUrl != null)
+          'registrationCertUrl': registrationCertUrl,
+        if (officePhotoUrl != null) 'officePhotoUrl': officePhotoUrl,
         'ceoUid': uid,
         'status': 'pending',
         'inviteCode': null,
@@ -155,9 +228,10 @@ class AuthViewModel extends ChangeNotifier {
         name: fullName.trim(),
         role: 'CEO',
         companyId: companyId,
-        phone: phone.trim(),
+        phone: normalizedPhone,
         city: city.trim(),
         address: address.trim(),
+        cnic: normalizedCnic,
         status: 'pending',
         approved: false,
         createdAt: DateTime.now(),
@@ -172,6 +246,7 @@ class AuthViewModel extends ChangeNotifier {
       _status = AuthStatus.error;
       _errorMessage = _mapAuthError(e);
     } catch (e) {
+      await cred?.user?.delete();
       _status = AuthStatus.error;
       _errorMessage = 'Registration failed. Please try again.';
     } finally {
@@ -191,6 +266,13 @@ class AuthViewModel extends ChangeNotifier {
     required String businessAddress,
     required List<String> categories,
     required int yearsInBusiness,
+    String? businessRegistrationNumber,
+    required List<String> deliveryCoverageAreas,
+    required Uint8List cnicFrontBytes,
+    required Uint8List cnicBackBytes,
+    Uint8List? shopPhotoBytes,
+    Uint8List? businessLicenseBytes,
+    Uint8List? certificationBytes,
   }) async {
     _status = AuthStatus.loading;
     _errorMessage = null;
@@ -203,6 +285,67 @@ class AuthViewModel extends ChangeNotifier {
         password: password,
       );
       final uid = cred.user!.uid;
+      final uploadFolder = 'ratebridge/suppliers/$uid';
+
+      final cnicFrontUrl = await CloudinaryService.uploadImageBytes(
+        bytes: cnicFrontBytes,
+        folder: uploadFolder,
+        filename: 'cnic_front.jpg',
+      );
+      final cnicBackUrl = await CloudinaryService.uploadImageBytes(
+        bytes: cnicBackBytes,
+        folder: uploadFolder,
+        filename: 'cnic_back.jpg',
+      );
+
+      if (cnicFrontUrl == null || cnicBackUrl == null) {
+        await cred.user?.delete();
+        _status = AuthStatus.error;
+        _errorMessage =
+            'Could not upload CNIC photos. Please check your connection and try again.';
+        return;
+      }
+
+      String? shopPhotoUrl;
+      String? businessLicenseUrl;
+      String? certificationUrl;
+
+      if (shopPhotoBytes != null) {
+        shopPhotoUrl = await CloudinaryService.uploadImageBytes(
+          bytes: shopPhotoBytes,
+          folder: uploadFolder,
+          filename: 'shop_photo.jpg',
+        );
+      }
+      if (businessLicenseBytes != null) {
+        businessLicenseUrl = await CloudinaryService.uploadImageBytes(
+          bytes: businessLicenseBytes,
+          folder: uploadFolder,
+          filename: 'business_license.jpg',
+        );
+      }
+      if (certificationBytes != null) {
+        certificationUrl = await CloudinaryService.uploadImageBytes(
+          bytes: certificationBytes,
+          folder: uploadFolder,
+          filename: 'certification.jpg',
+        );
+      }
+
+      if (shopPhotoUrl == null &&
+          businessLicenseUrl == null &&
+          certificationUrl == null) {
+        await cred.user?.delete();
+        _status = AuthStatus.error;
+        _errorMessage =
+            'Upload at least one business proof document (shop photo, license, or certification).';
+        return;
+      }
+
+      final normalizedPhone = PakistanValidators.normalizePhone(phone);
+      final normalizedCnic = PakistanValidators.formatCnic(cnic);
+      final trimmedNtn = businessRegistrationNumber?.trim();
+      final declaredCategories = categories;
 
       final userData = UserModel(
         uid: uid,
@@ -210,10 +353,10 @@ class AuthViewModel extends ChangeNotifier {
         name: ownerName.trim(),
         role: 'Supplier',
         companyId: '',
-        phone: phone.trim(),
+        phone: normalizedPhone,
         city: city.trim(),
         address: businessAddress.trim(),
-        cnic: cnic.trim(),
+        cnic: normalizedCnic,
         businessType: businessType,
         status: 'pending',
         approved: false,
@@ -222,22 +365,32 @@ class AuthViewModel extends ChangeNotifier {
 
       await _userRepo.createUserDoc(uid, userData);
 
-      // Save to suppliers collection with dual field names for maximum compatibility
       await _firestore.collection('suppliers').doc(uid).set({
         'id': uid,
-        'name': businessName.trim(), 
+        'name': businessName.trim(),
         'businessName': businessName.trim(),
         'ownerName': ownerName.trim(),
+        'ownerFullName': ownerName.trim(),
         'email': email.trim(),
-        'phone': phone.trim(),
-        'contact': phone.trim(), 
+        'phone': normalizedPhone,
+        'contact': normalizedPhone,
         'city': city.trim(),
-        'cnic': cnic.trim(),
+        'cnic': normalizedCnic,
+        'cnicNumber': normalizedCnic,
+        'cnicFrontUrl': cnicFrontUrl,
+        'cnicBackUrl': cnicBackUrl,
         'businessType': businessType,
-        'materialType': businessType, 
+        'materialType': businessType,
         'businessAddress': businessAddress.trim(),
-        'categories': categories,
+        'deliveryCoverageAreas': deliveryCoverageAreas,
+        'categories': declaredCategories,
+        'declaredCategories': declaredCategories,
         'yearsInBusiness': yearsInBusiness,
+        if (trimmedNtn != null && trimmedNtn.isNotEmpty)
+          'businessRegistrationNumber': trimmedNtn,
+        if (shopPhotoUrl != null) 'shopPhotoUrl': shopPhotoUrl,
+        if (businessLicenseUrl != null) 'businessLicenseUrl': businessLicenseUrl,
+        if (certificationUrl != null) 'certificationUrl': certificationUrl,
         'status': 'pending',
         'onboardingComplete': false,
         'totalCompanies': 0,
@@ -249,6 +402,7 @@ class AuthViewModel extends ChangeNotifier {
       isRegistered = true;
       _status = AuthStatus.authenticated;
       _startUserSubscription(uid);
+      await CategorySeedService(_firestore).seedIfEmpty();
     } on FirebaseAuthException catch (e) {
       _status = AuthStatus.error;
       _errorMessage = _mapAuthError(e);
@@ -282,16 +436,31 @@ class AuthViewModel extends ChangeNotifier {
       if (query.docs.isEmpty) {
         pendingInviteCompanyId = null;
         pendingInviteCompanyName = null;
-        inviteError = 'Invalid invite code. Ask your CEO.';
+        inviteError =
+            'Invalid invite code. Confirm the code from your CEO and that the company is approved.';
         return false;
       }
 
       final doc = query.docs.first;
       pendingInviteCompanyId = doc.id;
-      pendingInviteCompanyName = doc.data()['name'] ?? doc.data()['companyName'];
+      pendingInviteCompanyName =
+          doc.data()['name'] ?? doc.data()['companyName'];
       inviteError = null;
       return true;
-    } catch (e) {
+    } on FirebaseException catch (e) {
+      pendingInviteCompanyId = null;
+      pendingInviteCompanyName = null;
+      if (e.code == 'permission-denied') {
+        inviteError =
+            'Could not verify code. Firestore access denied — deploy the latest security rules.';
+      } else if (e.code == 'failed-precondition') {
+        inviteError =
+            'Could not verify code. Firestore index is building — try again in a minute.';
+      } else {
+        inviteError = 'Could not verify code. Check your connection.';
+      }
+      return false;
+    } catch (_) {
       pendingInviteCompanyId = null;
       pendingInviteCompanyName = null;
       inviteError = 'Could not verify code. Check your connection.';
@@ -315,6 +484,9 @@ class AuthViewModel extends ChangeNotifier {
     required String password,
     required String phone,
     required String inviteCode,
+    required String cnicNumber,
+    required String jobTitle,
+    required String assignedSite,
   }) async {
     _status = AuthStatus.loading;
     _errorMessage = null;
@@ -330,6 +502,8 @@ class AuthViewModel extends ChangeNotifier {
       }
 
       final companyId = pendingInviteCompanyId!;
+      final normalizedPhone = PakistanValidators.normalizePhone(phone);
+      final normalizedCnic = PakistanValidators.formatCnic(cnicNumber);
 
       final cred = await FirebaseAuth.instance.createUserWithEmailAndPassword(
         email: email.trim(),
@@ -343,9 +517,12 @@ class AuthViewModel extends ChangeNotifier {
         name: fullName.trim(),
         role: 'field_user',
         companyId: companyId,
-        phone: phone.trim(),
-        city: '', 
-        status: 'active', 
+        phone: normalizedPhone,
+        city: '',
+        cnic: normalizedCnic,
+        jobTitle: jobTitle.trim(),
+        assignedSite: assignedSite.trim(),
+        status: 'active',
         approved: true,
         createdAt: DateTime.now(),
       );
@@ -360,7 +537,10 @@ class AuthViewModel extends ChangeNotifier {
           .set({
         'fullName': fullName.trim(),
         'email': email.trim(),
-        'phone': phone.trim(),
+        'phone': normalizedPhone,
+        'cnicNumber': normalizedCnic,
+        'jobTitle': jobTitle.trim(),
+        'assignedSite': assignedSite.trim(),
         'status': 'active',
         'joinedAt': FieldValue.serverTimestamp(),
       });
@@ -382,10 +562,44 @@ class AuthViewModel extends ChangeNotifier {
 
   Future<void> updateFcmToken(String uid) async {
     try {
-      final token = await FirebaseMessaging.instance.getToken();
+      final messaging = FirebaseMessaging.instance;
+      await messaging.requestPermission(alert: true, badge: true, sound: true);
+      final token = await messaging.getToken();
       if (token != null) await _userRepo.updateFcmToken(uid, token);
     } catch (e) {
       debugPrint("Error updating FCM token: $e");
+    }
+  }
+
+  Future<void> clearFcmToken(String uid) async {
+    try {
+      await _userRepo.updateFcmToken(uid, null);
+    } catch (e) {
+      debugPrint('Error clearing FCM token: $e');
+    }
+  }
+
+  Future<String?> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    try {
+      await _authService.changePassword(
+        currentPassword: currentPassword,
+        newPassword: newPassword,
+      );
+      return null;
+    } catch (e) {
+      return _mapAuthError(e);
+    }
+  }
+
+  Future<String?> sendPasswordResetEmail(String email) async {
+    try {
+      await _authService.sendPasswordResetEmail(email);
+      return null;
+    } catch (e) {
+      return _mapAuthError(e);
     }
   }
 
@@ -443,13 +657,24 @@ class AuthViewModel extends ChangeNotifier {
           return 'An account already exists with this email.';
         case 'weak-password':
           return 'Password is too weak (minimum 8 characters).';
+        case 'requires-recent-login':
+          return 'Please sign out and sign in again, then retry changing your password.';
         case 'too-many-requests':
           return 'Too many attempts. Please try again later.';
         default:
           return e.message ?? 'Authentication error. Please try again.';
       }
     }
-    return e.toString();
+    if (e is FirebaseException && e.plugin == 'cloud_firestore') {
+      if (e.code == 'permission-denied') {
+        return 'Could not load your profile. Ask an admin to verify your account exists in Firestore.';
+      }
+    }
+    final message = e.toString();
+    if (message.contains('User model not found')) {
+      return 'Signed in, but no profile was found. Please register or contact your company admin.';
+    }
+    return message;
   }
 
   static String generateInviteCode() => InviteCodeGenerator.generate();

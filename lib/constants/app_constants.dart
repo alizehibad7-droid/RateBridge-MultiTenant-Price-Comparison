@@ -10,6 +10,9 @@ class AppConstants {
 
   // Price history
   static const int priceHistoryMinForAI = 3;
+  static const int priceHistoryMonths = 6;
+  /// Fractional change (0.03 = 3%) above/below which trend is up/down.
+  static const double priceTrendChangeThreshold = 0.03;
 
   // Image constraints
   static const int maxImageSizeBytes = 200 * 1024; // 200KB
@@ -50,6 +53,7 @@ class AppConstants {
   static const String roleFieldUser = 'fieldUser';
 
   // Order statuses
+  static const String statusPendingApproval = 'pending_approval';
   static const String statusPending = 'pending';
   static const String statusAccepted = 'accepted';
   static const String statusInProgress = 'inProgress';

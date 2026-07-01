@@ -19,7 +19,10 @@ class UserRepository {
       _cachedUser = null;
       return null;
     }
-    
+
+    // Web can fire auth state before the ID token is attached to Firestore.
+    await firebaseUser.getIdToken();
+
     final user = await _firestoreService.getUser(firebaseUser.uid);
     _cachedUser = user;
     return user;

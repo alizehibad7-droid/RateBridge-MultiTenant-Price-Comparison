@@ -1,3 +1,7 @@
+import 'package:flutter/material.dart';
+
+import '../constants/construction_categories_seed.dart';
+
 class CategoryModel {
   final String id;
   final String name;
@@ -5,6 +9,8 @@ class CategoryModel {
   final List<String> brands;
   final List<String> grades;
   final int activeMaterialsCount;
+  final bool isActive;
+  final String? iconKey;
 
   CategoryModel({
     required this.id,
@@ -13,7 +19,11 @@ class CategoryModel {
     required this.brands,
     required this.grades,
     this.activeMaterialsCount = 0,
+    this.isActive = true,
+    this.iconKey,
   });
+
+  IconData get icon => CategoryIconCodec.decode(iconKey);
 
   CategoryModel copyWith({
     String? id,
@@ -22,6 +32,8 @@ class CategoryModel {
     List<String>? brands,
     List<String>? grades,
     int? activeMaterialsCount,
+    bool? isActive,
+    String? iconKey,
   }) {
     return CategoryModel(
       id: id ?? this.id,
@@ -30,6 +42,8 @@ class CategoryModel {
       brands: brands ?? this.brands,
       grades: grades ?? this.grades,
       activeMaterialsCount: activeMaterialsCount ?? this.activeMaterialsCount,
+      isActive: isActive ?? this.isActive,
+      iconKey: iconKey ?? this.iconKey,
     );
   }
 
@@ -41,17 +55,39 @@ class CategoryModel {
       'brands': brands,
       'grades': grades,
       'activeMaterialsCount': activeMaterialsCount,
+      'active': isActive,
+      if (iconKey != null && iconKey!.isNotEmpty) 'icon': iconKey,
     };
   }
 
-  factory CategoryModel.fromMap(Map<String, dynamic> map) {
+  factory CategoryModel.fromMap(Map<String, dynamic> map, {String? id}) {
     return CategoryModel(
-      id: map['id'] as String,
-      name: map['name'] as String,
-      unit: map['unit'] as String,
-      brands: List<String>.from(map['brands'] ?? []),
-      grades: List<String>.from(map['grades'] ?? []),
-      activeMaterialsCount: map['activeMaterialsCount'] as int? ?? 0,
+      id: id ?? map['id']?.toString() ?? '',
+      name: map['name']?.toString() ?? '',
+      unit: map['unit']?.toString() ?? '',
+      brands: _stringList(map['brands']),
+      grades: _stringList(map['grades']),
+      activeMaterialsCount: (map['activeMaterialsCount'] as num?)?.toInt() ?? 0,
+      isActive: map['active'] as bool? ?? true,
+      iconKey: map['icon']?.toString(),
     );
+  }
+
+  static List<String> _stringList(dynamic raw) {
+    if (raw is List) {
+      return raw.map((e) => e.toString()).where((s) => s.isNotEmpty).toList();
+    }
+    if (raw is String && raw.trim().isNotEmpty) {
+      return raw
+          .split(',')
+          .map((s) => s.trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+    }
+    return const [];
+  }
+
+  factory CategoryModel.fromDoc(String docId, Map<String, dynamic> map) {
+    return CategoryModel.fromMap(map, id: docId);
   }
 }

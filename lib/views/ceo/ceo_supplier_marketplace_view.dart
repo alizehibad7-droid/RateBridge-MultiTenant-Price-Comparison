@@ -40,7 +40,12 @@ class _CeoSupplierMarketplaceViewState
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<CeoViewModel>().loadMarketplace();
+      final vm = context.read<CeoViewModel>();
+      final companyId = vm.company?.id;
+      if (companyId != null && companyId.isNotEmpty) {
+        vm.ensurePartnershipStatusWatch(companyId);
+      }
+      vm.loadMarketplace();
     });
   }
 
@@ -250,13 +255,9 @@ class _SupplierMarketCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ceoVM      = context.read<CeoViewModel>();
-    
-    return StreamBuilder<String>(
-      stream: ceoVM.watchLinkStatus(companyId, supplier.id),
-      builder: (context, snapshot) {
-        final invStatus = snapshot.data ?? 'Not Invited';
-        final isVerified = supplier.isVerified;
+    final ceoVM = context.watch<CeoViewModel>();
+    final invStatus = ceoVM.linkStatusFor(supplier.id);
+    final isVerified = supplier.isVerified;
         final rating     = supplier.rating;
         final contracts  = supplier.activeContracts;
         final category   = supplier.materialType;
@@ -386,8 +387,6 @@ class _SupplierMarketCard extends StatelessWidget {
             ),
           ),
         );
-      }
-    );
   }
 
   Widget _buildActionButton(
@@ -401,76 +400,34 @@ class _SupplierMarketCard extends StatelessWidget {
         return SizedBox(
           width: double.infinity,
           child: ElevatedButton(
-            onPressed: () => _confirmInvite(context, ceoVM, supplier),
+            onPressed: () => _showSendRequestSheet(context, ceoVM, supplier),
             style: ElevatedButton.styleFrom(
               elevation: 0,
               padding: const EdgeInsets.symmetric(vertical: 12),
             ),
-            child: const Text('Invite to Network'),
+            child: const Text('Send Partnership Request'),
           ),
         );
 
-      case 'Invited':
-        return Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          decoration: BoxDecoration(
-            color: Colors.amber.withValues(alpha: 0.05),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.amber.withValues(alpha: 0.2)),
-          ),
-          child: const Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.schedule, size: 16, color: Colors.amber),
-              SizedBox(width: 8),
-              Text(
-                'Awaiting Supplier Response',
-                style: TextStyle(
-                  color: Colors.amber,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
-                ),
-              ),
-            ],
-          ),
+      case 'Request Pending':
+        return _statusBadge(
+          'Request Pending',
+          Colors.amber,
+          Icons.schedule,
         );
 
-      case 'Linked':
-        return Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          decoration: BoxDecoration(
-            color: Colors.green.withValues(alpha: 0.05),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: const Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.check_circle, size: 16, color: Colors.green),
-              SizedBox(width: 8),
-              Text(
-                'Linked to Company',
-                style: TextStyle(
-                  color: Colors.green,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
-                ),
-              ),
-            ],
-          ),
+      case 'Already Partners':
+        return _statusBadge(
+          'Already Partners',
+          Colors.green,
+          Icons.check_circle,
         );
 
-      case 'Rejected':
-        return SizedBox(
-          width: double.infinity,
-          child: OutlinedButton(
-            onPressed: () => _confirmInvite(context, ceoVM, supplier),
-            style: OutlinedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-            ),
-            child: const Text('Re-invite Supplier'),
-          ),
+      case 'Request Rejected':
+        return _statusBadge(
+          'Request Rejected',
+          Colors.red,
+          Icons.cancel_outlined,
         );
 
       default:
@@ -478,40 +435,100 @@ class _SupplierMarketCard extends StatelessWidget {
     }
   }
 
-  void _confirmInvite(
+  Widget _statusBadge(String label, Color color, IconData icon) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 16, color: color),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.bold,
+              fontSize: 13,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showSendRequestSheet(
       BuildContext context,
       CeoViewModel ceoVM,
       SupplierModel supplier,
       ) {
-    showDialog(
+    final messageController = TextEditingController();
+    showModalBottomSheet<void>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Send Invitation'),
-        content: Text(
-          'Invite ${supplier.name} to join your company network?\n\n'
-          'They will be able to receive orders once they accept.',
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.fromLTRB(
+          20,
+          20,
+          20,
+          20 + MediaQuery.of(ctx).viewInsets.bottom,
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              await ceoVM.sendInvitation(supplier.id);
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Invitation sent to ${supplier.name}'),
-                    backgroundColor: Colors.green,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Partnership request',
+              style: Theme.of(ctx).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
                   ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Send a request to ${supplier.name}. They must accept before materials appear for your field team.',
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: messageController,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'Optional message',
+                hintText: 'Introduce your company or project needs',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.pop(ctx);
+                await ceoVM.sendPartnershipRequest(
+                  supplier.id,
+                  message: messageController.text.trim().isEmpty
+                      ? null
+                      : messageController.text.trim(),
                 );
-              }
-            },
-            child: const Text('Send'),
-          ),
-        ],
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Request sent to ${supplier.name}'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              },
+              child: const Text('Send Request'),
+            ),
+          ],
+        ),
       ),
     );
   }

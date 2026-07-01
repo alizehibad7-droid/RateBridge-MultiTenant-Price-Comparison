@@ -1,9 +1,7 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
-import 'package:dio/dio.dart';
 
 class StripeService {
-  final Dio _dio = Dio();
-
   Future<void> initialize() async {
     Stripe.publishableKey = "pk_test_mock_ratebridge_publishable_key_512345";
     await Stripe.instance.applySettings();
@@ -35,7 +33,7 @@ class StripeService {
   }) async {
     try {
       // Simulate setup and integration
-      debugPrint("Purchasing $planType subscription for $$priceUSD");
+      debugPrint('Purchasing $planType subscription for \$$priceUSD');
       await Future.delayed(const Duration(seconds: 2));
       return true;
     } catch (e) {
@@ -45,5 +43,3 @@ class StripeService {
   }
 }
 
-// Mock debugPrint if not available or import foundation
-import 'package:flutter/foundation.dart';

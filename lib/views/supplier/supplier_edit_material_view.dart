@@ -1,36 +1,82 @@
 // MVVM: View — no business logic
-import 'dart:io';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
-import '../../viewmodels/material_viewmodel.dart';
-import '../../viewmodels/auth_viewmodel.dart';
+import 'package:provider/provider.dart';
+
+import '../../theme/supplier_theme.dart';
 import '../../models/material_model.dart';
-import '../../constants/app_colors.dart';
+import '../../utils/app_theme.dart';
+import '../../utils/chat_image_utils.dart';
+import '../../viewmodels/auth_viewmodel.dart';
+import '../../viewmodels/material_viewmodel.dart';
+import '../../viewmodels/supplier_viewmodel.dart';
 
 class SupplierEditMaterialView extends StatefulWidget {
   final MaterialModel material;
+
   const SupplierEditMaterialView({super.key, required this.material});
 
   @override
-  State<SupplierEditMaterialView> createState() => _SupplierEditMaterialViewState();
+  State<SupplierEditMaterialView> createState() =>
+      _SupplierEditMaterialViewState();
 }
 
 class _SupplierEditMaterialViewState extends State<SupplierEditMaterialView> {
+  static const _stockStatuses = [
+    'Available',
+    'Limited Stock',
+    'Out of Stock',
+  ];
+  static const _deliveryTimes = [
+    'Same day',
+    '24 hours',
+    '2-3 days',
+    '1 week+',
+  ];
+
   final _formKey = GlobalKey<FormState>();
-  late TextEditingController _nameController;
-  late TextEditingController _priceController;
-  late TextEditingController _brandController;
-  late TextEditingController _gradeController;
-  File? _imageFile;
+  late final TextEditingController _nameController;
+  late final TextEditingController _priceController;
+  late final TextEditingController _brandController;
+  late final TextEditingController _gradeController;
+  late final TextEditingController _minOrderController;
+
+  String? _selectedBrand;
+  String? _selectedGrade;
+  late String _stockStatus;
+  String? _deliveryTime;
+  XFile? _imageXFile;
+  Uint8List? _imagePreviewBytes;
+  bool _categoriesLoaded = false;
 
   @override
   void initState() {
     super.initState();
-    _nameController = TextEditingController(text: widget.material.name);
-    _priceController = TextEditingController(text: widget.material.pricePerUnit.toString());
-    _brandController = TextEditingController(text: widget.material.brand);
-    _gradeController = TextEditingController(text: widget.material.grade);
+    final material = widget.material;
+    _nameController = TextEditingController(text: material.name);
+    _priceController =
+        TextEditingController(text: material.pricePerUnit.toString());
+    _brandController = TextEditingController(text: material.brand ?? '');
+    _gradeController = TextEditingController(text: material.grade);
+    _minOrderController = TextEditingController(
+      text: material.minOrderQuantity?.toString() ?? '',
+    );
+    _stockStatus = material.stockStatus ?? 'Available';
+    _deliveryTime = material.deliveryTime;
+    _selectedBrand = material.brand;
+    _selectedGrade = material.grade;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadCategory());
+  }
+
+  Future<void> _loadCategory() async {
+    final materialVM = context.read<MaterialViewModel>();
+    await materialVM.loadCategories();
+    materialVM.selectCategoryByName(widget.material.category);
+    if (!mounted) return;
+    setState(() => _categoriesLoaded = true);
   }
 
   @override
@@ -39,27 +85,64 @@ class _SupplierEditMaterialViewState extends State<SupplierEditMaterialView> {
     _priceController.dispose();
     _brandController.dispose();
     _gradeController.dispose();
+    _minOrderController.dispose();
     super.dispose();
   }
 
-  Future<void> _pickImage() async {
-    final picker = ImagePicker();
-    final image = await picker.pickImage(source: ImageSource.gallery);
-    if (image != null) {
-      setState(() => _imageFile = File(image.path));
+  String? get _brandValue {
+    if (_selectedBrand != null && _selectedBrand!.isNotEmpty) {
+      return _selectedBrand;
     }
+    final text = _brandController.text.trim();
+    return text.isEmpty ? null : text;
+  }
+
+  String? get _gradeValue {
+    if (_selectedGrade != null && _selectedGrade!.isNotEmpty) {
+      return _selectedGrade;
+    }
+    final text = _gradeController.text.trim();
+    return text.isEmpty ? null : text;
+  }
+
+  Future<void> _pickImage() async {
+    final source = await ChatImageUtils.showSourceSheet(context);
+    if (source == null) return;
+
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(
+      source: source,
+      maxWidth: 1200,
+      imageQuality: 80,
+    );
+    if (picked == null || !mounted) return;
+
+    final bytes = await picked.readAsBytes();
+    setState(() {
+      _imageXFile = picked;
+      _imagePreviewBytes = bytes;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final materialVM = Provider.of<MaterialViewModel>(context);
-    final authVM = Provider.of<AuthViewModel>(context);
+    final materialVM = context.watch<MaterialViewModel>();
+    final authVM = context.watch<AuthViewModel>();
+    final category = materialVM.selectedCategory;
+    final brands = category?.brands ?? const <String>[];
+    final grades = category?.grades ?? const <String>[];
+
+    if (!_categoriesLoaded && materialVM.isLoading) {
+      return Scaffold(
+        backgroundColor: FieldColors.screenBackground,
+        appBar: const SupplierAppBar(title: 'Edit Material'),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
 
     return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('Edit Material', style: TextStyle(fontWeight: FontWeight.w800)),
-      ),
+      backgroundColor: FieldColors.screenBackground,
+      appBar: const SupplierAppBar(title: 'Edit Material'),
       body: Form(
         key: _formKey,
         child: ListView(
@@ -67,88 +150,232 @@ class _SupplierEditMaterialViewState extends State<SupplierEditMaterialView> {
           children: [
             TextFormField(
               initialValue: widget.material.category,
-              decoration: const InputDecoration(labelText: 'Category (Locked)', filled: true, fillColor: AppColors.surface),
+              decoration: const InputDecoration(
+                labelText: 'Category (Locked)',
+                filled: true,
+                fillColor: FieldColors.screenBackground,
+              ),
               readOnly: true,
+              style: AppTextStyles.body,
             ),
+            const SizedBox(height: 16),
+            if (brands.isNotEmpty)
+              DropdownButtonFormField<String>(
+                decoration: const InputDecoration(labelText: 'Brand'),
+                value: brands.contains(_selectedBrand) ? _selectedBrand : null,
+                items: brands
+                    .map(
+                      (b) => DropdownMenuItem(
+                        value: b,
+                        child: Text(b, style: AppTextStyles.body),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (val) => setState(() => _selectedBrand = val),
+              )
+            else
+              TextFormField(
+                controller: _brandController,
+                decoration: const InputDecoration(labelText: 'Brand'),
+                style: AppTextStyles.body,
+              ),
+            const SizedBox(height: 16),
+            if (grades.isNotEmpty)
+              DropdownButtonFormField<String>(
+                decoration: const InputDecoration(labelText: 'Grade'),
+                value: grades.contains(_selectedGrade) ? _selectedGrade : null,
+                items: grades
+                    .map(
+                      (g) => DropdownMenuItem(
+                        value: g,
+                        child: Text(g, style: AppTextStyles.body),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (val) => setState(() => _selectedGrade = val),
+              )
+            else
+              TextFormField(
+                controller: _gradeController,
+                decoration: const InputDecoration(labelText: 'Grade'),
+                style: AppTextStyles.body,
+              ),
             const SizedBox(height: 16),
             TextFormField(
               controller: _nameController,
               decoration: const InputDecoration(labelText: 'Material Name'),
-              validator: (v) => v!.isEmpty ? 'Required' : null,
+              style: AppTextStyles.body,
+              validator: (v) =>
+                  v == null || v.trim().isEmpty ? 'Required' : null,
             ),
             const SizedBox(height: 16),
             TextFormField(
               controller: _priceController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Price', prefixText: 'Rs. '),
-              validator: (v) => v!.isEmpty ? 'Required' : null,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                labelText: 'Price',
+                prefixText: 'Rs. ',
+              ),
+              style: AppTextStyles.body,
+              validator: (v) =>
+                  v == null || v.trim().isEmpty ? 'Required' : null,
             ),
             const SizedBox(height: 16),
             TextFormField(
               initialValue: widget.material.unit,
-              decoration: const InputDecoration(labelText: 'Unit (Locked)', filled: true, fillColor: AppColors.surface),
+              decoration: const InputDecoration(
+                labelText: 'Unit (Locked)',
+                filled: true,
+                fillColor: FieldColors.screenBackground,
+              ),
               readOnly: true,
+              style: AppTextStyles.body,
             ),
             const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: TextFormField(
-                    controller: _brandController,
-                    decoration: const InputDecoration(labelText: 'Brand'),
-                  ),
+            DropdownButtonFormField<String>(
+              decoration: const InputDecoration(labelText: 'Stock Status'),
+              value: _stockStatuses.contains(_stockStatus)
+                  ? _stockStatus
+                  : 'Available',
+              items: _stockStatuses
+                  .map(
+                    (s) => DropdownMenuItem(
+                      value: s,
+                      child: Text(s, style: AppTextStyles.body),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (val) {
+                if (val != null) setState(() => _stockStatus = val);
+              },
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _minOrderController,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                labelText: 'Minimum Order Quantity (optional)',
+              ),
+              style: AppTextStyles.body,
+            ),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<String>(
+              decoration: const InputDecoration(
+                labelText: 'Delivery Time (optional)',
+              ),
+              value: _deliveryTime,
+              items: [
+                DropdownMenuItem<String>(
+                  value: null,
+                  child: Text('Not specified', style: AppTextStyles.bodyMuted),
                 ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: TextFormField(
-                    controller: _gradeController,
-                    decoration: const InputDecoration(labelText: 'Grade'),
+                ..._deliveryTimes.map(
+                  (d) => DropdownMenuItem(
+                    value: d,
+                    child: Text(d, style: AppTextStyles.body),
                   ),
                 ),
               ],
+              onChanged: (val) => setState(() => _deliveryTime = val),
             ),
             const SizedBox(height: 32),
-            const Text('UPDATE PHOTO', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
+            Text('UPDATE PHOTO', style: AppTextStyles.label),
             const SizedBox(height: 12),
             InkWell(
               onTap: _pickImage,
+              borderRadius: BorderRadius.circular(16),
               child: Container(
                 height: 120,
+                width: double.infinity,
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: FieldColors.screenBackground,
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppColors.border, style: BorderStyle.solid),
+                  border: Border.all(color: FieldColors.borderSubtle),
                 ),
-                child: _imageFile != null
-                    ? ClipRRect(borderRadius: BorderRadius.circular(16), child: Image.file(_imageFile!, fit: BoxFit.cover))
-                    : (widget.material.profileImageUrl != null
-                        ? ClipRRect(borderRadius: BorderRadius.circular(16), child: Image.network(widget.material.profileImageUrl!, fit: BoxFit.cover))
-                        : const Icon(Icons.add_a_photo_outlined, color: Colors.grey)),
+                child: _imagePreviewBytes != null
+                    ? ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: Image.memory(
+                          _imagePreviewBytes!,
+                          fit: BoxFit.cover,
+                          width: double.infinity,
+                          height: 120,
+                          gaplessPlayback: true,
+                        ),
+                      )
+                    : widget.material.profileImageUrl != null
+                        ? ClipRRect(
+                            borderRadius: BorderRadius.circular(16),
+                            child: Image.network(
+                              widget.material.profileImageUrl!,
+                              fit: BoxFit.cover,
+                              width: double.infinity,
+                              height: 120,
+                            ),
+                          )
+                        : const Icon(
+                            Icons.add_a_photo_outlined,
+                            color: FieldColors.textSecondary,
+                          ),
               ),
             ),
+            if (materialVM.error != null) ...[
+              const SizedBox(height: 16),
+              Text(
+                materialVM.error!,
+                style: AppTextStyles.body.copyWith(color: FieldColors.statusDanger),
+              ),
+            ],
             const SizedBox(height: 48),
             ElevatedButton(
-              onPressed: materialVM.isLoading ? null : () async {
-                if (_formKey.currentState!.validate()) {
-                  await materialVM.updateMaterial(
-                    widget.material.id,
-                    {
-                      'name': _nameController.text,
-                      'price': _priceController.text,
-                      'brand': _brandController.text,
-                      'grade': _gradeController.text,
+              onPressed: materialVM.isLoading
+                  ? null
+                  : () async {
+                      if (!_formKey.currentState!.validate()) return;
+
+                      final supplierVM = context.read<SupplierViewModel>();
+                      final companyId = supplierVM.selectedCompanyId ?? '';
+                      if (companyId.isEmpty) {
+                        if (!context.mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Select a company before updating materials.'),
+                          ),
+                        );
+                        return;
+                      }
+
+                      materialVM.resetSuccess();
+                      await materialVM.updateMaterial(
+                        widget.material.id,
+                        {
+                          'name': _nameController.text.trim(),
+                          'price': _priceController.text.trim(),
+                          'brand': _brandValue ?? '',
+                          'grade': _gradeValue ?? '',
+                          'stockStatus': _stockStatus,
+                          'minOrderQuantity': _minOrderController.text.trim(),
+                          'deliveryTime': _deliveryTime,
+                        },
+                        _imageXFile,
+                        companyId,
+                        authVM.user?.uid ?? '',
+                      );
+                      if (!mounted) return;
+                      if (materialVM.isSuccess) {
+                        Navigator.pop(context);
+                      }
                     },
-                    _imageFile,
-                    authVM.user?.companyId ?? '',
-                  );
-                  if (materialVM.isSuccess && mounted) {
-                    Navigator.pop(context);
-                  }
-                }
-              },
-              child: materialVM.isLoading 
-                ? const CircularProgressIndicator(color: Colors.white)
-                : const Text('UPDATE MATERIAL'),
+              child: materialVM.isLoading
+                  ? const SizedBox(
+                      height: 22,
+                      width: 22,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.5,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Text('UPDATE MATERIAL'),
             ),
           ],
         ),

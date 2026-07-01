@@ -5,7 +5,9 @@ import 'package:go_router/go_router.dart';
 
 import '../../utils/app_theme.dart';
 import '../../constants/app_colors.dart';
+import '../../constants/field_user_registration_options.dart';
 import '../../constants/route_names.dart';
+import '../../utils/pakistan_validators.dart';
 import '../../viewmodels/auth_viewmodel.dart';
 import '../../widgets/auth/auth_text_field.dart';
 import '../../widgets/auth/auth_widgets.dart';
@@ -25,7 +27,12 @@ class _RegisterFieldUserViewState extends State<RegisterFieldUserView> {
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   final _phoneController = TextEditingController();
+  final _cnicController = TextEditingController();
+  final _otherJobTitleController = TextEditingController();
+  final _assignedSiteController = TextEditingController();
   final _inviteCodeController = TextEditingController();
+
+  String _jobTitle = kFieldUserJobTitles.first;
 
   Timer? _debounce;
 
@@ -37,6 +44,9 @@ class _RegisterFieldUserViewState extends State<RegisterFieldUserView> {
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     _phoneController.dispose();
+    _cnicController.dispose();
+    _otherJobTitleController.dispose();
+    _assignedSiteController.dispose();
     _inviteCodeController.dispose();
     super.dispose();
   }
@@ -63,6 +73,21 @@ class _RegisterFieldUserViewState extends State<RegisterFieldUserView> {
     if (v == null || v.isEmpty) return 'Please confirm your password';
     if (v != _passwordController.text) return 'Passwords do not match';
     return null;
+  }
+
+  String? _validateJobTitleOther(String? v) {
+    if (_jobTitle != kFieldUserJobTitleOther) return null;
+    if (v == null || v.trim().isEmpty) {
+      return 'Please specify your job title';
+    }
+    return null;
+  }
+
+  String _resolvedJobTitle() {
+    if (_jobTitle == kFieldUserJobTitleOther) {
+      return _otherJobTitleController.text.trim();
+    }
+    return _jobTitle;
   }
 
   void _onInviteCodeChanged(String value) {
@@ -99,6 +124,9 @@ class _RegisterFieldUserViewState extends State<RegisterFieldUserView> {
       password: _passwordController.text,
       phone: _phoneController.text,
       inviteCode: _inviteCodeController.text,
+      cnicNumber: _cnicController.text,
+      jobTitle: _resolvedJobTitle(),
+      assignedSite: _assignedSiteController.text,
     );
 
     if (!mounted) return;
@@ -274,14 +302,19 @@ class _RegisterFieldUserViewState extends State<RegisterFieldUserView> {
                 ),
                 const SizedBox(height: 16),
 
-                // ---- Personal info ----
+                // ---- Personal identity ----
                 Container(
                   padding: const EdgeInsets.all(24),
                   decoration: appCardDecoration(shadow: AppShadows.card),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Text('Your Information', style: AppTextStyles.h3),
+                      Text('Personal Identity', style: AppTextStyles.h3),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Details used for your company employee record.',
+                        style: AppTextStyles.bodyMuted,
+                      ),
                       const SizedBox(height: 16),
                       AuthTextField(
                         label: 'FULL NAME',
@@ -289,6 +322,15 @@ class _RegisterFieldUserViewState extends State<RegisterFieldUserView> {
                         prefixIcon: Icons.person_outline,
                         placeholder: 'Ali Raza',
                         validator: (v) => _required(v, 'Full name'),
+                      ),
+                      const SizedBox(height: 16),
+                      AuthTextField(
+                        label: 'PHONE NUMBER',
+                        controller: _phoneController,
+                        prefixIcon: Icons.phone_outlined,
+                        placeholder: '0300 1234567',
+                        keyboardType: TextInputType.phone,
+                        validator: PakistanValidators.validatePhone,
                       ),
                       const SizedBox(height: 16),
                       AuthTextField(
@@ -319,12 +361,74 @@ class _RegisterFieldUserViewState extends State<RegisterFieldUserView> {
                       ),
                       const SizedBox(height: 16),
                       AuthTextField(
-                        label: 'PHONE NUMBER',
-                        controller: _phoneController,
-                        prefixIcon: Icons.phone_outlined,
-                        placeholder: '+92 300 0000000',
-                        keyboardType: TextInputType.phone,
-                        validator: (v) => _required(v, 'Phone number'),
+                        label: 'CNIC NUMBER',
+                        controller: _cnicController,
+                        prefixIcon: Icons.badge_outlined,
+                        placeholder: '35202-1234567-1',
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [CnicTextInputFormatter()],
+                        validator: PakistanValidators.validateCnic,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // ---- Role information ----
+                Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: appCardDecoration(shadow: AppShadows.card),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text('Role Information', style: AppTextStyles.h3),
+                      const SizedBox(height: 4),
+                      Text(
+                        'How you work on site for this company.',
+                        style: AppTextStyles.bodyMuted,
+                      ),
+                      const SizedBox(height: 16),
+                      Text('JOB TITLE / DESIGNATION', style: AppTextStyles.label),
+                      const SizedBox(height: 8),
+                      DropdownButtonFormField<String>(
+                        value: _jobTitle,
+                        isExpanded: true,
+                        items: kFieldUserJobTitles
+                            .map(
+                              (title) => DropdownMenuItem(
+                                value: title,
+                                child: Text(title, style: AppTextStyles.body),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (v) => setState(
+                          () => _jobTitle = v ?? kFieldUserJobTitles.first,
+                        ),
+                        decoration: const InputDecoration(
+                          prefixIcon: Icon(
+                            Icons.work_outline,
+                            color: AppColors.textSecondary,
+                            size: 20,
+                          ),
+                        ),
+                      ),
+                      if (_jobTitle == kFieldUserJobTitleOther) ...[
+                        const SizedBox(height: 16),
+                        AuthTextField(
+                          label: 'SPECIFY JOB TITLE',
+                          controller: _otherJobTitleController,
+                          prefixIcon: Icons.edit_outlined,
+                          placeholder: 'e.g. Quantity Surveyor',
+                          validator: _validateJobTitleOther,
+                        ),
+                      ],
+                      const SizedBox(height: 16),
+                      AuthTextField(
+                        label: 'ASSIGNED SITE / LOCATION',
+                        controller: _assignedSiteController,
+                        prefixIcon: Icons.place_outlined,
+                        placeholder: 'Site B - DHA Phase 6',
+                        validator: (v) => _required(v, 'Assigned site'),
                       ),
                     ],
                   ),
@@ -338,7 +442,7 @@ class _RegisterFieldUserViewState extends State<RegisterFieldUserView> {
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  'Your account will be reviewed by your CEO before you can sign in.',
+                  'Your account is active immediately — you can start ordering materials right away.',
                   style: AppTextStyles.bodyMuted,
                   textAlign: TextAlign.center,
                 ),

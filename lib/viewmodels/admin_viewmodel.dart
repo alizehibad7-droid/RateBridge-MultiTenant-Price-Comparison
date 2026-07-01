@@ -1,16 +1,11 @@
 // MVVM: ViewModel
-import 'dart:math';
 import 'dart:async';
 import 'dart:developer' as developer;
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/company_model.dart';
 import '../models/user_model.dart';
-import '../models/notification_model.dart';
-import '../models/transaction_model.dart';
-import '../models/subscription_model.dart';
 import '../models/category_model.dart';
-import '../utils/app_exception.dart';
 import '../utils/invite_code_generator.dart';
 import 'auth_viewmodel.dart';
 
@@ -163,7 +158,10 @@ class AdminViewModel extends ChangeNotifier {
       'rejectionReason': reason,
     });
     if (companyId != null && companyId.isNotEmpty) {
-      await _db.collection('companies').doc(companyId).update({'status': 'rejected'});
+      await _db.collection('companies').doc(companyId).update({
+        'status': 'rejected',
+        'rejectionReason': reason,
+      });
     }
     loadCEOs();
   }
@@ -205,24 +203,47 @@ class AdminViewModel extends ChangeNotifier {
 
   // --- Category & Transaction Management ---
 
-  Future<void> addCategory(String name, String unit, List<String> brands, List<String> grades) async {
+  Future<void> addCategory(
+    String name,
+    String unit,
+    List<String> brands,
+    List<String> grades, {
+    String iconKey = 'construction_outlined',
+  }) async {
     await _db.collection('categories').add({
       'name': name,
       'unit': unit,
       'brands': brands,
       'grades': grades,
+      'icon': iconKey,
       'active': true,
+      'activeMaterialsCount': 0,
       'createdAt': FieldValue.serverTimestamp(),
     });
   }
 
-  Future<void> editCategory(String id, String name, String unit, List<String> brands, List<String> grades) async {
-    await _db.collection('categories').doc(id).update({
+  Future<void> editCategory(
+    String id,
+    String name,
+    String unit,
+    List<String> brands,
+    List<String> grades, {
+    bool? isActive,
+  }) async {
+    final updates = <String, dynamic>{
       'name': name,
       'unit': unit,
       'brands': brands,
       'grades': grades,
-    });
+    };
+    if (isActive != null) {
+      updates['active'] = isActive;
+    }
+    await _db.collection('categories').doc(id).update(updates);
+  }
+
+  Future<void> setCategoryActive(String id, bool active) async {
+    await _db.collection('categories').doc(id).update({'active': active});
   }
 
   Future<void> deleteCategory(String id) async {
@@ -257,5 +278,14 @@ class AdminViewModel extends ChangeNotifier {
   Stream<int> watchSuspendedUsersCount() => _db.collection('users').where('status', isEqualTo: 'suspended').snapshots().map((s) => s.docs.length);
   Stream<int> watchPendingUsersCount() => _db.collection('users').where('status', isEqualTo: 'pending').snapshots().map((s) => s.docs.length);
   
-  Stream<List<CategoryModel>> watchCategories() => _db.collection('categories').snapshots().map((s) => s.docs.map((d) => CategoryModel.fromMap(d.data())).toList());
+  Stream<List<CategoryModel>> watchCategories() => _db
+      .collection('categories')
+      .snapshots()
+      .map(
+        (s) => s.docs
+            .map((d) => CategoryModel.fromDoc(d.id, d.data()))
+            .where((c) => c.name.isNotEmpty)
+            .toList()
+          ..sort((a, b) => a.name.compareTo(b.name)),
+      );
 }

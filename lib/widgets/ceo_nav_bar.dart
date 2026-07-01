@@ -14,6 +14,7 @@ class CeoNavBar extends StatelessWidget {
     '/ceo/invite',
     '/ceo/field-users',
     '/ceo/orders',
+    '/ceo/profile',
   ];
 
   @override
@@ -35,6 +36,8 @@ class CeoNavBar extends StatelessWidget {
             icon: Icon(Icons.group_outlined), label: 'Field Users'),
         NavigationDestination(
             icon: Icon(Icons.receipt_outlined), label: 'Orders'),
+        NavigationDestination(
+            icon: Icon(Icons.person_outline), label: 'Profile'),
       ],
     );
   }

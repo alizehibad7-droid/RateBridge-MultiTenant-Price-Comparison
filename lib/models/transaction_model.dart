@@ -10,8 +10,9 @@ class TransactionModel {
   final double commissionRate; // always 0.02
   final double commissionAmount;
   final double supplierEarning;
-  final String status; // settled
+  final String status; // unsettled | settled
   final DateTime createdAt;
+  final DateTime? settledAt;
 
   const TransactionModel({
     required this.txId,
@@ -24,7 +25,11 @@ class TransactionModel {
     required this.supplierEarning,
     required this.status,
     required this.createdAt,
+    this.settledAt,
   });
+
+  bool get isUnsettled => status.toLowerCase() == 'unsettled';
+  bool get isSettled => status.toLowerCase() == 'settled';
 
   factory TransactionModel.fromMap(String id, Map<String, dynamic> map) => TransactionModel(
     txId: id,
@@ -39,6 +44,9 @@ class TransactionModel {
     createdAt: map['createdAt'] is Timestamp 
         ? (map['createdAt'] as Timestamp).toDate() 
         : DateTime.tryParse(map['createdAt']?.toString() ?? '') ?? DateTime.now(),
+    settledAt: map['settledAt'] is Timestamp
+        ? (map['settledAt'] as Timestamp).toDate()
+        : DateTime.tryParse(map['settledAt']?.toString() ?? ''),
   );
 
   Map<String, dynamic> toMap() => {
@@ -51,7 +59,47 @@ class TransactionModel {
     'supplierEarning': supplierEarning,
     'status': status,
     'createdAt': FieldValue.serverTimestamp(),
+    if (settledAt != null) 'settledAt': Timestamp.fromDate(settledAt!),
   };
+}
+
+/// Per-supplier unsettled commission rollup for the admin ledger.
+class SupplierUnsettledSummary {
+  final String supplierUid;
+  final String supplierName;
+  final double unsettledAmount;
+  final int orderCount;
+  final List<String> transactionIds;
+
+  const SupplierUnsettledSummary({
+    required this.supplierUid,
+    required this.supplierName,
+    required this.unsettledAmount,
+    required this.orderCount,
+    required this.transactionIds,
+  });
+}
+
+/// Admin commission ledger totals and supplier rows.
+class CommissionLedgerSnapshot {
+  final double outstandingThisMonth;
+  final double collectedThisMonth;
+  final double grandTotalCollected;
+  final List<SupplierUnsettledSummary> suppliers;
+
+  const CommissionLedgerSnapshot({
+    required this.outstandingThisMonth,
+    required this.collectedThisMonth,
+    required this.grandTotalCollected,
+    required this.suppliers,
+  });
+
+  static const empty = CommissionLedgerSnapshot(
+    outstandingThisMonth: 0,
+    collectedThisMonth: 0,
+    grandTotalCollected: 0,
+    suppliers: [],
+  );
 }
 
 class MonthlyEarning {

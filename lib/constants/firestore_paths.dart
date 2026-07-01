@@ -9,6 +9,7 @@ class FirestorePaths {
   static const String categoriesCol = 'categories';
   static const String invitationsCol = 'invitations';
   static const String joinRequestsCol = 'joinRequests';
+  static const String partnershipRequestsCol = 'partnershipRequests';
   static const String transactionsCol = 'transactions';
   static const String subscriptionsCol = 'subscriptions';
   static const String processedEventsCol = 'processedEvents';

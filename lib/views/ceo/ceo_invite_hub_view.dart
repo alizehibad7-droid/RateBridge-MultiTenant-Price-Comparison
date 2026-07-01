@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import '../../constants/app_colors.dart';
 import '../../constants/app_constants.dart';
 import '../../utils/app_theme.dart';
-import '../../models/join_request_model.dart';
+import '../../models/partnership_request_model.dart';
 import '../../models/supplier_model.dart';
 import '../../viewmodels/ceo_viewmodel.dart';
 import '../../widgets/app_text_field.dart';
@@ -30,6 +30,10 @@ class _CeoInviteHubViewState extends State<CeoInviteHubView> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final vm = Provider.of<CeoViewModel>(context, listen: false);
+      final companyId = vm.company?.id;
+      if (companyId != null && companyId.isNotEmpty) {
+        vm.ensurePartnershipStatusWatch(companyId);
+      }
       vm.loadMarketplace();
     });
   }
@@ -54,7 +58,7 @@ class _CeoInviteHubViewState extends State<CeoInviteHubView> {
     final companyId = vm.company?.id ?? '';
 
     return DefaultTabController(
-      length: 2,
+      length: 3,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Supplier Hub'),
@@ -62,6 +66,7 @@ class _CeoInviteHubViewState extends State<CeoInviteHubView> {
             tabs: [
               Tab(text: 'Marketplace'),
               Tab(text: 'Join Requests'),
+              Tab(text: 'Sent'),
             ],
           ),
         ),
@@ -80,6 +85,8 @@ class _CeoInviteHubViewState extends State<CeoInviteHubView> {
                       child: Text(
                         vm.errorMessage!,
                         style: const TextStyle(color: AppColors.danger, fontSize: 13),
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     IconButton(
@@ -94,6 +101,7 @@ class _CeoInviteHubViewState extends State<CeoInviteHubView> {
                 children: [
                   _buildMarketplace(vm, companyId),
                   _buildJoinRequests(companyId),
+                  _buildSentRequests(companyId),
                 ],
               ),
             ),
@@ -118,6 +126,7 @@ class _CeoInviteHubViewState extends State<CeoInviteHubView> {
           child: Column(
             children: [
               TextField(
+                key: const ValueKey('marketplace_supplier_search'),
                 controller: _searchController,
                 decoration: InputDecoration(
                   hintText: 'Search by name or email...',
@@ -215,7 +224,7 @@ class _CeoInviteHubViewState extends State<CeoInviteHubView> {
                         children: [
                           const Icon(Icons.search_off, size: 48, color: AppColors.textMuted),
                           const SizedBox(height: 12),
-                          const Text('No suppliers found', style: AppTextStyles.bodyMuted),
+                          Text('No suppliers found', style: AppTextStyles.bodyMuted),
                           TextButton(
                             onPressed: () {
                               _searchController.clear();
@@ -295,34 +304,162 @@ class _CeoInviteHubViewState extends State<CeoInviteHubView> {
             ],
           ),
           const SizedBox(height: 12),
-          StreamBuilder<String>(
-            stream: vm.watchLinkStatus(companyId, supplier.id),
-            builder: (context, snap) {
-              final status = snap.data ?? 'Not Invited';
-              if (status == 'Linked') {
-                return OutlinedButton(
-                  onPressed: null,
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.success,
-                    side: const BorderSide(color: AppColors.success),
-                  ),
-                  child: const Text('Linked ✓'),
-                );
-              }
-              if (status == 'Invited') {
-                return OutlinedButton(
-                  onPressed: null,
-                  style: OutlinedButton.styleFrom(foregroundColor: AppColors.textMuted),
-                  child: const Text('Invited'),
-                );
-              }
-              return ElevatedButton.icon(
-                onPressed: () => vm.sendInvitation(supplier.id),
-                icon: const Icon(Icons.send_outlined, size: 16),
-                label: const Text('Invite to Join', style: AppTextStyles.button),
-              );
-            },
+          _buildPartnershipAction(context, vm, supplier, companyId),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPartnershipAction(
+    BuildContext context,
+    CeoViewModel vm,
+    SupplierModel supplier,
+    String companyId,
+  ) {
+    final status = vm.linkStatusFor(supplier.id);
+    if (status == 'Already Partners') {
+      return OutlinedButton(
+        onPressed: null,
+        style: OutlinedButton.styleFrom(
+          foregroundColor: AppColors.success,
+          side: const BorderSide(color: AppColors.success),
+        ),
+        child: const Text('Already Partners'),
+      );
+    }
+    if (status == 'Request Pending') {
+      return OutlinedButton(
+        onPressed: null,
+        style: OutlinedButton.styleFrom(foregroundColor: AppColors.textMuted),
+        child: const Text('Request Pending'),
+      );
+    }
+    if (status == 'Request Rejected') {
+      final reason = vm.linkRejectionReasonFor(supplier.id);
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (reason != null && reason.isNotEmpty)
+            Container(
+              margin: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.dangerBg,
+                borderRadius: BorderRadius.circular(AppRadius.sm),
+              ),
+              child: Text(
+                'Rejected: $reason',
+                style: const TextStyle(color: AppColors.danger, fontSize: 12),
+              ),
+            ),
+          ElevatedButton.icon(
+            onPressed: () => _showPartnershipSheet(context, vm, supplier),
+            icon: const Icon(Icons.refresh, size: 16),
+            label: const Text('Send Again'),
           ),
+        ],
+      );
+    }
+    return ElevatedButton.icon(
+      onPressed: () => _showPartnershipSheet(context, vm, supplier),
+      icon: const Icon(Icons.send_outlined, size: 16),
+      label: Text('Send Partnership Request', style: AppTextStyles.button),
+    );
+  }
+
+  // =====================================================================
+  // TAB 3 — SENT REQUESTS (CEO-initiated partnership requests)
+  // =====================================================================
+
+  Widget _buildSentRequests(String companyId) {
+    if (companyId.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    return Consumer<CeoViewModel>(
+      builder: (context, vm, _) {
+        if (!vm.partnershipRequestsReady) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final requests = vm.sentPartnershipRequests;
+        if (requests.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.send_outlined, size: 48, color: AppColors.textMuted),
+                const SizedBox(height: 12),
+                Text('No sent partnership requests', style: AppTextStyles.bodyMuted),
+              ],
+            ),
+          );
+        }
+
+        return ListView.separated(
+          padding: const EdgeInsets.all(16),
+          itemCount: requests.length,
+          separatorBuilder: (_, __) => const SizedBox(height: 12),
+          itemBuilder: (context, i) => _sentRequestCard(requests[i]),
+        );
+      },
+    );
+  }
+
+  Widget _sentRequestCard(PartnershipRequestModel req) {
+    Color statusColor = AppColors.warning;
+    if (req.status == 'accepted') statusColor = AppColors.success;
+    if (req.status == 'rejected') statusColor = AppColors.danger;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: appCardDecoration(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(req.supplierName, style: AppTextStyles.h3.copyWith(fontSize: 15)),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: statusColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(AppRadius.pill),
+                ),
+                child: Text(
+                  req.status.toUpperCase(),
+                  style: TextStyle(
+                    color: statusColor,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Sent: ${req.createdAt.toLocal().toString().split(' ').first}',
+            style: AppTextStyles.bodyMuted.copyWith(fontSize: 12),
+          ),
+          if (req.status == 'rejected' &&
+              req.rejectionReason != null &&
+              req.rejectionReason!.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.dangerBg,
+                borderRadius: BorderRadius.circular(AppRadius.sm),
+              ),
+              child: Text(
+                'Rejection reason: ${req.rejectionReason}',
+                style: const TextStyle(color: AppColors.danger, fontSize: 12),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -333,43 +470,40 @@ class _CeoInviteHubViewState extends State<CeoInviteHubView> {
   // =====================================================================
 
   Widget _buildJoinRequests(String companyId) {
+    if (companyId.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
     return Consumer<CeoViewModel>(
       builder: (context, vm, _) {
-        return StreamBuilder<List<JoinRequestModel>>(
-          stream: vm.watchJoinRequests(companyId, 'Received'),
-          builder: (context, snap) {
-            if (snap.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            if (snap.hasError) {
-              return Center(child: Text('Error: ${snap.error}', style: const TextStyle(color: AppColors.danger)));
-            }
-            final requests = snap.data ?? [];
-            if (requests.isEmpty) {
-              return const Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.inbox_outlined, size: 48, color: AppColors.textMuted),
-                    SizedBox(height: 12),
-                    Text('No pending join requests', style: AppTextStyles.bodyMuted),
-                  ],
-                ),
-              );
-            }
-            return ListView.separated(
-              padding: const EdgeInsets.all(16),
-              itemCount: requests.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 12),
-              itemBuilder: (context, i) => _joinRequestCard(context, vm, requests[i]),
-            );
-          },
+        if (!vm.partnershipRequestsReady) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final requests = vm.pendingReceivedPartnershipRequests;
+        if (requests.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.inbox_outlined, size: 48, color: AppColors.textMuted),
+                SizedBox(height: 12),
+                Text('No pending join requests', style: AppTextStyles.bodyMuted),
+              ],
+            ),
+          );
+        }
+        return ListView.separated(
+          padding: const EdgeInsets.all(16),
+          itemCount: requests.length,
+          separatorBuilder: (_, __) => const SizedBox(height: 12),
+          itemBuilder: (context, i) => _joinRequestCard(context, vm, requests[i]),
         );
       },
     );
   }
 
-  Widget _joinRequestCard(BuildContext context, CeoViewModel vm, JoinRequestModel req) {
+  Widget _joinRequestCard(BuildContext context, CeoViewModel vm, PartnershipRequestModel req) {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: appCardDecoration(),
@@ -392,8 +526,10 @@ class _CeoInviteHubViewState extends State<CeoInviteHubView> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(req.supplierName, style: AppTextStyles.h3.copyWith(fontSize: 15)),
-                    Text(req.supplierEmail, style: AppTextStyles.bodyMuted.copyWith(fontSize: 12)),
-                    Text(req.supplierCity, style: AppTextStyles.bodyMuted.copyWith(fontSize: 12)),
+                    if (req.supplierEmail != null && req.supplierEmail!.isNotEmpty)
+                      Text(req.supplierEmail!, style: AppTextStyles.bodyMuted.copyWith(fontSize: 12)),
+                    if (req.supplierCity != null && req.supplierCity!.isNotEmpty)
+                      Text(req.supplierCity!, style: AppTextStyles.bodyMuted.copyWith(fontSize: 12)),
                     const SizedBox(height: 4),
                     Row(
                       children: [
@@ -430,7 +566,7 @@ class _CeoInviteHubViewState extends State<CeoInviteHubView> {
               Expanded(
                 flex: 2,
                 child: ElevatedButton(
-                  onPressed: () => vm.acceptJoinRequest(req.reqId, req.supplierUid),
+                  onPressed: () => vm.acceptPartnershipRequest(req.requestId),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
                     minimumSize: const Size(0, 44),
@@ -441,7 +577,7 @@ class _CeoInviteHubViewState extends State<CeoInviteHubView> {
               const SizedBox(width: 8),
               Expanded(
                 child: OutlinedButton(
-                  onPressed: () => _showRejectDialog(context, vm, req.reqId),
+                  onPressed: () => _showRejectDialog(context, vm, req.requestId),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: AppColors.danger,
                     side: const BorderSide(color: AppColors.danger),
@@ -474,12 +610,74 @@ class _CeoInviteHubViewState extends State<CeoInviteHubView> {
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger),
             onPressed: () {
-              vm.rejectJoinRequest(reqId, reasonController.text.trim());
+              vm.rejectPartnershipRequest(reqId, reasonController.text.trim());
               Navigator.pop(ctx);
             },
-            child: const Text('Reject', style: AppTextStyles.button),
+            child: Text('Reject', style: AppTextStyles.button),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showPartnershipSheet(
+    BuildContext context,
+    CeoViewModel vm,
+    SupplierModel supplier,
+  ) {
+    final messageController = TextEditingController();
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.fromLTRB(
+          20,
+          20,
+          20,
+          20 + MediaQuery.of(ctx).viewInsets.bottom,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('Partnership request', style: AppTextStyles.h3),
+            const SizedBox(height: 8),
+            Text(
+              'Send a request to ${supplier.name}. They must accept before your field team can see their materials.',
+              style: AppTextStyles.bodyMuted,
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: messageController,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'Optional message',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.pop(ctx);
+                await vm.sendPartnershipRequest(
+                  supplier.id,
+                  message: messageController.text.trim().isEmpty
+                      ? null
+                      : messageController.text.trim(),
+                );
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Request sent to ${supplier.name}')),
+                  );
+                }
+              },
+              child: Text('Send Request', style: AppTextStyles.button),
+            ),
+          ],
+        ),
       ),
     );
   }

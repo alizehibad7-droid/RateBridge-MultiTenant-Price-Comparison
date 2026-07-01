@@ -1,4 +1,6 @@
 // Pure Dart Model for Materials conforming with Rule 5
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class MaterialModel {
   final String id;
   final String name;
@@ -13,6 +15,15 @@ class MaterialModel {
   final String originCity;
   final String? profileImageUrl;
   final String? brand;
+  final String? stockStatus;
+  final double? minOrderQuantity;
+  final String? deliveryTime;
+  final String? description;
+  final bool? bulkDiscountAvailable;
+  final String? bulkDiscountDetails;
+  final String? deliveryCoverageArea;
+  final String? deliveryCharges;
+  final DateTime? createdAt;
 
   MaterialModel({
     required this.id,
@@ -28,6 +39,15 @@ class MaterialModel {
     required this.originCity,
     this.profileImageUrl,
     this.brand,
+    this.stockStatus,
+    this.minOrderQuantity,
+    this.deliveryTime,
+    this.description,
+    this.bulkDiscountAvailable,
+    this.bulkDiscountDetails,
+    this.deliveryCoverageArea,
+    this.deliveryCharges,
+    this.createdAt,
   });
 
   // Getters to support UI components
@@ -48,6 +68,15 @@ class MaterialModel {
     String? originCity,
     String? profileImageUrl,
     String? brand,
+    String? stockStatus,
+    double? minOrderQuantity,
+    String? deliveryTime,
+    String? description,
+    bool? bulkDiscountAvailable,
+    String? bulkDiscountDetails,
+    String? deliveryCoverageArea,
+    String? deliveryCharges,
+    DateTime? createdAt,
   }) {
     return MaterialModel(
       id: id ?? this.id,
@@ -63,6 +92,17 @@ class MaterialModel {
       originCity: originCity ?? this.originCity,
       profileImageUrl: profileImageUrl ?? this.profileImageUrl,
       brand: brand ?? this.brand,
+      stockStatus: stockStatus ?? this.stockStatus,
+      minOrderQuantity: minOrderQuantity ?? this.minOrderQuantity,
+      deliveryTime: deliveryTime ?? this.deliveryTime,
+      description: description ?? this.description,
+      bulkDiscountAvailable:
+          bulkDiscountAvailable ?? this.bulkDiscountAvailable,
+      bulkDiscountDetails: bulkDiscountDetails ?? this.bulkDiscountDetails,
+      deliveryCoverageArea:
+          deliveryCoverageArea ?? this.deliveryCoverageArea,
+      deliveryCharges: deliveryCharges ?? this.deliveryCharges,
+      createdAt: createdAt ?? this.createdAt,
     );
   }
 
@@ -76,29 +116,53 @@ class MaterialModel {
       'specifications': specifications,
       'qualityGrade': qualityGrade,
       'supplierId': supplierId,
+      'supplierUid': supplierId,
       'supplierName': supplierName,
       'isCertified': isCertified,
       'originCity': originCity,
       'profileImageUrl': profileImageUrl,
       'brand': brand,
+      if (stockStatus != null) 'stockStatus': stockStatus,
+      if (minOrderQuantity != null) 'minOrderQuantity': minOrderQuantity,
+      if (deliveryTime != null) 'deliveryTime': deliveryTime,
+      if (description != null) 'description': description,
+      if (bulkDiscountAvailable != null)
+        'bulkDiscountAvailable': bulkDiscountAvailable,
+      if (bulkDiscountDetails != null)
+        'bulkDiscountDetails': bulkDiscountDetails,
+      if (deliveryCoverageArea != null)
+        'deliveryCoverageArea': deliveryCoverageArea,
+      if (deliveryCharges != null) 'deliveryCharges': deliveryCharges,
+      if (createdAt != null) 'createdAt': createdAt,
     };
   }
 
   factory MaterialModel.fromMap(Map<String, dynamic> map) {
     return MaterialModel(
       id: (map['id'] ?? '') as String,
-      name: (map['name'] ?? '') as String,
+      name: (map['name'] ?? map['materialName'] ?? '') as String,
       category: (map['category'] ?? '') as String,
       pricePerUnit: (map['pricePerUnit'] as num? ?? 0.0).toDouble(),
       unit: (map['unit'] ?? '') as String,
       specifications: (map['specifications'] ?? '') as String,
       qualityGrade: (map['qualityGrade'] ?? '') as String,
-      supplierId: (map['supplierId'] ?? '') as String,
+      supplierId: (map['supplierId'] ?? map['supplierUid'] ?? '') as String,
       supplierName: (map['supplierName'] ?? '') as String,
       isCertified: (map['isCertified'] ?? false) as bool,
       originCity: (map['originCity'] ?? '') as String,
       profileImageUrl: map['profileImageUrl'] as String?,
       brand: map['brand'] as String?,
+      stockStatus: map['stockStatus'] as String?,
+      minOrderQuantity: (map['minOrderQuantity'] as num?)?.toDouble(),
+      deliveryTime: map['deliveryTime'] as String?,
+      description: map['description'] as String?,
+      bulkDiscountAvailable: map['bulkDiscountAvailable'] as bool?,
+      bulkDiscountDetails: map['bulkDiscountDetails'] as String?,
+      deliveryCoverageArea: map['deliveryCoverageArea'] as String?,
+      deliveryCharges: map['deliveryCharges'] as String?,
+      createdAt: map['createdAt'] is Timestamp
+          ? (map['createdAt'] as Timestamp).toDate()
+          : DateTime.tryParse(map['createdAt']?.toString() ?? ''),
     );
   }
 }

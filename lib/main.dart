@@ -7,12 +7,22 @@ import 'viewmodels/auth_viewmodel.dart';
 import 'viewmodels/ceo_viewmodel.dart';
 import 'viewmodels/admin_viewmodel.dart';
 import 'viewmodels/supplier_viewmodel.dart';
-import 'viewmodels/field_user_viewmodel.dart';
-import 'viewmodels/field_order_viewmodel.dart';
+import 'viewmodels/field_user/field_session_viewmodel.dart';
+import 'viewmodels/field_user/field_catalog_viewmodel.dart';
+import 'viewmodels/field_user/field_compare_viewmodel.dart';
+import 'viewmodels/field_user/field_trends_viewmodel.dart';
+import 'viewmodels/field_user/field_orders_viewmodel.dart';
+import 'viewmodels/field_user/field_chat_viewmodel.dart';
+import 'viewmodels/field_user/field_notifications_viewmodel.dart';
+import 'viewmodels/field_user/field_rating_viewmodel.dart';
+import 'viewmodels/field_user/field_supplier_profile_viewmodel.dart';
 import 'viewmodels/invite_viewmodel.dart';
 import 'viewmodels/comparison_viewmodel.dart';
 import 'viewmodels/order_viewmodel.dart';
+import 'viewmodels/chat_viewmodel.dart';
 import 'viewmodels/subscription_viewmodel.dart';
+import 'viewmodels/notification_viewmodel.dart';
+import 'viewmodels/material_viewmodel.dart';
 import 'repositories/user_repository.dart';
 import 'repositories/company_repository.dart';
 import 'repositories/material_repository.dart';
@@ -20,16 +30,34 @@ import 'repositories/order_repository.dart';
 import 'repositories/transaction_repository.dart';
 import 'repositories/price_history_repository.dart';
 import 'repositories/supplier_repository.dart';
+import 'repositories/partnership_request_repository.dart';
 import 'repositories/join_request_repository.dart';
 import 'repositories/invitation_repository.dart';
+import 'repositories/chat_repository.dart';
+import 'repositories/notification_repository.dart';
+import 'repositories/subscription_payment_repository.dart';
 import 'services/firebase_auth_service.dart';
 import 'services/firestore_service.dart';
 import 'services/storage_service.dart';
 import 'services/cloud_function_service.dart';
 import 'services/dynamic_link_service.dart';
 import 'services/gemini_service.dart';
+import 'services/ai_context_service.dart';
 import 'services/voice_search_service.dart';
+import 'services/recently_viewed_service.dart';
+import 'services/fcm_service.dart';
+import 'services/notification_service.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'firebase_options.dart';
+
+/// Call once after [Firebase.initializeApp], before any Firestore reads.
+void configureFirestoreForPlatform() {
+  if (!kIsWeb) return;
+  FirebaseFirestore.instance.settings = const Settings(
+    webExperimentalAutoDetectLongPolling: true,
+  );
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -39,7 +67,10 @@ void main() async {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
+    configureFirestoreForPlatform();
     prefs = await SharedPreferences.getInstance();
+    await FCMService().initialize();
+    // Category seed runs after sign-in (see AuthViewModel) when rules allow writes.
   } catch (e) {
     debugPrint("Startup Error: $e");
   }
@@ -60,6 +91,9 @@ void main() async {
         Provider<CloudFunctionService>(create: (_) => CloudFunctionService()),
         Provider<DynamicLinkService>(create: (_) => DynamicLinkService()),
         Provider<GeminiService>(create: (_) => GeminiService()),
+        ChangeNotifierProvider<AiContextService>(
+          create: (_) => AiContextService(),
+        ),
         Provider<VoiceSearchService>(create: (_) => VoiceSearchService()),
         
         ProxyProvider<FirestoreService, FirebaseAuthService>(
@@ -78,6 +112,10 @@ void main() async {
           update: (context, firestore, previous) => MaterialRepository(firestore),
         ),
 
+        ProxyProvider<SharedPreferences, RecentlyViewedService>(
+          update: (context, prefs, previous) => RecentlyViewedService(prefs),
+        ),
+
         ProxyProvider<FirestoreService, OrderRepository>(
           update: (context, firestore, previous) => OrderRepository(firestore),
         ),
@@ -94,12 +132,29 @@ void main() async {
           update: (context, firestore, previous) => SupplierRepository(firestore),
         ),
 
+        ProxyProvider<FirestoreService, PartnershipRequestRepository>(
+          update: (context, firestore, previous) =>
+              PartnershipRequestRepository(firestore),
+        ),
+
         ProxyProvider<FirestoreService, JoinRequestRepository>(
           update: (context, firestore, previous) => JoinRequestRepository(firestore),
         ),
 
         ProxyProvider<FirestoreService, InvitationRepository>(
           update: (context, firestore, previous) => InvitationRepository(firestore),
+        ),
+
+        ProxyProvider<FirestoreService, ChatRepository>(
+          update: (context, firestore, previous) => ChatRepository(firestore),
+        ),
+
+        ProxyProvider<FirestoreService, NotificationRepository>(
+          update: (context, firestore, previous) => NotificationRepository(firestore),
+        ),
+
+        ProxyProvider<NotificationRepository, NotificationService>(
+          update: (context, repo, previous) => NotificationService(repo),
         ),
 
         ChangeNotifierProxyProvider<UserRepository, AuthViewModel>(
@@ -125,8 +180,21 @@ void main() async {
           },
         ),
 
-        ChangeNotifierProvider<SubscriptionViewModel>(
-          create: (context) => SubscriptionViewModel(),
+        ProxyProvider2<FirestoreService, NotificationService,
+            SubscriptionPaymentRepository>(
+          update: (context, firestore, notifications, previous) =>
+              SubscriptionPaymentRepository(firestore, notifications),
+        ),
+
+        ChangeNotifierProxyProvider2<FirestoreService,
+            SubscriptionPaymentRepository, SubscriptionViewModel>(
+          create: (context) => SubscriptionViewModel(
+            context.read<FirestoreService>(),
+            context.read<SubscriptionPaymentRepository>(),
+          ),
+          update: (context, firestore, paymentRepo, previous) =>
+              previous ??
+              SubscriptionViewModel(firestore, paymentRepo),
         ),
 
         ChangeNotifierProxyProvider4<InvitationRepository, JoinRequestRepository, DynamicLinkService, CloudFunctionService, InviteViewModel>(
@@ -143,27 +211,6 @@ void main() async {
           },
         ),
 
-        ChangeNotifierProxyProvider4<MaterialRepository, OrderRepository, GeminiService, AuthViewModel, FieldUserViewModel>(
-          create: (context) => FieldUserViewModel(
-            context.read<MaterialRepository>(),
-            context.read<OrderRepository>(),
-            context.read<GeminiService>(),
-          ),
-          update: (context, mat, ord, gem, auth, previous) {
-            final vm = previous ?? FieldUserViewModel(mat, ord, gem);
-            vm.updateAuth(auth);
-            return vm;
-          },
-        ),
-
-        ChangeNotifierProxyProvider2<OrderRepository, MaterialRepository, FieldOrderViewModel>(
-          create: (context) => FieldOrderViewModel(
-            context.read<OrderRepository>(),
-            context.read<MaterialRepository>(),
-          ),
-          update: (context, ord, mat, previous) => previous ?? FieldOrderViewModel(ord, mat),
-        ),
-
         ChangeNotifierProxyProvider2<MaterialRepository, GeminiService, ComparisonViewModel>(
           create: (context) => ComparisonViewModel(
             context.read<MaterialRepository>(),
@@ -172,15 +219,107 @@ void main() async {
           update: (context, mat, gem, previous) => previous ?? ComparisonViewModel(mat, gem),
         ),
 
+        // --- Field User Panel ViewModels ---
+        ChangeNotifierProxyProvider3<CompanyRepository, UserRepository, AuthViewModel, FieldSessionViewModel>(
+          create: (context) => FieldSessionViewModel(
+            context.read<CompanyRepository>(),
+            context.read<UserRepository>(),
+          ),
+          update: (context, companyRepo, userRepo, auth, previous) {
+            final vm = previous ?? FieldSessionViewModel(companyRepo, userRepo);
+            vm.updateAuth(auth);
+            return vm;
+          },
+        ),
+
+        ChangeNotifierProxyProvider<MaterialRepository, FieldCatalogViewModel>(
+          create: (context) => FieldCatalogViewModel(context.read<MaterialRepository>()),
+          update: (context, mat, previous) => previous ?? FieldCatalogViewModel(mat),
+        ),
+
+        ChangeNotifierProxyProvider2<MaterialRepository, GeminiService, FieldCompareViewModel>(
+          create: (context) => FieldCompareViewModel(
+            context.read<MaterialRepository>(),
+            context.read<GeminiService>(),
+          ),
+          update: (context, mat, gem, previous) =>
+              previous ?? FieldCompareViewModel(mat, gem),
+        ),
+
+        ChangeNotifierProxyProvider2<MaterialRepository, GeminiService, FieldTrendsViewModel>(
+          create: (context) => FieldTrendsViewModel(
+            context.read<MaterialRepository>(),
+            context.read<GeminiService>(),
+          ),
+          update: (context, mat, gem, previous) =>
+              previous ?? FieldTrendsViewModel(mat, gem),
+        ),
+
+        ChangeNotifierProxyProvider2<OrderRepository, TransactionRepository,
+            FieldOrdersViewModel>(
+          create: (context) => FieldOrdersViewModel(
+            context.read<OrderRepository>(),
+            context.read<TransactionRepository>(),
+            context.read<NotificationService>(),
+          ),
+          update: (context, ord, tx, previous) =>
+              previous ??
+              FieldOrdersViewModel(
+                ord,
+                tx,
+                context.read<NotificationService>(),
+              ),
+        ),
+
+        ChangeNotifierProxyProvider2<ChatRepository, NotificationService,
+            FieldChatViewModel>(
+          create: (context) => FieldChatViewModel(
+            context.read<ChatRepository>(),
+            context.read<NotificationService>(),
+          ),
+          update: (context, chat, notifications, previous) =>
+              previous ??
+              FieldChatViewModel(chat, notifications),
+        ),
+
+        ChangeNotifierProxyProvider<ChatRepository, ChatViewModel>(
+          create: (context) => ChatViewModel(context.read<ChatRepository>()),
+          update: (context, chat, previous) => previous ?? ChatViewModel(chat),
+        ),
+
+        ChangeNotifierProxyProvider<NotificationRepository, FieldNotificationsViewModel>(
+          create: (context) => FieldNotificationsViewModel(
+            context.read<NotificationRepository>(),
+          ),
+          update: (context, notif, previous) =>
+              previous ?? FieldNotificationsViewModel(notif),
+        ),
+
+        ChangeNotifierProxyProvider<OrderRepository, FieldRatingViewModel>(
+          create: (context) => FieldRatingViewModel(context.read<OrderRepository>()),
+          update: (context, ord, previous) => previous ?? FieldRatingViewModel(ord),
+        ),
+
+        ChangeNotifierProxyProvider2<MaterialRepository, OrderRepository,
+            FieldSupplierProfileViewModel>(
+          create: (context) => FieldSupplierProfileViewModel(
+            context.read<MaterialRepository>(),
+            context.read<OrderRepository>(),
+          ),
+          update: (context, mat, ord, previous) =>
+              previous ?? FieldSupplierProfileViewModel(mat, ord),
+        ),
+
         ChangeNotifierProxyProvider<AuthViewModel, CeoViewModel>(
           create: (context) => CeoViewModel(
             null, 
             'CEO',
             context.read<OrderRepository>(),
-            context.read<JoinRequestRepository>(),
+            context.read<PartnershipRequestRepository>(),
             context.read<UserRepository>(),
             context.read<CompanyRepository>(),
             context.read<InvitationRepository>(),
+            context.read<NotificationService>(),
             context.read<CloudFunctionService>(),
           ),
           update: (context, auth, previous) {
@@ -189,14 +328,27 @@ void main() async {
                 auth.user?.uid, 
                 auth.user?.name ?? 'CEO',
                 context.read<OrderRepository>(),
-                context.read<JoinRequestRepository>(),
+                context.read<PartnershipRequestRepository>(),
                 context.read<UserRepository>(),
                 context.read<CompanyRepository>(),
                 context.read<InvitationRepository>(),
+                context.read<NotificationService>(),
                 context.read<CloudFunctionService>(),
               );
             }
             return previous;
+          },
+        ),
+
+        ChangeNotifierProxyProvider<AuthViewModel, NotificationViewModel>(
+          create: (context) => NotificationViewModel(
+            context.read<NotificationRepository>(),
+          ),
+          update: (context, auth, previous) {
+            final vm = previous ??
+                NotificationViewModel(context.read<NotificationRepository>());
+            vm.updateAuth(auth);
+            return vm;
           },
         ),
 
@@ -209,6 +361,13 @@ void main() async {
           },
         ),
 
+        ChangeNotifierProxyProvider<MaterialRepository, MaterialViewModel>(
+          create: (context) =>
+              MaterialViewModel(context.read<MaterialRepository>()),
+          update: (_, repo, previous) =>
+              previous ?? MaterialViewModel(repo),
+        ),
+
         ChangeNotifierProxyProvider<AuthViewModel, SupplierViewModel>(
           create: (context) => SupplierViewModel(
             context.read<MaterialRepository>(),
@@ -219,6 +378,8 @@ void main() async {
             context.read<CloudFunctionService>(),
             context.read<UserRepository>(),
             context.read<CompanyRepository>(),
+            context.read<PartnershipRequestRepository>(),
+            context.read<NotificationService>(),
           ),
           update: (context, auth, previous) {
             previous?.updateAuth(auth);
@@ -231,6 +392,8 @@ void main() async {
               context.read<CloudFunctionService>(),
               context.read<UserRepository>(),
               context.read<CompanyRepository>(),
+              context.read<PartnershipRequestRepository>(),
+              context.read<NotificationService>(),
             );
           },
         ),

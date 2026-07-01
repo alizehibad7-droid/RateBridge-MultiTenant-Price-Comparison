@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import '../../viewmodels/supplier_viewmodel.dart';
-import '../../constants/app_colors.dart';
+import '../../viewmodels/auth_viewmodel.dart';
+import '../../theme/supplier_theme.dart';
 import '../../constants/route_names.dart';
 import 'package:intl/intl.dart';
 
@@ -21,7 +22,7 @@ class SupplierPendingView extends StatelessWidget {
         }
 
         return Scaffold(
-          backgroundColor: AppColors.background,
+          backgroundColor: FieldColors.screenBackground,
           body: Padding(
             padding: const EdgeInsets.all(32.0),
             child: viewModel.status == 'rejected'
@@ -37,18 +38,22 @@ class SupplierPendingView extends StatelessWidget {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        const Icon(Icons.access_time_filled_rounded, size: 80, color: Colors.amber),
+        const Icon(
+          Icons.access_time_filled_rounded,
+          size: 80,
+          color: FieldColors.accentAmber,
+        ),
         const SizedBox(height: 24),
-        const Text(
+        Text(
           'Account Under Review',
-          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+          style: FieldTypography.headlineMedium,
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 16),
-        const Text(
-          'Your supplier registration is being reviewed by our compliance team. Verification usually takes 24-48 hours.',
+        Text(
+          'Your supplier application is under review. You\'ll be notified once approved.',
           textAlign: TextAlign.center,
-          style: TextStyle(color: AppColors.textSecondary, fontSize: 16),
+          style: FieldTypography.bodyLarge.copyWith(color: FieldColors.textSecondary),
         ),
         const SizedBox(height: 32),
         if (viewModel.profile != null)
@@ -58,7 +63,7 @@ class SupplierPendingView extends StatelessWidget {
               child: Column(
                 children: [
                   Text('Submitted: ${DateFormat('MMM dd, yyyy').format(viewModel.profile!.createdAt)}',
-                      style: const TextStyle(color: AppColors.textSecondary)),
+                      style: const TextStyle(color: FieldColors.textSecondary)),
                 ],
               ),
             ),
@@ -72,10 +77,13 @@ class SupplierPendingView extends StatelessWidget {
           ),
         ),
         TextButton(
-          onPressed: () {
-            // Access AuthViewModel to sign out
+          onPressed: () async {
+            await context.read<AuthViewModel>().signOut();
+            if (context.mounted) {
+              context.go(RouteNames.roleSelection);
+            }
           },
-          child: const Text('Sign Out', style: TextStyle(color: AppColors.error)),
+          child: const Text('Sign Out', style: TextStyle(color: FieldColors.statusDanger)),
         ),
       ],
     );
@@ -85,25 +93,29 @@ class SupplierPendingView extends StatelessWidget {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        const Icon(Icons.cancel_rounded, size: 80, color: AppColors.error),
+        const Icon(Icons.cancel_rounded, size: 80, color: FieldColors.statusDanger),
         const SizedBox(height: 24),
-        const Text(
+        Text(
           'Registration Rejected',
-          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+          style: FieldTypography.headlineMedium,
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 16),
         Container(
           width: double.infinity,
           padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(12)),
+          decoration: BoxDecoration(
+            color: FieldColors.statusDanger.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(FieldRadius.card),
+            border: Border.all(color: FieldColors.statusDanger.withValues(alpha: 0.2)),
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('REASON:', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.error, fontSize: 12)),
+              const Text('REASON:', style: TextStyle(fontWeight: FontWeight.bold, color: FieldColors.statusDanger, fontSize: 12)),
               const SizedBox(height: 4),
               Text(viewModel.rejectionReason ?? 'Information provided was insufficient for verification.',
-                  style: const TextStyle(color: AppColors.error)),
+                  style: const TextStyle(color: FieldColors.statusDanger)),
             ],
           ),
         ),
@@ -115,8 +127,13 @@ class SupplierPendingView extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         TextButton(
-          onPressed: () {}, // Auth Sign Out
-          child: const Text('Sign Out', style: TextStyle(color: AppColors.error)),
+          onPressed: () async {
+            await context.read<AuthViewModel>().signOut();
+            if (context.mounted) {
+              context.go(RouteNames.roleSelection);
+            }
+          },
+          child: const Text('Sign Out', style: TextStyle(color: FieldColors.statusDanger)),
         ),
       ],
     );

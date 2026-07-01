@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:image_picker/image_picker.dart';
-import 'dart:io';
 import '../viewmodels/chat_viewmodel.dart';
 import '../widgets/chat_bubble_widget.dart';
 
@@ -40,12 +38,7 @@ class _ChatThreadViewState extends State<ChatThreadView> {
   }
 
   Future<void> _handleImage() async {
-    final pickedFile = await ImagePicker().pickImage(source: ImageSource.gallery);
-    if (pickedFile != null) {
-      if (mounted) {
-        context.read<ChatViewModel>().sendImage(widget.orderId, File(pickedFile.path));
-      }
-    }
+    // Image attachments are handled in FieldChatThreadView / SupplierChatThreadView.
   }
 
   @override

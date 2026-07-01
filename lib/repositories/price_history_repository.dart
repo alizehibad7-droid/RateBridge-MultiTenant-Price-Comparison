@@ -7,10 +7,9 @@ import '../constants/firestore_paths.dart';
 import '../utils/app_exception.dart';
 
 class PriceHistoryRepository {
-  final FirestoreService _firestoreService;
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  PriceHistoryRepository(this._firestoreService);
+  PriceHistoryRepository(FirestoreService _);
 
   Stream<List<PriceHistoryModel>> watchPriceHistory(
     String matId,
@@ -31,7 +30,10 @@ class PriceHistoryRepository {
 
       return query.snapshots().map((s) =>
         s.docs.map((d) =>
-          PriceHistoryModel.fromMap(d.id, d.data() as Map<String, dynamic>)).toList());
+          PriceHistoryModel.fromMap(
+            d.id,
+            Map<String, dynamic>.from(d.data() as Map),
+          )).toList());
     } on FirebaseException catch (e) {
       throw AppException('Failed to watch price history: ${e.message}');
     }
@@ -51,7 +53,7 @@ class PriceHistoryRepository {
           .get();
 
       return snapshot.docs.map((d) =>
-        PriceHistoryModel.fromMap(d.id, d.data() as Map<String, dynamic>)).toList();
+        PriceHistoryModel.fromMap(d.id, d.data())).toList();
     } on FirebaseException catch (e) {
       throw AppException('Failed to get price history for chart: ${e.message}');
     }

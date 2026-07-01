@@ -23,6 +23,7 @@ class RouteNames {
   static const String adminCategories = '/admin/categories';
   static const String adminPayments = '/admin/payments';
   static const String adminSubscription = '/admin/subscriptions';
+  static const String adminNotifications = '/admin/notifications';
 
   // CEO
   static const String ceoDashboard = '/ceo/dashboard';
@@ -48,8 +49,12 @@ class RouteNames {
   static const String supplierChatThread = '/supplier/chat/:orderId';
   static const String supplierRatings = '/supplier/ratings';
   static const String supplierEarnings = '/supplier/earnings';
-  static const String supplierDirectory = '/supplier/directory';
+  static const String supplierPartnershipRequests =
+      '/supplier/partnership-requests';
+  static const String supplierCompanyDirectory = '/supplier/companies';
+  static const String supplierMyCompanies = '/supplier/my-companies';
   static const String supplierProfile = '/supplier/profile';
+  static const String supplierNotifications = '/supplier/notifications';
 
   // Field User
   static const String fieldHome = '/field/home';
@@ -58,7 +63,10 @@ class RouteNames {
   static const String fieldCompare = '/field/compare/:materialId';
   static const String fieldCompareRates = '/field/compare-rates';
   static const String fieldMarketplace = '/field/marketplace';
+  static const String fieldCategories = '/field/categories';
+  static const String fieldRecentlyViewed = '/field/recently-viewed';
   static const String fieldTrend = '/field/trend/:matId/:supplierUid';
+  static const String fieldPriceTrends = '/field/price-trends/:materialName';
   static const String fieldSupplierProfile = '/field/supplier/:supplierUid';
   static const String fieldPlaceOrder = '/field/place-order';
   static const String fieldOrders = '/field/orders';

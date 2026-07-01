@@ -7,7 +7,7 @@ import 'package:ratebridge/viewmodels/auth_viewmodel.dart';
 import 'package:ratebridge/viewmodels/ceo_viewmodel.dart';
 import 'package:ratebridge/viewmodels/admin_viewmodel.dart';
 import 'package:ratebridge/viewmodels/supplier_viewmodel.dart';
-import 'package:ratebridge/viewmodels/field_user_viewmodel.dart';
+import 'package:ratebridge/viewmodels/field_user/field_session_viewmodel.dart';
 import 'package:ratebridge/repositories/user_repository.dart';
 import 'package:ratebridge/repositories/company_repository.dart';
 import 'package:ratebridge/repositories/material_repository.dart';
@@ -17,6 +17,8 @@ import 'package:ratebridge/repositories/price_history_repository.dart';
 import 'package:ratebridge/repositories/supplier_repository.dart';
 import 'package:ratebridge/repositories/join_request_repository.dart';
 import 'package:ratebridge/repositories/invitation_repository.dart';
+import 'package:ratebridge/repositories/notification_repository.dart';
+import 'package:ratebridge/services/notification_service.dart';
 import 'package:ratebridge/services/firebase_auth_service.dart';
 import 'package:ratebridge/services/firestore_service.dart';
 import 'package:ratebridge/services/storage_service.dart';
@@ -42,6 +44,8 @@ void main() {
     final companyRepository = CompanyRepository(firestoreService);
     final joinRequestRepository = JoinRequestRepository(firestoreService);
     final invitationRepository = InvitationRepository(firestoreService);
+    final notificationRepository = NotificationRepository(firestoreService);
+    final notificationService = NotificationService(notificationRepository);
     final geminiService = GeminiService();
 
     // Build our app and trigger a frame.
@@ -61,6 +65,8 @@ void main() {
           Provider<CompanyRepository>.value(value: companyRepository),
           Provider<JoinRequestRepository>.value(value: joinRequestRepository),
           Provider<InvitationRepository>.value(value: invitationRepository),
+          Provider<NotificationRepository>.value(value: notificationRepository),
+          Provider<NotificationService>.value(value: notificationService),
           Provider<GeminiService>.value(value: geminiService),
           
           ChangeNotifierProvider(
@@ -75,6 +81,7 @@ void main() {
               userRepository,
               companyRepository,
               invitationRepository,
+              notificationService,
               cloudFunctionService,
             ),
             update: (context, auth, previous) => CeoViewModel(
@@ -85,6 +92,7 @@ void main() {
               userRepository,
               companyRepository,
               invitationRepository,
+              notificationService,
               cloudFunctionService,
             ),
           ),
@@ -102,6 +110,7 @@ void main() {
               cloudFunctionService,
               userRepository,
               companyRepository,
+              notificationService,
             ),
             update: (context, auth, previous) {
               final vm = previous ?? SupplierViewModel(
@@ -113,16 +122,16 @@ void main() {
                 cloudFunctionService,
                 userRepository,
                 companyRepository,
+                notificationService,
               );
               vm.updateAuth(auth);
               return vm;
             },
           ),
           ChangeNotifierProvider(
-            create: (context) => FieldUserViewModel(
-              materialRepository,
-              orderRepository,
-              geminiService,
+            create: (context) => FieldSessionViewModel(
+              companyRepository,
+              userRepository,
             ),
           ),
         ],

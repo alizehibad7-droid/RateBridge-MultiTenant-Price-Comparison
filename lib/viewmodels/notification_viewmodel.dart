@@ -13,13 +13,17 @@ class NotificationViewModel extends ChangeNotifier {
   List<NotificationModel> _notifications = [];
   int _unreadCount = 0;
   bool _isLoading = false;
+  String? _errorMessage;
   StreamSubscription? _notifSubscription;
   StreamSubscription? _unreadSubscription;
 
   void updateAuth(AuthViewModel auth) {
-    _uid = auth.user?.uid;
+    final newUid = auth.user?.uid;
+    if (newUid == _uid) return;
+    _uid = newUid;
     if (_uid != null) {
       watchUnreadCount(_uid!);
+      loadNotifications(_uid!);
     } else {
       _notifSubscription?.cancel();
       _unreadSubscription?.cancel();
@@ -29,13 +33,16 @@ class NotificationViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  String? get uid => _uid;
   List<NotificationModel> get notifications => _notifications;
   int get unreadCount => _unreadCount;
   bool get isLoading => _isLoading;
+  String? get errorMessage => _errorMessage;
 
   void loadNotifications(String uid) {
     _notifSubscription?.cancel();
     _isLoading = true;
+    _errorMessage = null;
     notifyListeners();
     _notifSubscription = _notificationRepo
       .watchNotifications(uid)
@@ -44,6 +51,7 @@ class NotificationViewModel extends ChangeNotifier {
         _isLoading = false;
         notifyListeners();
       }, onError: (e) {
+        _errorMessage = e.toString();
         _isLoading = false;
         notifyListeners();
       });
@@ -55,6 +63,9 @@ class NotificationViewModel extends ChangeNotifier {
       .watchUnreadCount(uid)
       .listen((count) {
         _unreadCount = count;
+        notifyListeners();
+      }, onError: (e) {
+        _errorMessage = e.toString();
         notifyListeners();
       });
   }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../utils/app_theme.dart';
 import '../../constants/app_colors.dart';
 
@@ -7,6 +8,7 @@ class AuthTextField extends StatefulWidget {
   final String label;
   final TextEditingController controller;
   final String? placeholder;
+  final String? helperText;
   final IconData prefixIcon;
   final bool obscureText;
   final TextInputType keyboardType;
@@ -14,6 +16,8 @@ class AuthTextField extends StatefulWidget {
   final ValueChanged<String>? onChanged;
   final Widget? suffix;
   final bool enabled;
+  final int maxLines;
+  final List<TextInputFormatter>? inputFormatters;
 
   const AuthTextField({
     super.key,
@@ -21,12 +25,15 @@ class AuthTextField extends StatefulWidget {
     required this.controller,
     required this.prefixIcon,
     this.placeholder,
+    this.helperText,
     this.obscureText = false,
     this.keyboardType = TextInputType.text,
     this.validator,
     this.onChanged,
     this.suffix,
     this.enabled = true,
+    this.maxLines = 1,
+    this.inputFormatters,
   });
 
   @override
@@ -56,9 +63,12 @@ class _AuthTextFieldState extends State<AuthTextField> {
           enabled: widget.enabled,
           validator: widget.validator,
           onChanged: widget.onChanged,
+          maxLines: widget.maxLines,
+          inputFormatters: widget.inputFormatters,
           style: AppTextStyles.body,
           decoration: InputDecoration(
             hintText: widget.placeholder,
+            helperText: widget.helperText,
             prefixIcon: Icon(widget.prefixIcon,
                 color: AppColors.textSecondary, size: 20),
             suffixIcon: widget.obscureText

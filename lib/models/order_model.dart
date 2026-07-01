@@ -19,7 +19,7 @@ class OrderModel {
   final String deliveryAddress;
   final String? siteLocation; 
   final String? notes;
-  final String status; // pending_approval|pending|accepted|inProgress|delivered|confirmed|rejected|cancelled
+  final String status; // pending|accepted|delivered|confirmed|rejected|cancelled
   final String? rejectionReason;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -28,6 +28,8 @@ class OrderModel {
   final DateTime? confirmedAt;
   final bool commissionDeducted;
   final String? chatMetaId;
+  final String? paymentProofUrl;
+  final String? paymentStatus;
 
   const OrderModel({
     required this.orderId,
@@ -57,6 +59,8 @@ class OrderModel {
     this.confirmedAt,
     this.commissionDeducted = false,
     this.chatMetaId,
+    this.paymentProofUrl,
+    this.paymentStatus,
   });
 
   String get id => orderId;
@@ -93,6 +97,8 @@ class OrderModel {
     confirmedAt: map['confirmedAt'] is Timestamp ? (map['confirmedAt'] as Timestamp).toDate() : null,
     commissionDeducted: map['commissionDeducted'] ?? false,
     chatMetaId: map['chatMetaId'],
+    paymentProofUrl: map['paymentProofUrl'],
+    paymentStatus: map['paymentStatus'],
   );
 
   Map<String, dynamic> toMap() => {
@@ -115,13 +121,15 @@ class OrderModel {
     'notes': notes,
     'status': status,
     'rejectionReason': rejectionReason,
-    'createdAt': createdAt,
-    'updatedAt': updatedAt,
+    'createdAt': Timestamp.fromDate(createdAt),
+    'updatedAt': Timestamp.fromDate(updatedAt),
     'requiredDate': requiredDate != null ? Timestamp.fromDate(requiredDate!) : null,
     'deliveredAt': deliveredAt != null ? Timestamp.fromDate(deliveredAt!) : null,
     'confirmedAt': confirmedAt != null ? Timestamp.fromDate(confirmedAt!) : null,
     'commissionDeducted': commissionDeducted,
     'chatMetaId': chatMetaId,
+    if (paymentProofUrl != null) 'paymentProofUrl': paymentProofUrl,
+    if (paymentStatus != null) 'paymentStatus': paymentStatus,
   };
 
   OrderModel copyWith({
@@ -152,6 +160,8 @@ class OrderModel {
     DateTime? confirmedAt,
     bool? commissionDeducted,
     String? chatMetaId,
+    String? paymentProofUrl,
+    String? paymentStatus,
   }) {
     return OrderModel(
       orderId: orderId ?? this.orderId,
@@ -181,6 +191,8 @@ class OrderModel {
       confirmedAt: confirmedAt ?? this.confirmedAt,
       commissionDeducted: commissionDeducted ?? this.commissionDeducted,
       chatMetaId: chatMetaId ?? this.chatMetaId,
+      paymentProofUrl: paymentProofUrl ?? this.paymentProofUrl,
+      paymentStatus: paymentStatus ?? this.paymentStatus,
     );
   }
 }

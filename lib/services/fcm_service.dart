@@ -71,9 +71,10 @@ class FCMService {
   }
 
   void _handleForegroundMessage(RemoteMessage message) {
-    // Show in-app notification banner or show local notification
     final notification = message.notification;
     final android = message.notification?.android;
+    final type = message.data['type'] ?? 'system';
+    final channelId = _channelForType(type);
 
     if (notification != null && android != null) {
       _localNotifications.show(
@@ -82,14 +83,29 @@ class FCMService {
         notification.body,
         NotificationDetails(
           android: AndroidNotificationDetails(
-            'system_channel', // Fallback channel
-            'System',
-            channelDescription: 'System notifications',
+            channelId,
+            channelId,
+            channelDescription: 'RateBridge notifications',
             icon: android.smallIcon,
+            importance: Importance.high,
+            priority: Priority.high,
           ),
         ),
       );
     }
+  }
+
+  String _channelForType(String type) {
+    final normalized = type.toLowerCase();
+    if (normalized.contains('chat')) return 'chat_channel';
+    if (normalized.contains('payment') || normalized.contains('commission')) {
+      return 'payments_channel';
+    }
+    if (normalized.contains('invitation')) return 'invitations_channel';
+    if (normalized.contains('order') || normalized.contains('delivery')) {
+      return 'orders_channel';
+    }
+    return 'system_channel';
   }
 
   void _handleMessageOpenedApp(RemoteMessage message) {

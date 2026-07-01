@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../viewmodels/supplier_viewmodel.dart';
-import '../../constants/app_colors.dart';
+import '../../theme/supplier_theme.dart';
 
 class SupplierAppealView extends StatefulWidget {
   const SupplierAppealView({super.key});
@@ -41,10 +41,8 @@ class _SupplierAppealViewState extends State<SupplierAppealView> {
     final viewModel = Provider.of<SupplierViewModel>(context);
 
     return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('Submit Appeal', style: TextStyle(fontWeight: FontWeight.w800)),
-      ),
+      backgroundColor: FieldColors.screenBackground,
+      appBar: const SupplierAppBar(title: 'Submit Appeal'),
       body: viewModel.appealSubmitted 
         ? _buildSuccessCard()
         : Form(
@@ -58,12 +56,12 @@ class _SupplierAppealViewState extends State<SupplierAppealView> {
                     padding: EdgeInsets.all(16.0),
                     child: Row(
                       children: [
-                        Icon(Icons.info_outline, color: AppColors.primary),
+                        Icon(Icons.info_outline, color: FieldColors.primaryNavy),
                         SizedBox(width: 12),
                         Expanded(
                           child: Text(
                             'One appeal per rejection cycle only. Please provide clear evidence or clarification regarding your business registration.',
-                            style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                            style: TextStyle(fontSize: 13, color: FieldColors.textSecondary),
                           ),
                         ),
                       ],
@@ -100,7 +98,7 @@ class _SupplierAppealViewState extends State<SupplierAppealView> {
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: AppColors.border, style: BorderStyle.solid),
+                      border: Border.all(color: FieldColors.borderSubtle, style: BorderStyle.solid),
                     ),
                     child: _selectedFile == null
                         ? const Column(
@@ -172,7 +170,7 @@ class _SupplierAppealViewState extends State<SupplierAppealView> {
             const Text(
               'Your appeal has been received and added to our review queue. We will notify you once a decision is made.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 16),
+              style: TextStyle(color: FieldColors.textSecondary, fontSize: 16),
             ),
             const SizedBox(height: 40),
             SizedBox(

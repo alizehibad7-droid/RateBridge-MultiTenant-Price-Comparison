@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../constants/app_constants.dart';
 import '../../utils/app_theme.dart';
 import '../../utils/formatters.dart';
 import '../../viewmodels/ceo_viewmodel.dart';
@@ -12,7 +13,17 @@ import '../../widgets/ceo_nav_bar.dart';
 import '../../widgets/status_badge.dart';
 import '../../constants/app_colors.dart';
 
-const _statusTabs = ['All', 'Pending', 'Accepted', 'In Progress', 'Delivered', 'Confirmed', 'Rejected', 'Cancelled'];
+const _statusTabs = [
+  'All',
+  'Awaiting Approval',
+  'Pending',
+  'Accepted',
+  'In Progress',
+  'Delivered',
+  'Confirmed',
+  'Rejected',
+  'Cancelled',
+];
 
 class CeoOrdersView extends StatefulWidget {
   const CeoOrdersView({super.key});
@@ -30,6 +41,12 @@ class _CeoOrdersViewState extends State<CeoOrdersView>
     super.initState();
     _tabController =
         TabController(length: _statusTabs.length, vsync: this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final vm = context.read<CeoViewModel>();
+      if (vm.company == null) {
+        vm.loadDashboard();
+      }
+    });
   }
 
   @override
@@ -40,9 +57,9 @@ class _CeoOrdersViewState extends State<CeoOrdersView>
 
   @override
   Widget build(BuildContext context) {
-    final companyId =
-        context.read<AuthViewModel>().companyId ?? '';
-    final vm = context.read<CeoViewModel>();
+    final authVm = context.watch<AuthViewModel>();
+    final vm = context.watch<CeoViewModel>();
+    final companyId = vm.company?.id ?? authVm.companyId ?? '';
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -66,9 +83,29 @@ class _CeoOrdersViewState extends State<CeoOrdersView>
               if (snap.connectionState == ConnectionState.waiting) {
                 return const Center(child: CircularProgressIndicator());
               }
+              if (snap.hasError) {
+                return Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Text(
+                      'Could not load orders. Pull to refresh or try again shortly.',
+                      style: AppTextStyles.bodyMuted,
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                );
+              }
+              if (companyId.isEmpty) {
+                return Center(
+                  child: Text(
+                    'Company profile not loaded yet.',
+                    style: AppTextStyles.bodyMuted,
+                  ),
+                );
+              }
               final orders = snap.data ?? [];
               if (orders.isEmpty) {
-                return const Center(
+                return Center(
                   child: Text('No orders found',
                       style: AppTextStyles.bodyMuted),
                 );
@@ -91,6 +128,8 @@ class _CeoOrdersViewState extends State<CeoOrdersView>
   Widget _orderCard(
       BuildContext context, CeoViewModel vm, OrderModel order) {
     final canCancel = order.status == 'pending' || order.status == 'accepted';
+    final awaitingApproval =
+        order.status == AppConstants.statusPendingApproval;
 
     return GestureDetector(
       onTap: () => _showOrderDetail(context, order),
@@ -139,6 +178,32 @@ class _CeoOrdersViewState extends State<CeoOrdersView>
                         fontSize: 11, color: AppColors.textMuted)),
               ],
             ),
+            if (awaitingApproval) ...[
+              const SizedBox(height: 10),
+              const Divider(height: 1),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => _confirmReject(context, vm, order),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.danger,
+                        side: const BorderSide(color: AppColors.danger),
+                      ),
+                      child: const Text('Reject'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () => vm.approveOrder(order),
+                      child: const Text('Approve'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
             if (canCancel) ...[
               const SizedBox(height: 10),
               const Divider(height: 1),
@@ -155,6 +220,38 @@ class _CeoOrdersViewState extends State<CeoOrdersView>
             ],
           ],
         ),
+      ),
+    );
+  }
+
+  void _confirmReject(
+      BuildContext context, CeoViewModel vm, OrderModel order) {
+    final reasonController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Reject order?'),
+        content: TextField(
+          controller: reasonController,
+          decoration: const InputDecoration(
+            labelText: 'Reason (optional)',
+          ),
+          maxLines: 2,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger),
+            onPressed: () {
+              Navigator.pop(ctx);
+              vm.rejectOrder(order, reason: reasonController.text);
+            },
+            child: const Text('Reject'),
+          ),
+        ],
       ),
     );
   }
@@ -180,7 +277,7 @@ class _CeoOrdersViewState extends State<CeoOrdersView>
               vm.cancelOrder(order.id,
                   context.read<AuthViewModel>().companyId ?? '');
             },
-            child: const Text('Yes, cancel', style: AppTextStyles.button),
+            child: Text('Yes, cancel', style: AppTextStyles.button),
           ),
         ],
       ),

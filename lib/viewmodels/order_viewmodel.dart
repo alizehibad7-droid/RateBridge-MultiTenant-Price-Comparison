@@ -11,10 +11,6 @@ class OrderViewModel extends ChangeNotifier {
   final OrderRepository _orderRepo;
   final CloudFunctionService _cloudFunctions;
 
-  String? _uid;
-  String? _companyId;
-  String? _role;
-
   List<OrderModel> _orders = [];
   bool _isLoading = false;
   bool _isOrderPlaced = false;
@@ -27,9 +23,6 @@ class OrderViewModel extends ChangeNotifier {
   OrderViewModel(this._orderRepo, this._cloudFunctions);
 
   void updateAuth(AuthViewModel auth) {
-    _uid = auth.user?.uid;
-    _companyId = auth.user?.companyId;
-    _role = auth.user?.role;
     notifyListeners();
   }
 
@@ -207,7 +200,7 @@ class OrderViewModel extends ChangeNotifier {
     notifyListeners();
     try {
       await _orderRepo.submitRating(orderId, companyId, rating);
-      await _orderRepo.updateSupplierAvgRating(rating.supplierUid, rating);
+      await _orderRepo.updateSupplierAvgRating(rating.supplierUid);
       _isRatingSubmitted = true;
     } catch(e) {
       _error = e.toString();

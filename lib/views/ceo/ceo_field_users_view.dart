@@ -155,13 +155,11 @@ class _CeoFieldUsersViewState extends State<CeoFieldUsersView>
               _statusBadge(filter),
             ],
           ),
-          if (user.createdAt != null) ...[
-            const SizedBox(height: 4),
-            Text(
-              'Joined: ${_fmtDate(user.createdAt)}',
-              style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
-            ),
-          ],
+          const SizedBox(height: 4),
+          Text(
+            'Joined: ${_fmtDate(user.createdAt)}',
+            style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+          ),
           const SizedBox(height: 12),
           const Divider(height: 1),
           const SizedBox(height: 10),
@@ -181,7 +179,7 @@ class _CeoFieldUsersViewState extends State<CeoFieldUsersView>
           flex: 2,
           child: ElevatedButton(
             onPressed: () => vm.approveFieldUser(user.uid),
-            child: const Text('Approve', style: AppTextStyles.button),
+            child: Text('Approve', style: AppTextStyles.button),
           ),
         ),
         const SizedBox(width: 8),
@@ -231,7 +229,7 @@ class _CeoFieldUsersViewState extends State<CeoFieldUsersView>
             onConfirm: () => vm.reactivateFieldUser(user.uid),
           ),
           icon: const Icon(Icons.check_circle_outline, size: 16),
-          label: const Text('Reactivate', style: AppTextStyles.button),
+          label: Text('Reactivate', style: AppTextStyles.button),
           style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.success),
         ),
@@ -263,7 +261,7 @@ class _CeoFieldUsersViewState extends State<CeoFieldUsersView>
               vm.rejectFieldUser(uid, reasonCtrl.text.trim());
               Navigator.pop(ctx);
             },
-            child: const Text('Reject', style: AppTextStyles.button),
+            child: Text('Reject', style: AppTextStyles.button),
           ),
         ],
       ),
@@ -330,7 +328,7 @@ class _CeoFieldUsersViewState extends State<CeoFieldUsersView>
                     fontWeight: FontWeight.w600, fontSize: 16),
                 textAlign: TextAlign.center),
             const SizedBox(height: 4),
-            const Text(
+            Text(
               'Share this code with your field users so they can '
               'register and join your team.',
               style: AppTextStyles.bodyMuted,
@@ -385,7 +383,7 @@ class _CeoFieldUsersViewState extends State<CeoFieldUsersView>
                           'Use invite code: $code');
                     },
                     icon: const Icon(Icons.share, size: 16),
-                    label: const Text('Share', style: AppTextStyles.button),
+                    label: Text('Share', style: AppTextStyles.button),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -432,7 +430,7 @@ class _CeoFieldUsersViewState extends State<CeoFieldUsersView>
               Navigator.pop(dlg);
               vm.regenerateInviteCode();
             },
-            child: const Text('Regenerate', style: AppTextStyles.button),
+            child: Text('Regenerate', style: AppTextStyles.button),
           ),
         ],
       ),

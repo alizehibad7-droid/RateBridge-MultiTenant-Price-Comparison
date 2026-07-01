@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import '../../viewmodels/ceo_viewmodel.dart';
-import '../../models/join_request_model.dart';
+import '../../models/partnership_request_model.dart';
 import '../../constants/app_colors.dart';
 import '../../constants/route_names.dart';
 import 'package:intl/intl.dart';
@@ -22,6 +22,13 @@ class _CeoJoinRequestsViewState extends State<CeoJoinRequestsView> with SingleTi
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final vm = context.read<CeoViewModel>();
+      final companyId = vm.company?.id;
+      if (companyId != null && companyId.isNotEmpty) {
+        vm.ensurePartnershipStatusWatch(companyId);
+      }
+    });
   }
 
   @override
@@ -32,13 +39,13 @@ class _CeoJoinRequestsViewState extends State<CeoJoinRequestsView> with SingleTi
 
   @override
   Widget build(BuildContext context) {
-    final ceoVM = Provider.of<CeoViewModel>(context);
+    final ceoVM = context.watch<CeoViewModel>();
     final companyId = ceoVM.company?.id ?? '';
 
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('Join Requests', style: TextStyle(fontWeight: FontWeight.w800)),
+        title: const Text('Partnership Requests', style: TextStyle(fontWeight: FontWeight.w800)),
         actions: [
           IconButton(
             icon: const Icon(Icons.account_circle_outlined),
@@ -52,8 +59,8 @@ class _CeoJoinRequestsViewState extends State<CeoJoinRequestsView> with SingleTi
           unselectedLabelColor: AppColors.textSecondary,
           indicatorColor: AppColors.primary,
           tabs: const [
-            Tab(text: 'Received'),
-            Tab(text: 'Sent'),
+            Tab(text: 'Supplier requests'),
+            Tab(text: 'Sent by you'),
           ],
         ),
       ),
@@ -68,45 +75,50 @@ class _CeoJoinRequestsViewState extends State<CeoJoinRequestsView> with SingleTi
   }
 
   Widget _buildReceivedTab(CeoViewModel viewModel, String companyId) {
-    return StreamBuilder<List<JoinRequestModel>>(
-      stream: viewModel.watchJoinRequests(companyId, 'Received'),
-      builder: (context, snapshot) {
-        final requests = snapshot.data ?? [];
-        if (requests.isEmpty) return const Center(child: Text('No received requests.'));
+    if (companyId.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (!viewModel.partnershipRequestsReady) {
+      return const Center(child: CircularProgressIndicator());
+    }
 
-        return ListView.builder(
-          padding: const EdgeInsets.all(16),
-          itemCount: requests.length,
-          itemBuilder: (context, index) {
-            final req = requests[index];
-            if (req.status != 'pending') return const SizedBox.shrink();
-            return _buildRequestCard(viewModel, req);
-          },
-        );
+    final requests = viewModel.pendingReceivedPartnershipRequests;
+    if (requests.isEmpty) {
+      return const Center(child: Text('No received requests.'));
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: requests.length,
+      itemBuilder: (context, index) {
+        return _buildRequestCard(viewModel, requests[index]);
       },
     );
   }
 
   Widget _buildSentTab(CeoViewModel viewModel, String companyId) {
-    return StreamBuilder<List<JoinRequestModel>>(
-      stream: viewModel.watchJoinRequests(companyId, 'Sent'),
-      builder: (context, snapshot) {
-        final invites = snapshot.data ?? [];
-        if (invites.isEmpty) return const Center(child: Text('No sent invitations.'));
+    if (companyId.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (!viewModel.partnershipRequestsReady) {
+      return const Center(child: CircularProgressIndicator());
+    }
 
-        return ListView.builder(
-          padding: const EdgeInsets.all(16),
-          itemCount: invites.length,
-          itemBuilder: (context, index) {
-            final invite = invites[index];
-            return _buildInviteCard(invite);
-          },
-        );
+    final invites = viewModel.sentPartnershipRequests;
+    if (invites.isEmpty) {
+      return const Center(child: Text('No sent invitations.'));
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: invites.length,
+      itemBuilder: (context, index) {
+        return _buildInviteCard(invites[index]);
       },
     );
   }
 
-  Widget _buildRequestCard(CeoViewModel viewModel, JoinRequestModel req) {
+  Widget _buildRequestCard(CeoViewModel viewModel, PartnershipRequestModel req) {
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
       child: Padding(
@@ -146,26 +158,71 @@ class _CeoJoinRequestsViewState extends State<CeoJoinRequestsView> with SingleTi
     );
   }
 
-  Widget _buildInviteCard(JoinRequestModel invite) {
+  Widget _buildInviteCard(PartnershipRequestModel invite) {
     Color statusColor = Colors.amber;
     if (invite.status == 'accepted') statusColor = Colors.green;
     if (invite.status == 'rejected') statusColor = Colors.red;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
-      child: ListTile(
-        title: Text(invite.supplierName, style: const TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Text('Sent: ${DateFormat('MMM dd, yyyy').format(invite.createdAt)}'),
-        trailing: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(color: statusColor.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
-          child: Text(invite.status.toUpperCase(), style: TextStyle(color: statusColor, fontSize: 10, fontWeight: FontWeight.bold)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    invite.supplierName,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: statusColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    invite.status.toUpperCase(),
+                    style: TextStyle(
+                      color: statusColor,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Sent: ${DateFormat('MMM dd, yyyy').format(invite.createdAt)}',
+              style: const TextStyle(color: Colors.grey, fontSize: 12),
+            ),
+            if (invite.status == 'rejected' &&
+                invite.rejectionReason != null &&
+                invite.rejectionReason!.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppColors.dangerBg,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  'Rejection reason: ${invite.rejectionReason}',
+                  style: const TextStyle(color: AppColors.danger, fontSize: 12),
+                ),
+              ),
+            ],
+          ],
         ),
       ),
     );
   }
 
-  void _confirmAccept(CeoViewModel viewModel, JoinRequestModel req) {
+  void _confirmAccept(CeoViewModel viewModel, PartnershipRequestModel req) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -176,7 +233,7 @@ class _CeoJoinRequestsViewState extends State<CeoJoinRequestsView> with SingleTi
           ElevatedButton(
             onPressed: () async {
               Navigator.pop(context);
-              await viewModel.acceptJoinRequest(req.reqId, req.supplierUid);
+              await viewModel.acceptPartnershipRequest(req.requestId);
             },
             child: const Text('ACCEPT'),
           ),
@@ -185,7 +242,7 @@ class _CeoJoinRequestsViewState extends State<CeoJoinRequestsView> with SingleTi
     );
   }
 
-  void _showRejectDialog(CeoViewModel viewModel, JoinRequestModel req) {
+  void _showRejectDialog(CeoViewModel viewModel, PartnershipRequestModel req) {
     final reasonController = TextEditingController();
     showDialog(
       context: context,
@@ -200,7 +257,7 @@ class _CeoJoinRequestsViewState extends State<CeoJoinRequestsView> with SingleTi
           ElevatedButton(
             onPressed: () async {
               Navigator.pop(context);
-              await viewModel.rejectJoinRequest(req.reqId, reasonController.text);
+              await viewModel.rejectPartnershipRequest(req.requestId, reasonController.text);
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             child: const Text('REJECT'),

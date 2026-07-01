@@ -98,8 +98,13 @@ class SubscriptionModel {
     this.history = const [],
   });
 
-  bool get isActive =>
-      status == 'active' || status == 'admin_granted';
+  bool get isActive {
+    if (status != 'active' && status != 'admin_granted') return false;
+    if (expiresAt != null && expiresAt!.isBefore(DateTime.now())) {
+      return false;
+    }
+    return true;
+  }
 
   int get daysRemaining {
     if (expiresAt == null) return 0;

@@ -1,24 +1,37 @@
+import 'dart:io';
+
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_stripe/flutter_stripe.dart';
+
+import '../models/payment_details_config.dart';
 import '../models/subscription_model.dart';
+import '../models/subscription_payment_model.dart';
+import '../repositories/subscription_payment_repository.dart';
+import '../services/cloudinary_service.dart';
 import '../services/firestore_service.dart';
-import '../services/cloud_function_service.dart';
 
 class SubscriptionViewModel extends ChangeNotifier {
-  final FirestoreService _firestoreService = FirestoreService();
-  final CloudFunctionService _cloudFunctionService = CloudFunctionService();
+  final FirestoreService _firestoreService;
+  final SubscriptionPaymentRepository _paymentRepo;
+
+  SubscriptionViewModel(this._firestoreService, this._paymentRepo);
 
   bool _isLoading = false;
   String? error;
   String? successMessage;
   SubscriptionModel? _subscription;
+  PaymentDetailsConfig _paymentDetails = const PaymentDetailsConfig();
+  SubscriptionPaymentModel? _latestPayment;
 
-  // --- Getters ---
   bool get isLoading => _isLoading;
   SubscriptionModel? get currentSubscription => _subscription;
   List<SubscriptionHistoryEntry> get history => _subscription?.history ?? [];
+  PaymentDetailsConfig get paymentDetails => _paymentDetails;
+  SubscriptionPaymentModel? get latestPayment => _latestPayment;
 
-  // --- Load Subscription ---
+  bool get hasPendingPayment => _latestPayment?.isPending ?? false;
+  bool get hasRejectedPayment => _latestPayment?.isRejected ?? false;
+
   Future<void> loadSubscription(String companyId) async {
     if (companyId.isEmpty) return;
     _isLoading = true;
@@ -33,6 +46,7 @@ class SubscriptionViewModel extends ChangeNotifier {
           status: 'active',
         );
       }
+      await loadPaymentDetails();
     } catch (e) {
       error = 'Failed to load subscription: $e';
     } finally {
@@ -41,7 +55,26 @@ class SubscriptionViewModel extends ChangeNotifier {
     }
   }
 
-  // --- Watch Subscription (Stream) ---
+  Future<void> loadPaymentDetails() async {
+    try {
+      _paymentDetails = await _paymentRepo.getPaymentDetails();
+    } catch (_) {
+      _paymentDetails = const PaymentDetailsConfig();
+    }
+    notifyListeners();
+  }
+
+  void watchLatestPayment(String companyId) {
+    if (companyId.isEmpty) return;
+    _paymentRepo.watchLatestCompanyPayment(companyId).listen(
+      (payment) {
+        _latestPayment = payment;
+        notifyListeners();
+      },
+      onError: (_) {},
+    );
+  }
+
   Stream<SubscriptionModel?> watchSubscription(String companyId) {
     if (companyId.isEmpty) return Stream.value(null);
     return _firestoreService.streamSubscription(companyId).map((sub) {
@@ -53,17 +86,18 @@ class SubscriptionViewModel extends ChangeNotifier {
         );
       }
       _subscription = sub;
-      // Note: We don't call notifyListeners() here to avoid build cycles if used in StreamBuilder
       return sub;
     });
   }
 
-  // --- Purchase Plan ---
-  Future<void> purchasePlan(String companyId, PlanDefinition plan) async {
-    if (plan.id == PlanId.free) {
-      await _setFreePlan(companyId);
-      return;
-    }
+  Future<void> submitManualPayment({
+    required String companyId,
+    required String companyName,
+    required String ceoUid,
+    required PlanDefinition plan,
+    required File proofFile,
+  }) async {
+    if (plan.id == PlanId.free) return;
 
     _isLoading = true;
     error = null;
@@ -71,50 +105,41 @@ class SubscriptionViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // 1. Create Payment Intent via Cloud Function
-      final response = await _cloudFunctionService.callFunction('createPaymentIntent', {
-        'amount': plan.priceRs * 100, // Stripe expects amount in subunits (cents/paisa)
-        'currency': 'pkr',
-        'companyId': companyId,
-        'plan': plan.planKey,
-      });
-
-      final clientSecret = response['clientSecret'];
-      final paymentIntentId = response['id'];
-
-      // 2. Initialize and Present Payment Sheet
-      await Stripe.instance.initPaymentSheet(
-        paymentSheetParameters: SetupPaymentSheetParameters(
-          paymentIntentClientSecret: clientSecret,
-          merchantDisplayName: 'RateBridge',
-          style: ThemeMode.light,
-        ),
+      final proofUrl = await CloudinaryService.uploadImage(
+        filePath: proofFile.path,
+        folder: 'ratebridge/subscription_payments',
       );
-      
-      await Stripe.instance.presentPaymentSheet();
+      if (proofUrl == null) {
+        error = 'Image upload failed. Please try again.';
+        return;
+      }
 
-      // 3. Update Firestore after successful payment
-      await _activateSubscription(
+      final payment = SubscriptionPaymentModel(
+        id: '',
         companyId: companyId,
-        plan: plan,
-        paymentIntentId: paymentIntentId,
-        adminGranted: false,
+        companyName: companyName,
+        submittedByUid: ceoUid,
+        plan: plan.planKey,
+        amount: plan.priceRs,
+        paymentProofUrl: proofUrl,
+        status: 'pending',
+        submittedAt: DateTime.now(),
       );
 
-      successMessage = '${plan.name} plan activated successfully!';
-    } on StripeException catch (e) {
-      error = e.error.code == FailureCode.Canceled
-          ? 'Payment cancelled.'
-          : 'Payment failed: ${e.error.localizedMessage}';
+      await _paymentRepo.submitPayment(payment);
+      await _paymentRepo.notifyAdminsNewPayment(companyName);
+      _latestPayment = payment;
+
+      successMessage =
+          'Payment submitted for review. We will notify you once approved.';
     } catch (e) {
-      error = 'Something went wrong: $e';
+      error = 'Could not submit payment: $e';
     } finally {
       _isLoading = false;
       notifyListeners();
     }
   }
 
-  // --- Admin Grant Plan ---
   Future<void> adminGrantPlan({
     required String companyId,
     required PlanDefinition plan,
@@ -127,7 +152,6 @@ class SubscriptionViewModel extends ChangeNotifier {
       await _activateSubscription(
         companyId: companyId,
         plan: plan,
-        paymentIntentId: '',
         adminGranted: true,
         adminNote: note.trim().isEmpty ? null : note.trim(),
       );
@@ -140,32 +164,17 @@ class SubscriptionViewModel extends ChangeNotifier {
     }
   }
 
-  // --- Internal Helpers ---
-
-  Future<void> _setFreePlan(String companyId) async {
+  Future<void> savePaymentDetails(PaymentDetailsConfig config) async {
     _isLoading = true;
+    error = null;
+    successMessage = null;
     notifyListeners();
     try {
-      final sub = SubscriptionModel(
-        companyId: companyId,
-        plan: 'free',
-        status: 'active',
-        startedAt: DateTime.now(),
-      );
-      await _firestoreService.saveSubscription(sub);
-      
-      final historyEntry = SubscriptionHistoryEntry(
-        plan: 'free',
-        action: 'downgraded',
-        date: DateTime.now(),
-        amountPaid: 0,
-      );
-      await _firestoreService.updateSubscriptionHistory(companyId, historyEntry);
-      
-      await loadSubscription(companyId);
-      successMessage = 'Switched to Free plan.';
+      await _paymentRepo.savePaymentDetails(config);
+      _paymentDetails = config;
+      successMessage = 'Payment details saved.';
     } catch (e) {
-      error = 'Failed to update plan: $e';
+      error = 'Failed to save payment details: $e';
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -175,9 +184,9 @@ class SubscriptionViewModel extends ChangeNotifier {
   Future<void> _activateSubscription({
     required String companyId,
     required PlanDefinition plan,
-    required String paymentIntentId,
     required bool adminGranted,
     String? adminNote,
+    int? amountPaid,
   }) async {
     final now = DateTime.now();
     final expiry = plan.durationDays > 0
@@ -190,7 +199,6 @@ class SubscriptionViewModel extends ChangeNotifier {
       status: adminGranted ? 'admin_granted' : 'active',
       startedAt: now,
       expiresAt: expiry,
-      stripePaymentIntentId: paymentIntentId.isEmpty ? null : paymentIntentId,
       adminGranted: adminGranted,
       adminNote: adminNote,
     );
@@ -201,11 +209,17 @@ class SubscriptionViewModel extends ChangeNotifier {
       plan: plan.planKey,
       action: adminGranted ? 'admin_granted' : 'purchased',
       date: now,
-      amountPaid: adminGranted ? 0 : plan.priceRs,
+      amountPaid: amountPaid ?? (adminGranted ? 0 : plan.priceRs),
       note: adminNote,
     );
-    
+
     await _firestoreService.updateSubscriptionHistory(companyId, historyEntry);
+
+    await FirebaseFirestore.instance
+        .collection('companies')
+        .doc(companyId)
+        .set({'plan': plan.planKey}, SetOptions(merge: true));
+
     await loadSubscription(companyId);
   }
 

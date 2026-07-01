@@ -6,6 +6,8 @@ import '../../viewmodels/admin_viewmodel.dart';
 import '../../models/user_model.dart';
 import '../../models/company_model.dart';
 import '../../constants/app_colors.dart';
+import '../../utils/pakistan_validators.dart';
+import '../../widgets/admin/admin_widgets.dart';
 
 class AdminCeoManagementView extends StatefulWidget {
   const AdminCeoManagementView({super.key});
@@ -14,7 +16,8 @@ class AdminCeoManagementView extends StatefulWidget {
   State<AdminCeoManagementView> createState() => _AdminCeoManagementViewState();
 }
 
-class _AdminCeoManagementViewState extends State<AdminCeoManagementView> with SingleTickerProviderStateMixin {
+class _AdminCeoManagementViewState extends State<AdminCeoManagementView>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
   @override
@@ -34,8 +37,10 @@ class _AdminCeoManagementViewState extends State<AdminCeoManagementView> with Si
     final adminVM = Provider.of<AdminViewModel>(context);
 
     return Scaffold(
+      backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('CEO Management', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text('CEO Management',
+            style: TextStyle(fontWeight: FontWeight.bold)),
         bottom: TabBar(
           controller: _tabController,
           tabs: const [
@@ -60,7 +65,8 @@ class _AdminCeoManagementViewState extends State<AdminCeoManagementView> with Si
 
   Widget _buildCeoStream(String status, AdminViewModel adminVM) {
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance.collection('users')
+      stream: FirebaseFirestore.instance
+          .collection('users')
           .where('role', isEqualTo: 'CEO')
           .where('status', isEqualTo: status)
           .snapshots(),
@@ -71,20 +77,29 @@ class _AdminCeoManagementViewState extends State<AdminCeoManagementView> with Si
 
         final docs = snapshot.data?.docs ?? [];
         if (docs.isEmpty) {
-          return Center(child: Text('No $status CEOs found.'));
+          return AdminEmptyState(
+            icon: Icons.business_outlined,
+            message: 'No $status CEOs found.',
+          );
         }
 
         return ListView.builder(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(16),
           itemCount: docs.length,
           itemBuilder: (context, index) {
-            final ceo = UserModel.fromMap(docs[index].data() as Map<String, dynamic>);
+            final ceo =
+                UserModel.fromMap(docs[index].data() as Map<String, dynamic>);
             return FutureBuilder<DocumentSnapshot>(
-              future: FirebaseFirestore.instance.collection('companies').doc(ceo.companyId).get(),
+              future: FirebaseFirestore.instance
+                  .collection('companies')
+                  .doc(ceo.companyId)
+                  .get(),
               builder: (context, companySnap) {
                 CompanyModel? company;
                 if (companySnap.hasData && companySnap.data!.exists) {
-                  company = CompanyModel.fromMap(companySnap.data!.data() as Map<String, dynamic>);
+                  company = CompanyModel.fromMap(
+                    companySnap.data!.data() as Map<String, dynamic>,
+                  );
                 }
                 return _buildCeoCard(ceo, company, adminVM);
               },
@@ -95,47 +110,192 @@ class _AdminCeoManagementViewState extends State<AdminCeoManagementView> with Si
     );
   }
 
-  Widget _buildCeoCard(UserModel ceo, CompanyModel? company, AdminViewModel adminVM) {
+  Widget _buildCeoCard(
+    UserModel ceo,
+    CompanyModel? company,
+    AdminViewModel adminVM,
+  ) {
     final status = (ceo.status ?? 'pending').toLowerCase();
+    final ceoName = company?.ceoFullName ?? ceo.name;
+    final designation = company?.designation ?? 'CEO';
+    final cnic = _formatCnic(company?.cnicNumber ?? ceo.cnic);
+    final rejectionReason =
+        ceo.rejectionReason ?? company?.rejectionReason ?? '';
 
     return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      margin: const EdgeInsets.only(bottom: 16),
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: const BorderSide(color: AppColors.border),
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(16),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                CircleAvatar(
+                  radius: 24,
+                  backgroundColor: AppColors.ceoAccent.withValues(alpha: 0.1),
+                  child: const Icon(Icons.business_center_outlined,
+                      color: AppColors.ceoAccent),
+                ),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(ceo.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-                      Text(ceo.email, style: const TextStyle(color: Colors.grey, fontSize: 13)),
-                      if (company != null) Text("Company: ${company.name}", style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.primary)),
+                      Text(ceoName,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 16)),
+                      Text(ceo.email,
+                          style: const TextStyle(
+                              color: AppColors.textSecondary, fontSize: 12)),
+                      if (company != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Text(
+                            company.name,
+                            style: const TextStyle(
+                              color: AppColors.primary,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ),
-                _buildStatusBadge(status),
+                StatusChip(status: status),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             Row(
               children: [
-                const Icon(Icons.location_on_outlined, size: 14, color: AppColors.textSecondary),
+                const Icon(Icons.calendar_today_outlined,
+                    size: 14, color: AppColors.textSecondary),
                 const SizedBox(width: 4),
-                Text(ceo.city, style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
-                const SizedBox(width: 16),
-                const Icon(Icons.calendar_today, size: 14, color: Colors.grey),
-                const SizedBox(width: 4),
-                Text(DateFormat('MMM d, yyyy').format(ceo.createdAt), style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                Text(
+                  DateFormat('MMM d, yyyy').format(ceo.createdAt),
+                  style: const TextStyle(
+                      fontSize: 12, color: AppColors.textSecondary),
+                ),
+                if (ceo.phone.isNotEmpty) ...[
+                  const SizedBox(width: 16),
+                  const Icon(Icons.phone_outlined,
+                      size: 14, color: AppColors.textSecondary),
+                  const SizedBox(width: 4),
+                  Text(ceo.phone,
+                      style: const TextStyle(
+                          fontSize: 12, color: AppColors.textSecondary)),
+                ],
               ],
             ),
-            const Divider(height: 24),
+            if (company != null) ...[
+              const Divider(height: 28),
+              AdminApprovalSection(
+                title: 'COMPANY IDENTITY',
+                children: [
+                  AdminDetailRow(label: 'Company name', value: company.name),
+                  AdminDetailRow(
+                      label: 'Company type',
+                      value: company.companyType ?? ''),
+                  AdminDetailRow(
+                    label: 'Years in operation',
+                    value: company.yearsInOperation?.toString() ?? '',
+                  ),
+                  AdminDetailRow(
+                    label: 'Registration / NTN',
+                    value: company.registrationNumber,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              AdminApprovalSection(
+                title: 'CEO / AUTHORIZED PERSON',
+                children: [
+                  AdminDetailRow(label: 'Full name', value: ceoName),
+                  AdminDetailRow(label: 'Designation', value: designation),
+                  AdminDetailRow(label: 'CNIC', value: cnic),
+                  const SizedBox(height: 4),
+                  AdminDocumentThumbnailRow(
+                    documents: [
+                      (label: 'CNIC Front', url: company.cnicFrontUrl),
+                      (label: 'CNIC Back', url: company.cnicBackUrl),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              AdminApprovalSection(
+                title: 'LOCATION & SCALE',
+                children: [
+                  AdminDetailRow(
+                      label: 'City', value: company.city.isNotEmpty ? company.city : ceo.city),
+                  AdminDetailRow(
+                    label: 'Address',
+                    value: company.address.isNotEmpty
+                        ? company.address
+                        : (ceo.address ?? ''),
+                    maxLines: 5,
+                  ),
+                  AdminDetailRow(
+                    label: 'Monthly procurement',
+                    value: company.estimatedMonthlyVolume ?? '',
+                  ),
+                  AdminDetailRow(
+                    label: 'Active sites',
+                    value: company.activeSitesCount?.toString() ?? '',
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              AdminApprovalSection(
+                title: 'COMPANY PROOF',
+                children: [
+                  AdminDocumentThumbnailRow(
+                    documents: [
+                      (
+                        label: 'Registration cert / letterhead',
+                        url: company.registrationCertUrl,
+                      ),
+                      (label: 'Office / site photo', url: company.officePhotoUrl),
+                    ],
+                  ),
+                ],
+              ),
+            ],
+            if (status == 'rejected' && rejectionReason.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.danger.withValues(alpha: 0.06),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppColors.danger.withValues(alpha: 0.2)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Rejection reason',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.danger,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(rejectionReason, style: const TextStyle(fontSize: 13)),
+                  ],
+                ),
+              ),
+            ],
+            const Divider(height: 28),
             _buildActionButtons(company, ceo, adminVM),
           ],
         ),
@@ -143,41 +303,42 @@ class _AdminCeoManagementViewState extends State<AdminCeoManagementView> with Si
     );
   }
 
-  Widget _buildStatusBadge(String status) {
-    Color color;
-    switch (status) {
-      case 'active': color = Colors.green; break;
-      case 'pending': color = Colors.orange; break;
-      case 'suspended': color = Colors.red; break;
-      case 'rejected': color = Colors.red; break;
-      default: color = Colors.grey;
-    }
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-      child: Text(status.toUpperCase(), style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 10)),
-    );
+  String _formatCnic(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return '';
+    return PakistanValidators.formatCnic(raw);
   }
 
-  Widget _buildActionButtons(CompanyModel? company, UserModel ceo, AdminViewModel adminVM) {
+  Widget _buildActionButtons(
+    CompanyModel? company,
+    UserModel ceo,
+    AdminViewModel adminVM,
+  ) {
     final status = (ceo.status ?? 'pending').toLowerCase();
 
     return Wrap(
       spacing: 8,
+      runSpacing: 8,
       children: [
         if (status == 'pending') ...[
           ElevatedButton(
             onPressed: () => _showConfirmDialog(
               'Approve CEO',
-              'Activate account and grant access?',
+              'Activate account and generate company invite code?',
               () => adminVM.acceptCEO(company?.id, ceo.uid),
             ),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white, elevation: 0),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+              foregroundColor: Colors.white,
+              elevation: 0,
+            ),
             child: const Text('Approve'),
           ),
           OutlinedButton(
             onPressed: () => _showRejectDialog(company?.id, ceo.uid, adminVM),
-            style: OutlinedButton.styleFrom(foregroundColor: Colors.red, side: const BorderSide(color: Colors.red)),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.red,
+              side: const BorderSide(color: Colors.red),
+            ),
             child: const Text('Reject'),
           ),
         ],
@@ -188,7 +349,10 @@ class _AdminCeoManagementViewState extends State<AdminCeoManagementView> with Si
               'User will lose access immediately.',
               () => adminVM.suspendCEO(company?.id, ceo.uid),
             ),
-            style: OutlinedButton.styleFrom(foregroundColor: Colors.amber, side: const BorderSide(color: Colors.amber)),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.amber,
+              side: const BorderSide(color: Colors.amber),
+            ),
             child: const Text('Suspend'),
           ),
         ],
@@ -199,7 +363,10 @@ class _AdminCeoManagementViewState extends State<AdminCeoManagementView> with Si
               'Restore dashboard access?',
               () => adminVM.activateCEO(company?.id, ceo.uid),
             ),
-            style: OutlinedButton.styleFrom(foregroundColor: Colors.green, side: const BorderSide(color: Colors.green)),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.green,
+              side: const BorderSide(color: Colors.green),
+            ),
             child: const Text('Activate'),
           ),
         ],
@@ -207,31 +374,46 @@ class _AdminCeoManagementViewState extends State<AdminCeoManagementView> with Si
     );
   }
 
-  void _showConfirmDialog(String title, String message, Future<void> Function() action) {
+  void _showConfirmDialog(
+    String title,
+    String message,
+    Future<void> Function() action,
+  ) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: Text(title),
         content: Text(message),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel')),
           TextButton(
             onPressed: () async {
               Navigator.pop(context);
               try {
                 await action();
               } catch (e) {
-                if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Error: $e')),
+                  );
+                }
               }
             },
-            child: const Text('Confirm', style: TextStyle(fontWeight: FontWeight.bold)),
+            child: const Text('Confirm',
+                style: TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
       ),
     );
   }
 
-  void _showRejectDialog(String? companyId, String ceoUid, AdminViewModel adminVM) {
+  void _showRejectDialog(
+    String? companyId,
+    String ceoUid,
+    AdminViewModel adminVM,
+  ) {
     final reasonController = TextEditingController();
     showDialog(
       context: context,
@@ -239,13 +421,22 @@ class _AdminCeoManagementViewState extends State<AdminCeoManagementView> with Si
         title: const Text('Reject Application'),
         content: TextField(
           controller: reasonController,
-          decoration: const InputDecoration(labelText: 'Reason for rejection'),
+          maxLines: 3,
+          decoration: const InputDecoration(
+            labelText: 'Reason for rejection',
+            border: OutlineInputBorder(),
+            hintText: 'Shown to the applicant',
+          ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel')),
           TextButton(
             onPressed: () {
-              adminVM.rejectCEO(companyId, ceoUid, reasonController.text);
+              final reason = reasonController.text.trim();
+              if (reason.isEmpty) return;
+              adminVM.rejectCEO(companyId, ceoUid, reason);
               Navigator.pop(context);
             },
             child: const Text('Reject', style: TextStyle(color: Colors.red)),

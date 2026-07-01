@@ -2,18 +2,24 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import 'package:url_launcher/url_launcher.dart';
+import '../../utils/notification_utils.dart';
+import '../../utils/phone_launcher_utils.dart';
+import '../../viewmodels/auth_viewmodel.dart';
 import '../../viewmodels/supplier_viewmodel.dart';
 import '../../models/order_model.dart';
-import '../../constants/app_colors.dart';
+import '../../theme/supplier_theme.dart';
+import '../../constants/app_constants.dart';
 import '../../constants/route_names.dart';
 import '../../utils/currency_formatter.dart';
 import '../../utils/app_theme.dart';
 import '../../widgets/status_badge.dart';
 import '../../widgets/supplier_nav_bar.dart';
+import '../../widgets/supplier/supplier_async_states.dart';
 
 class SupplierOrdersView extends StatefulWidget {
-  const SupplierOrdersView({super.key});
+  final int initialTabIndex;
+
+  const SupplierOrdersView({super.key, this.initialTabIndex = 0});
 
   @override
   State<SupplierOrdersView> createState() => _SupplierOrdersViewState();
@@ -26,7 +32,19 @@ class _SupplierOrdersViewState extends State<SupplierOrdersView> with SingleTick
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: _tabs.length, vsync: this);
+    final initialTab = widget.initialTabIndex.clamp(0, _tabs.length - 1);
+    _tabController = TabController(
+      length: _tabs.length,
+      vsync: this,
+      initialIndex: initialTab,
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final vm = context.read<SupplierViewModel>();
+      final companyId = vm.selectedCompanyId;
+      if (companyId != null) {
+        vm.loadOrders(companyId, null);
+      }
+    });
   }
 
   @override
@@ -40,17 +58,12 @@ class _SupplierOrdersViewState extends State<SupplierOrdersView> with SingleTick
     final viewModel = Provider.of<SupplierViewModel>(context);
 
     return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('Orders', style: AppTextStyles.h2),
+      backgroundColor: FieldColors.screenBackground,
+      appBar: SupplierAppBar(
+        title: 'Orders',
         bottom: TabBar(
           controller: _tabController,
           isScrollable: true,
-          labelColor: AppColors.primary,
-          unselectedLabelColor: AppColors.textSecondary,
-          indicatorColor: AppColors.primary,
-          indicatorWeight: 3,
-          labelStyle: const TextStyle(fontWeight: FontWeight.bold),
           tabs: _tabs.map((t) => Tab(text: t)).toList(),
         ),
       ),
@@ -66,8 +79,10 @@ class _SupplierOrdersViewState extends State<SupplierOrdersView> with SingleTick
     final filteredOrders = viewModel.orders.where((o) {
       final status = o.status.toLowerCase();
       switch (tab) {
-        case 'Pending': return status == 'pending';
-        case 'Accepted': return status == 'accepted' || status == 'inprogress';
+        case 'Pending':
+          return status == 'pending';
+        case 'Accepted':
+          return status == 'accepted' || status == 'inprogress';
         case 'Delivered': return status == 'delivered';
         case 'Confirmed': return status == 'confirmed';
         case 'Rejected': return status == 'rejected' || status == 'cancelled';
@@ -76,20 +91,11 @@ class _SupplierOrdersViewState extends State<SupplierOrdersView> with SingleTick
     }).toList();
 
     if (viewModel.isLoading && filteredOrders.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
+      return const SupplierListSkeleton(itemCount: 4, itemHeight: 160);
     }
 
     if (filteredOrders.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.receipt_long_outlined, size: 64, color: AppColors.textSecondary.withOpacity(0.3)),
-            const SizedBox(height: 16),
-            Text('No $tab orders found.', style: AppTextStyles.bodyMuted),
-          ],
-        ),
-      );
+      return _buildTabEmptyState(tab);
     }
 
     return RefreshIndicator(
@@ -105,13 +111,44 @@ class _SupplierOrdersViewState extends State<SupplierOrdersView> with SingleTick
     );
   }
 
+  Widget _buildTabEmptyState(String tab) {
+    final (title, subtitle) = switch (tab) {
+      'Pending' => (
+          'No pending orders',
+          'New orders from field users will appear here for you to accept',
+        ),
+      'Accepted' => (
+          'No accepted orders',
+          'Orders you accept will show here until marked as delivered',
+        ),
+      'Delivered' => (
+          'No delivered orders',
+          'Mark accepted orders as delivered once they reach the site',
+        ),
+      'Confirmed' => (
+          'No confirmed orders',
+          'Completed and confirmed orders will appear here',
+        ),
+      'Rejected' => (
+          'No rejected orders',
+          'Rejected or cancelled orders are listed in this tab',
+        ),
+      _ => ('No orders found', 'Orders matching this status will appear here'),
+    };
+
+    return SupplierEmptyState(
+      icon: Icons.receipt_long_outlined,
+      title: title,
+      subtitle: subtitle,
+    );
+  }
+
   Widget _buildOrderCard(SupplierViewModel viewModel, OrderModel order, String tab) {
-    final commission = order.totalAmount * 0.02; // Assuming 2% platform fee
-    final netPayout = order.totalAmount - commission;
+    final netPayout = order.totalAmount * (1 - AppConstants.commissionRate);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
-      decoration: appCardDecoration(shadow: AppShadows.card),
+      decoration: SupplierTheme.cardDecoration(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -138,7 +175,7 @@ class _SupplierOrdersViewState extends State<SupplierOrdersView> with SingleTick
                 const SizedBox(height: 4),
                 Row(
                   children: [
-                    const Icon(Icons.person_outline, size: 14, color: AppColors.textSecondary),
+                    const Icon(Icons.person_outline, size: 14, color: FieldColors.textSecondary),
                     const SizedBox(width: 4),
                     Text(order.fieldUserName, style: AppTextStyles.bodyMuted.copyWith(fontSize: 13)),
                   ],
@@ -150,7 +187,7 @@ class _SupplierOrdersViewState extends State<SupplierOrdersView> with SingleTick
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('QUANTITY', style: AppTextStyles.label),
+                        Text('QUANTITY', style: AppTextStyles.label),
                         const SizedBox(height: 4),
                         Text('${order.quantity} ${order.unit}', style: AppTextStyles.body.copyWith(fontWeight: FontWeight.bold)),
                       ],
@@ -158,11 +195,11 @@ class _SupplierOrdersViewState extends State<SupplierOrdersView> with SingleTick
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        const Text('NET PAYOUT', style: AppTextStyles.label),
+                        Text('NET PAYOUT', style: AppTextStyles.label),
                         const SizedBox(height: 4),
                         Text(
                           CurrencyFormatter.formatPKR(netPayout),
-                          style: AppTextStyles.h3.copyWith(color: AppColors.success),
+                          style: AppTextStyles.h3.copyWith(color: FieldColors.statusSuccess),
                         ),
                       ],
                     ),
@@ -195,8 +232,8 @@ class _SupplierOrdersViewState extends State<SupplierOrdersView> with SingleTick
                     child: OutlinedButton(
                       onPressed: () => _showRejectDialog(viewModel, order),
                       style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: AppColors.error),
-                        foregroundColor: AppColors.error,
+                        side: const BorderSide(color: FieldColors.statusDanger),
+                        foregroundColor: FieldColors.statusDanger,
                       ),
                       child: const Text('REJECT'),
                     ),
@@ -220,7 +257,7 @@ class _SupplierOrdersViewState extends State<SupplierOrdersView> with SingleTick
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: () => _confirmDelivered(viewModel, order),
-                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.success),
+                  style: ElevatedButton.styleFrom(backgroundColor: FieldColors.statusSuccess),
                   child: const Text('MARK AS DELIVERED'),
                 ),
               ),
@@ -232,6 +269,11 @@ class _SupplierOrdersViewState extends State<SupplierOrdersView> with SingleTick
   }
 
   void _showOrderDetail(SupplierViewModel viewModel, OrderModel order) {
+    final commission = order.totalAmount * AppConstants.commissionRate;
+    final netPayout = order.totalAmount * (1 - AppConstants.commissionRate);
+    final commissionPercent =
+        (AppConstants.commissionRate * 100).toStringAsFixed(0);
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -245,7 +287,7 @@ class _SupplierOrdersViewState extends State<SupplierOrdersView> with SingleTick
         child: Column(
           children: [
             const SizedBox(height: 12),
-            Container(width: 40, height: 4, decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(2))),
+            Container(width: 40, height: 4, decoration: BoxDecoration(color: FieldColors.borderSubtle, borderRadius: BorderRadius.circular(2))),
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.all(24),
@@ -253,7 +295,7 @@ class _SupplierOrdersViewState extends State<SupplierOrdersView> with SingleTick
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Order Details', style: AppTextStyles.h2),
+                      Text('Order Details', style: AppTextStyles.h2),
                       StatusBadge(label: order.status.toUpperCase(), status: order.status),
                     ],
                   ),
@@ -263,13 +305,17 @@ class _SupplierOrdersViewState extends State<SupplierOrdersView> with SingleTick
                   _detailItem('Unit Price', CurrencyFormatter.formatPKR(order.unitPrice), Icons.price_change_outlined),
                   const Divider(height: 48),
                   _detailItem('Customer', order.fieldUserName, Icons.person_outline),
-                  _detailItem('Company', 'Usman Associates', Icons.business_outlined), // Should come from order or link
+                  _detailItem(
+                    'Company',
+                    viewModel.companyNameFor(order.companyId) ?? 'Company',
+                    Icons.business_outlined,
+                  ),
                   _detailItem('Delivery Address', order.deliveryAddress, Icons.location_on_outlined),
                   const Divider(height: 48),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Total Amount', style: AppTextStyles.body),
+                      Text('Total Amount', style: AppTextStyles.body),
                       Text(CurrencyFormatter.formatPKR(order.totalAmount), style: AppTextStyles.h3),
                     ],
                   ),
@@ -277,19 +323,28 @@ class _SupplierOrdersViewState extends State<SupplierOrdersView> with SingleTick
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Commission (2%)', style: AppTextStyles.bodyMuted),
-                      Text('- ${CurrencyFormatter.formatPKR(order.totalAmount * 0.02)}', style: const TextStyle(color: AppColors.error)),
+                      Text(
+                        'Commission ($commissionPercent%)',
+                        style: AppTextStyles.bodyMuted,
+                      ),
+                      Text(
+                        '- ${CurrencyFormatter.formatPKR(commission)}',
+                        style: const TextStyle(color: FieldColors.statusDanger),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 12),
                   Container(
                     padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(color: AppColors.successBg, borderRadius: BorderRadius.circular(AppRadius.md)),
+                    decoration: BoxDecoration(color: FieldColors.statusSuccess.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(AppRadius.md)),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text('Net Payout', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.success)),
-                        Text(CurrencyFormatter.formatPKR(order.totalAmount * 0.98), style: AppTextStyles.h3.copyWith(color: AppColors.success)),
+                        const Text('Net Payout', style: TextStyle(fontWeight: FontWeight.bold, color: FieldColors.statusSuccess)),
+                        Text(
+                          CurrencyFormatter.formatPKR(netPayout),
+                          style: AppTextStyles.h3.copyWith(color: FieldColors.statusSuccess),
+                        ),
                       ],
                     ),
                   ),
@@ -298,7 +353,10 @@ class _SupplierOrdersViewState extends State<SupplierOrdersView> with SingleTick
                     children: [
                       Expanded(
                         child: OutlinedButton.icon(
-                          onPressed: () => launchUrl(Uri.parse('tel:${order.fieldUserPhone}')),
+                          onPressed: () => PhoneLauncherUtils.dial(
+                            context,
+                            order.fieldUserPhone,
+                          ),
                           icon: const Icon(Icons.phone_outlined, size: 18),
                           label: const Text('CALL'),
                         ),
@@ -306,7 +364,7 @@ class _SupplierOrdersViewState extends State<SupplierOrdersView> with SingleTick
                       const SizedBox(width: 16),
                       Expanded(
                         child: ElevatedButton.icon(
-                          onPressed: () => context.push('${RouteNames.supplierChat}/${order.orderId}'),
+                          onPressed: () => _openOrderChat(context, order),
                           icon: const Icon(Icons.chat_bubble_outline, size: 18),
                           label: const Text('CHAT'),
                         ),
@@ -323,6 +381,18 @@ class _SupplierOrdersViewState extends State<SupplierOrdersView> with SingleTick
     );
   }
 
+  void _openOrderChat(BuildContext context, OrderModel order) {
+    final supplierUid = context.read<AuthViewModel>().user?.uid ?? order.supplierId;
+    final thread = supplierChatThreadFromOrder(
+      order: order,
+      supplierUid: supplierUid,
+    );
+    context.push(
+      RouteNames.supplierChatThread.replaceFirst(':orderId', thread.chatId),
+      extra: thread,
+    );
+  }
+
   Widget _detailItem(String label, String value, IconData icon) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 20),
@@ -331,8 +401,8 @@ class _SupplierOrdersViewState extends State<SupplierOrdersView> with SingleTick
         children: [
           Container(
             padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(8)),
-            child: Icon(icon, size: 18, color: AppColors.primary),
+            decoration: BoxDecoration(color: FieldColors.screenBackground, borderRadius: BorderRadius.circular(8)),
+            child: Icon(icon, size: 18, color: FieldColors.primaryNavy),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -389,7 +459,7 @@ class _SupplierOrdersViewState extends State<SupplierOrdersView> with SingleTick
               Navigator.pop(context);
               await viewModel.rejectOrder(order.orderId, order.companyId, controller.text);
             },
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+            style: ElevatedButton.styleFrom(backgroundColor: FieldColors.statusDanger),
             child: const Text('REJECT'),
           ),
         ],
@@ -410,7 +480,7 @@ class _SupplierOrdersViewState extends State<SupplierOrdersView> with SingleTick
               Navigator.pop(context);
               await viewModel.markDelivered(order.orderId, order.companyId);
             },
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.success),
+            style: ElevatedButton.styleFrom(backgroundColor: FieldColors.statusSuccess),
             child: const Text('CONFIRM'),
           ),
         ],

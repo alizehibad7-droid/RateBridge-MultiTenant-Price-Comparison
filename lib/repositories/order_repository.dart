@@ -2,6 +2,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/order_model.dart';
 import '../models/rating_model.dart';
+import '../models/supplier_model.dart';
 import '../services/firestore_service.dart';
 import '../utils/app_exception.dart';
 
@@ -23,6 +24,38 @@ class OrderRepository {
   }
 
   Future<void> submitOrder(OrderModel order) => createOrder(order);
+
+  Future<OrderModel?> getOrderById(String orderId) async {
+    try {
+      final doc = await _db.collection('orders').doc(orderId).get();
+      if (!doc.exists || doc.data() == null) return null;
+      return OrderModel.fromMap(doc.id, doc.data() as Map<String, dynamic>);
+    } on FirebaseException catch (e) {
+      throw AppException('Failed to load order: ${e.message}');
+    }
+  }
+
+  Future<SupplierModel?> getSupplierById(String supplierUid) async {
+    return _firestoreService.getSupplierById(supplierUid);
+  }
+
+  Future<void> submitWeightReport(
+    String orderId,
+    double actualWeight, {
+    String? remarks,
+  }) async {
+    try {
+      await _db.collection('orders').doc(orderId).update({
+        'actualWeight': actualWeight,
+        if (remarks != null && remarks.isNotEmpty) 'weightReportRemarks': remarks,
+        'status': 'delivered',
+        'deliveredAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    } on FirebaseException catch (e) {
+      throw AppException('Failed to submit weight report: ${e.message}');
+    }
+  }
 
   /// Updates an order with partial data
   Future<void> updateOrder(String orderId, Map<String, dynamic> updates) async {
@@ -68,8 +101,6 @@ class OrderRepository {
 
     if (statusFilter != null && statusFilter != 'all' && statusFilter != 'All') {
       query = query.where('status', isEqualTo: statusFilter.toLowerCase());
-    } else {
-      query = query.where('status', isNotEqualTo: 'pending_approval');
     }
 
     return query.snapshots().map((snapshot) => snapshot.docs
@@ -81,33 +112,62 @@ class OrderRepository {
     return _db
         .collection('orders')
         .where('supplierId', isEqualTo: supplierUid)
-        .where('status', isNotEqualTo: 'pending_approval')
-        .orderBy('status')
-        .orderBy('createdAt', descending: true)
         .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => OrderModel.fromMap(doc.id, doc.data() as Map<String, dynamic>))
-            .toList());
+        .map((snapshot) {
+      final orders = snapshot.docs
+          .map((doc) => OrderModel.fromMap(doc.id, doc.data()))
+          .toList();
+      orders.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return orders;
+    });
   }
 
+  // REQUIRED FIRESTORE INDEX: orders collection
+  // Fields: fieldUserUid (Asc), companyId (Asc)
+  // Create at: Firebase Console → Firestore → Indexes → Add composite index
   Stream<List<OrderModel>> watchFieldUserOrders(
     String fieldUserUid,
     String companyId,
     String? statusFilter,
   ) {
-    Query query = _db
-        .collection('orders')
-        .where('fieldUserUid', isEqualTo: fieldUserUid)
-        .where('companyId', isEqualTo: companyId)
-        .orderBy('createdAt', descending: true);
+    try {
+      Query query = _db
+          .collection('orders')
+          .where('fieldUserUid', isEqualTo: fieldUserUid)
+          .where('companyId', isEqualTo: companyId);
 
-    if (statusFilter != null && statusFilter != 'all' && statusFilter != 'All') {
-      query = query.where('status', isEqualTo: statusFilter.toLowerCase());
+      if (statusFilter != null &&
+          statusFilter != 'all' &&
+          statusFilter != 'All') {
+        query = query.where('status', isEqualTo: statusFilter.toLowerCase());
+      }
+
+      return query.snapshots().map((snapshot) {
+        final orders = snapshot.docs
+            .map((doc) =>
+                OrderModel.fromMap(doc.id, doc.data() as Map<String, dynamic>))
+            .toList();
+        orders.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        return orders;
+      }).handleError((Object error, StackTrace stackTrace) {
+        if (error is FirebaseException &&
+            error.code == 'failed-precondition') {
+          throw AppException(
+            'Orders index is building. Please wait 2 minutes and retry.',
+          );
+        }
+        throw error;
+      });
+    } on FirebaseException catch (e) {
+      if (e.code == 'failed-precondition') {
+        return Stream.error(
+          AppException(
+            'Orders index is building. Please wait 2 minutes and retry.',
+          ),
+        );
+      }
+      return Stream.error(AppException('Failed to load orders: ${e.message}'));
     }
-
-    return query.snapshots().map((snapshot) => snapshot.docs
-        .map((doc) => OrderModel.fromMap(doc.id, doc.data() as Map<String, dynamic>))
-        .toList());
   }
 
   Future<List<OrderModel>> getRecentFieldOrders(int limit) async {
@@ -116,7 +176,19 @@ class OrderRepository {
         .orderBy('createdAt', descending: true)
         .limit(limit)
         .get();
-    return snap.docs.map((doc) => OrderModel.fromMap(doc.id, doc.data() as Map<String, dynamic>)).toList();
+    return snap.docs.map((doc) => OrderModel.fromMap(doc.id, doc.data())).toList();
+  }
+
+  Future<String?> resolveCeoUid(String companyId) async {
+    try {
+      final doc = await _db.collection('companies').doc(companyId).get();
+      if (!doc.exists || doc.data() == null) return null;
+      final ceoUid = doc.data()!['ceoUid'] as String?;
+      if (ceoUid != null && ceoUid.isNotEmpty) return ceoUid;
+      return null;
+    } on FirebaseException catch (e) {
+      throw AppException('Failed to resolve company CEO: ${e.message}');
+    }
   }
 
   Future<void> updateStatus(
@@ -184,37 +256,57 @@ class OrderRepository {
     return snapshot.docs.isNotEmpty;
   }
 
+  Future<bool> hasRatingForOrderByUser(String orderId, String userId) async {
+    try {
+      final snapshot = await _db
+          .collection('ratings')
+          .where('orderId', isEqualTo: orderId)
+          .get();
+      return snapshot.docs.any((doc) {
+        final data = doc.data();
+        final ratedBy = data['userId'] ?? data['fieldUserId'];
+        return ratedBy == userId;
+      });
+    } on FirebaseException catch (e) {
+      throw AppException('Failed to check existing rating: ${e.message}');
+    }
+  }
+
   Future<void> submitRating(String orderId, String companyId, RatingModel rating) async {
     try {
-      await _db
-          .collection('ratings')
-          .doc(rating.id)
-          .set(rating.toMap());
+      final ref = _db.collection('ratings').doc();
+      await ref.set({
+        ...rating.toMap(),
+        'companyId': companyId,
+        'fieldUserId': rating.userId,
+      });
     } on FirebaseException catch (e) {
       throw AppException('Failed to submit rating: ${e.message}');
     }
   }
 
-  Future<void> updateSupplierAvgRating(String supplierUid, RatingModel rating) async {
+  /// Recomputes average overall score from all ratings for [supplierUid].
+  Future<void> updateSupplierAvgRating(String supplierUid) async {
     try {
-      await _db.runTransaction((transaction) async {
-        final supplierRef = _db.collection('suppliers').doc(supplierUid);
-        final supplierDoc = await transaction.get(supplierRef);
-        
-        if (supplierDoc.exists) {
-          final data = supplierDoc.data()!;
-          final double currentAvg = (data['rating'] as num?)?.toDouble() ?? 0.0;
-          final int currentCount = (data['activeContracts'] as num?)?.toInt() ?? 0;
-          
-          final int newCount = currentCount + 1;
-          final double newAvg = ((currentAvg * currentCount) + rating.rating) / newCount;
-          
-          transaction.update(supplierRef, {
-            'rating': newAvg,
-            'activeContracts': newCount,
-          });
-        }
-      });
+      final snapshot = await _db
+          .collection('ratings')
+          .where('supplierUid', isEqualTo: supplierUid)
+          .get();
+      if (snapshot.docs.isEmpty) return;
+
+      final scores = snapshot.docs
+          .map((doc) => (doc.data()['rating'] as num?)?.toDouble() ?? 0.0)
+          .where((score) => score > 0)
+          .toList();
+      if (scores.isEmpty) return;
+
+      final average =
+          scores.fold<double>(0, (total, score) => total + score) / scores.length;
+
+      await _db.collection('suppliers').doc(supplierUid).set(
+        {'rating': double.parse(average.toStringAsFixed(2))},
+        SetOptions(merge: true),
+      );
     } on FirebaseException catch (e) {
       throw AppException('Failed to update supplier rating: ${e.message}');
     }
@@ -227,7 +319,7 @@ class OrderRepository {
         .orderBy('createdAt', descending: true)
         .snapshots()
         .map((snapshot) => snapshot.docs
-            .map((doc) => RatingModel.fromMap(doc.id, doc.data() as Map<String, dynamic>))
+            .map((doc) => RatingModel.fromMap(doc.id, doc.data()))
             .toList());
   }
 }

@@ -222,7 +222,7 @@ class _CeoMySuppliersViewState extends State<CeoMySuppliersView>
                             activate: true),
                         icon: const Icon(Icons.check_circle_outline,
                             size: 16),
-                        label: const Text('Activate',
+                        label: Text('Activate',
                             style: AppTextStyles.button),
                         style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.success),
@@ -290,10 +290,9 @@ class _CeoMySuppliersViewState extends State<CeoMySuppliersView>
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Remove supplier?'),
-        content: Text(
-          'This will permanently unlink $name from your company. '
-          'They can request to join again later.',
+        title: const Text('Remove partnership?'),
+        content: const Text(
+          'Are you sure? This supplier\'s materials will no longer be visible to your field team.',
         ),
         actions: [
           TextButton(
@@ -306,7 +305,7 @@ class _CeoMySuppliersViewState extends State<CeoMySuppliersView>
               Navigator.pop(ctx);
               vm.removeSupplier(supplierId);
             },
-            child: const Text('Remove', style: AppTextStyles.button),
+            child: Text('Remove Partnership', style: AppTextStyles.button),
           ),
         ],
       ),

@@ -11,6 +11,8 @@ class UserModel {
   final String city;
   final String? address;
   final String? cnic;
+  final String? jobTitle;
+  final String? assignedSite;
   final String? businessType;
   final String? profileImageUrl;
   final String? fcmToken;
@@ -31,6 +33,8 @@ class UserModel {
     required this.city,
     this.address,
     this.cnic,
+    this.jobTitle,
+    this.assignedSite,
     this.businessType,
     this.profileImageUrl,
     this.fcmToken,
@@ -47,6 +51,8 @@ class UserModel {
   String get fullName => name;
   DateTime? get joinedAt => createdAt;
 
+  String? get cnicNumber => cnic;
+
   UserModel copyWith({
     String? uid,
     String? email,
@@ -57,6 +63,8 @@ class UserModel {
     String? city,
     String? address,
     String? cnic,
+    String? jobTitle,
+    String? assignedSite,
     String? businessType,
     String? profileImageUrl,
     String? profilePicture, // Added for compatibility with updateProfile calls
@@ -78,6 +86,8 @@ class UserModel {
       city: city ?? this.city,
       address: address ?? this.address,
       cnic: cnic ?? this.cnic,
+      jobTitle: jobTitle ?? this.jobTitle,
+      assignedSite: assignedSite ?? this.assignedSite,
       businessType: businessType ?? this.businessType,
       profileImageUrl: profilePicture ?? profileImageUrl ?? this.profileImageUrl,
       fcmToken: fcmToken ?? this.fcmToken,
@@ -101,6 +111,9 @@ class UserModel {
       'city': city,
       'address': address,
       'cnic': cnic,
+      if (cnic != null) 'cnicNumber': cnic,
+      if (jobTitle != null) 'jobTitle': jobTitle,
+      if (assignedSite != null) 'assignedSite': assignedSite,
       'businessType': businessType,
       'profileImageUrl': profileImageUrl,
       'fcmToken': fcmToken,
@@ -130,7 +143,9 @@ class UserModel {
       phone: (map['phone'] ?? map['phoneNumber'] ?? '') as String,
       city: (map['city'] ?? '') as String,
       address: map['address'] as String?,
-      cnic: map['cnic'] as String?,
+      cnic: (map['cnicNumber'] ?? map['cnic']) as String?,
+      jobTitle: map['jobTitle'] as String?,
+      assignedSite: map['assignedSite'] as String?,
       businessType: map['businessType'] as String?,
       profileImageUrl: map['profileImageUrl'] as String?,
       fcmToken: map['fcmToken'] as String?,

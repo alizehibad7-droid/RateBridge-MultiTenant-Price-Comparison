@@ -8,8 +8,8 @@ import '../utils/app_exception.dart';
 
 class GeminiService {
   static const String _baseUrl =
-    'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent';
-  final String _apiKey = const String.fromEnvironment('GEMINI_API_KEY');
+    'https://api.groq.com/openai/v1/chat/completions';
+  final String _apiKey = const String.fromEnvironment('GROQ_API_KEY');
   final http.Client _client;
 
   GeminiService({http.Client? client}) : _client = client ?? http.Client();
@@ -31,20 +31,28 @@ class GeminiService {
   }
 
   Future<String> _callGemini(String prompt) async {
+    if (_apiKey.isEmpty) return '';
     if (!_checkRateLimit()) {
       return 'AI recommendations temporarily unavailable. Please try again in a minute.';
     }
     final response = await _client.post(
-      Uri.parse('$_baseUrl?key=$_apiKey'),
-      headers: {'Content-Type': 'application/json'},
+      Uri.parse(_baseUrl),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $_apiKey',
+      },
       body: jsonEncode({
-        'contents': [{'parts': [{'text': prompt}]}],
-        'generationConfig': {'maxOutputTokens': 500, 'temperature': 0.3}
+        'model': 'llama-3.3-70b-versatile',
+        'max_tokens': 500,
+        'temperature': 0.3,
+        'messages': [
+          {'role': 'user', 'content': prompt},
+        ],
       }),
     );
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
-      return data['candidates'][0]['content']['parts'][0]['text'] as String;
+      return data['choices'][0]['message']['content'] as String;
     } else if (response.statusCode == 429) {
       return 'AI temporarily unavailable due to rate limiting. Please try again shortly.';
     } else {
@@ -55,7 +63,7 @@ class GeminiService {
   Future<String> getSupplierRecommendation(
     List<SupplierCompareModel> suppliers,
     String query,
-    {required String locale}
+    {required String locale, bool inlineBrief = false}
   ) async {
     final suppliersJson = jsonEncode(suppliers.map((s) => {
       'name': s.businessName,
@@ -65,7 +73,16 @@ class GeminiService {
       'isVerified': s.isVerified,
       'isPriceFlagged': s.isAnomalyFlagged,
     }).toList());
-    final prompt = '''You are a procurement assistant for a Pakistan construction company.
+    final prompt = inlineBrief
+        ? '''You are a procurement assistant for a Pakistan construction company.
+Material: $query.
+Suppliers: $suppliersJson.
+Focus on the best-value supplier (lowest price among non-flagged options).
+Return ONE short sentence, maximum 12 words, italic-friendly tone.
+Use a middle dot (·) to join two short phrases if helpful.
+Example: Best price this month · stable supply record
+Respond in $locale. No quotes, labels, or markdown. Plain text only.'''
+        : '''You are a procurement assistant for a Pakistan construction company.
 Material: $query.
 Suppliers available: $suppliersJson.
 Recommend the best supplier in 1-2 sentences considering price, rating, and city.
@@ -86,9 +103,22 @@ Respond in $locale language. Use only the provided data. Be concise.''';
       'date': h.timestamp.toIso8601String().substring(0, 10),
     }).toList());
     final prompt = '''Analyze this price history for construction material "$materialName" in Pakistan: $historyJson.
-Give a clear buy-now or wait advisory in 2 sentences.
-Mention the price trend direction (rising/falling/stable).
-Respond in $locale language. Use only this data.''';
+Give a buy-now or wait advisory in at most 2 short sentences.
+Mention trend direction (rising/falling/stable).
+Respond in $locale. Plain text only — no title, labels, or markdown.''';
+    return _callGemini(prompt);
+  }
+
+  Future<String> getHomeMarketGreeting(
+    List<Map<String, dynamic>> categoryPrices,
+    {required String locale}
+  ) async {
+    final dataJson = jsonEncode(categoryPrices);
+    final prompt = '''You summarize construction material price movements for a Pakistan field buyer.
+Category price data (PKR): $dataJson.
+Return ONE line only, maximum 10 words, with a leading trend emoji per category mentioned.
+Format example: 📈 Steel prices rising this week · Cement stable
+Respond in $locale. Plain text only — no labels or markdown.''';
     return _callGemini(prompt);
   }
 
@@ -122,5 +152,33 @@ No markdown. No explanation. JSON only.''';
         quantity: null,
       );
     }
+  }
+
+  Future<String> askAssistant(
+    String userQuestion,
+    String screenName,
+    Map<String, dynamic> screenContext,
+  ) async {
+    final contextJson = jsonEncode(screenContext);
+    final prompt = '''You are the RateBridge AI Assistant, helping a 
+field user of a Pakistan construction material procurement app.
+
+The user is currently on the "$screenName" screen.
+Screen context data: $contextJson
+
+User question: "$userQuestion"
+
+Rules:
+- Answer ONLY using the screen context data provided above when 
+  the question relates to prices, suppliers, or trends.
+- If the question is about how to use the RateBridge app (general 
+  app usage, not data), answer using general knowledge of a 
+  construction material comparison and ordering app.
+- Keep your answer under 60 words.
+- Be direct and helpful, no greetings, no markdown, plain text only.
+- If you don't have enough data to answer, say so honestly in 
+  one short sentence.''';
+
+    return _callGemini(prompt);
   }
 }

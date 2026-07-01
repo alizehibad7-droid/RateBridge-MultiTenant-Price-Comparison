@@ -2,8 +2,9 @@
 
 import 'package:flutter/material.dart';
 import '../../utils/app_theme.dart';
+import '../../utils/chat_image_utils.dart';
 import '../../constants/app_colors.dart';
-import '../field/field_widgets.dart'; // For StatusBadgeStyle
+import '../status_badge.dart';
 
 /// Compact stat card for the admin dashboard grid.
 class AdminStatCard extends StatelessWidget {
@@ -214,6 +215,254 @@ class ApprovalActions extends StatelessWidget {
             ),
           ),
         ),
+      ],
+    );
+  }
+}
+
+/// Titled block inside an admin approval card.
+class AdminApprovalSection extends StatelessWidget {
+  final String title;
+  final List<Widget> children;
+
+  const AdminApprovalSection({
+    super.key,
+    required this.title,
+    required this.children,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w800,
+            color: AppColors.textSecondary,
+            letterSpacing: 0.6,
+          ),
+        ),
+        const SizedBox(height: 10),
+        ...children,
+      ],
+    );
+  }
+}
+
+/// Label + value row for admin approval detail panels.
+class AdminDetailRow extends StatelessWidget {
+  final String label;
+  final String value;
+  final int maxLines;
+
+  const AdminDetailRow({
+    super.key,
+    required this.label,
+    required this.value,
+    this.maxLines = 3,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final display = value.trim().isEmpty ? '—' : value.trim();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 132,
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              display,
+              maxLines: maxLines,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: AppColors.textPrimary,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Horizontal chip list for coverage areas, categories, etc.
+class AdminChipList extends StatelessWidget {
+  final List<String> items;
+  final Color? color;
+
+  const AdminChipList({
+    super.key,
+    required this.items,
+    this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (items.isEmpty) {
+      return const Text('—', style: TextStyle(fontSize: 13, color: AppColors.textSecondary));
+    }
+    final chipColor = color ?? AppColors.primary;
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: items.map((item) {
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: chipColor.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(AppRadius.pill),
+            border: Border.all(color: chipColor.withValues(alpha: 0.25)),
+          ),
+          child: Text(
+            item,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: chipColor,
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+}
+
+/// One tappable document thumbnail; opens fullscreen via [ChatImageUtils].
+class AdminDocumentThumbnail extends StatelessWidget {
+  final String label;
+  final String? imageUrl;
+
+  const AdminDocumentThumbnail({
+    super.key,
+    required this.label,
+    this.imageUrl,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final hasImage = imageUrl != null && imageUrl!.trim().isNotEmpty;
+    return Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            label,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 6),
+          AspectRatio(
+            aspectRatio: 4 / 3,
+            child: Material(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(10),
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                onTap: hasImage
+                    ? () => ChatImageUtils.showFullscreen(
+                          context,
+                          imageUrl: imageUrl,
+                        )
+                    : null,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: AppColors.border),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: hasImage
+                      ? Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            Image.network(
+                              imageUrl!,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) =>
+                                  const _MissingDocPlaceholder(),
+                            ),
+                            Positioned(
+                              right: 6,
+                              bottom: 6,
+                              child: Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: BoxDecoration(
+                                  color: Colors.black54,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: const Icon(
+                                  Icons.zoom_in,
+                                  color: Colors.white,
+                                  size: 14,
+                                ),
+                              ),
+                            ),
+                          ],
+                        )
+                      : const _MissingDocPlaceholder(),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MissingDocPlaceholder extends StatelessWidget {
+  const _MissingDocPlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.image_not_supported_outlined,
+              size: 22, color: AppColors.textMuted),
+          SizedBox(height: 4),
+          Text('Not uploaded',
+              style: TextStyle(fontSize: 10, color: AppColors.textMuted)),
+        ],
+      ),
+    );
+  }
+}
+
+/// Row of document thumbnails with consistent spacing.
+class AdminDocumentThumbnailRow extends StatelessWidget {
+  final List<({String label, String? url})> documents;
+
+  const AdminDocumentThumbnailRow({super.key, required this.documents});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (var i = 0; i < documents.length; i++) ...[
+          if (i > 0) const SizedBox(width: 10),
+          AdminDocumentThumbnail(
+            label: documents[i].label,
+            imageUrl: documents[i].url,
+          ),
+        ],
       ],
     );
   }

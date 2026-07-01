@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
-import '../constants/app_colors.dart';
+import 'package:google_fonts/google_fonts.dart';
+
+import '../theme/field_theme.dart';
 
 class AppRadius {
   static const double xs = 4.0;
@@ -13,64 +15,93 @@ class AppRadius {
 class AppShadows {
   static List<BoxShadow> get card => [
         BoxShadow(
-          color: Colors.black.withOpacity(0.04),
+          color: Colors.black.withValues(alpha: 0.04),
           blurRadius: 16,
           offset: const Offset(0, 4),
         ),
       ];
 }
 
+TextStyle _plusJakarta({
+  required double fontSize,
+  FontWeight? fontWeight,
+  Color? color,
+  double? height,
+  double? letterSpacing,
+}) {
+  return GoogleFonts.plusJakartaSans(
+    fontSize: fontSize,
+    fontWeight: fontWeight,
+    color: color,
+    height: height,
+    letterSpacing: letterSpacing,
+  );
+}
+
 class AppTextStyles {
-  static const TextStyle h1 = TextStyle(
-    fontSize: 26,
-    fontWeight: FontWeight.w700,
-    color: AppColors.textPrimary,
-    letterSpacing: -0.5,
-  );
+  static TextStyle get h1 => _plusJakarta(
+        fontSize: 26,
+        fontWeight: FontWeight.w700,
+        color: FieldColors.textPrimary,
+        letterSpacing: -0.5,
+      );
 
-  static const TextStyle h2 = TextStyle(
-    fontSize: 22,
-    fontWeight: FontWeight.w700,
-    color: AppColors.textPrimary,
-    letterSpacing: -0.4,
-  );
+  static TextStyle get h2 => _plusJakarta(
+        fontSize: 22,
+        fontWeight: FontWeight.w700,
+        color: FieldColors.textPrimary,
+        letterSpacing: -0.4,
+      );
 
-  static const TextStyle h3 = TextStyle(
-    fontSize: 17,
-    fontWeight: FontWeight.w600,
-    color: AppColors.textPrimary,
-  );
+  static TextStyle get h3 => _plusJakarta(
+        fontSize: 17,
+        fontWeight: FontWeight.w600,
+        color: FieldColors.textPrimary,
+      );
 
-  static const TextStyle label = TextStyle(
-    fontSize: 11,
-    fontWeight: FontWeight.w800,
-    color: AppColors.textSecondary,
-    letterSpacing: 1.1,
-  );
+  static TextStyle get label => _plusJakarta(
+        fontSize: 11,
+        fontWeight: FontWeight.w800,
+        color: FieldColors.textSecondary,
+        letterSpacing: 1.1,
+      );
 
-  static const TextStyle body = TextStyle(
-    fontSize: 15,
-    color: AppColors.textPrimary,
-    height: 1.5,
-  );
+  static TextStyle get body => _plusJakarta(
+        fontSize: 15,
+        color: FieldColors.textPrimary,
+        height: 1.5,
+      );
 
-  static const TextStyle bodyMuted = TextStyle(
-    fontSize: 14,
-    color: AppColors.textSecondary,
-    height: 1.5,
-  );
+  static TextStyle get bodyMuted => _plusJakarta(
+        fontSize: 14,
+        color: FieldColors.textSecondary,
+        height: 1.5,
+      );
 
-  static const TextStyle caption = TextStyle(
-    fontSize: 12,
-    color: AppColors.textSecondary,
-  );
+  static TextStyle get caption => _plusJakarta(
+        fontSize: 12,
+        color: FieldColors.textSecondary,
+      );
 
-  static const TextStyle button = TextStyle(
-    fontSize: 15,
-    fontWeight: FontWeight.w700,
-    color: Colors.white,
-    letterSpacing: 0.3,
-  );
+  static TextStyle get button => _plusJakarta(
+        fontSize: 15,
+        fontWeight: FontWeight.w700,
+        color: Colors.white,
+        letterSpacing: 0.3,
+      );
+
+  static TextStyle get emptyTitle => _plusJakarta(
+        fontSize: 16,
+        fontWeight: FontWeight.w600,
+        color: FieldColors.textMuted,
+      );
+
+  static TextStyle get emptySubtitle => _plusJakarta(
+        fontSize: 14,
+        fontWeight: FontWeight.w400,
+        color: FieldColors.textSecondary,
+        height: 1.5,
+      );
 }
 
 BoxDecoration appCardDecoration({
@@ -78,9 +109,12 @@ BoxDecoration appCardDecoration({
   Color? borderColor,
 }) {
   return BoxDecoration(
-    color: Colors.white,
-    borderRadius: BorderRadius.circular(AppRadius.lg),
-    border: Border.all(color: borderColor ?? AppColors.border, width: 1),
+    color: FieldColors.surfaceWhite,
+    borderRadius: BorderRadius.circular(FieldRadius.card),
+    border: Border.all(
+      color: borderColor ?? FieldColors.borderSubtle,
+      width: 1,
+    ),
     boxShadow: shadow,
   );
 }

@@ -4,11 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../utils/app_theme.dart';
 import '../../constants/app_colors.dart';
 import '../../constants/route_names.dart';
 import '../../viewmodels/auth_viewmodel.dart';
-import '../../viewmodels/locale_viewmodel.dart';
 
 class SplashView extends StatefulWidget {
   const SplashView({super.key});
