@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
-import '../../constants/app_colors.dart';
+
 import '../../constants/route_names.dart';
+import '../../theme/admin_theme.dart';
 import '../../viewmodels/auth_viewmodel.dart';
 import '../../viewmodels/admin_viewmodel.dart';
 import '../../viewmodels/notification_viewmodel.dart';
@@ -36,10 +38,10 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
     super.initState();
     _screens = [
       _AdminHomeOverview(onAction: _onTabTapped),
-      const AdminSupplierManagementView(),
-      const _PlaceholderView(title: "Global Orders Monitor"),
+      const AdminSupplierManagementView(embedded: true),
+      const _PlaceholderView(title: 'Global Orders Monitor'),
       const AdminFinanceView(),
-      const AdminCeoManagementView(),
+      const AdminCeoManagementView(embedded: true),
       const _AdminProfileView(),
     ];
   }
@@ -50,57 +52,80 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
     final notifVM = context.watch<NotificationViewModel>();
 
     return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        title: const Text(
-          "SKYLINE ADMIN",
-          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: AppColors.primary, letterSpacing: 1.2)
-        ),
-        bottom: isLoading ? const PreferredSize(
-          preferredSize: Size.fromHeight(2),
-          child: LinearProgressIndicator(minHeight: 2, backgroundColor: Colors.transparent, valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary)),
-        ) : null,
+      backgroundColor: AdminColors.screenBg,
+      appBar: AdminAppBar(
+        title: 'RateBridge Admin',
+        bottom: isLoading
+            ? const PreferredSize(
+                preferredSize: Size.fromHeight(2),
+                child: LinearProgressIndicator(
+                  minHeight: 2,
+                  backgroundColor: Colors.transparent,
+                  color: AdminColors.amber,
+                ),
+              )
+            : null,
         actions: [
           NotificationBadgeIcon(
             unreadCount: notifVM.unreadCount,
-            iconColor: AppColors.textPrimary,
+            iconColor: Colors.white,
             onPressed: () => context.push(RouteNames.adminNotifications),
           ),
           const SizedBox(width: 8),
         ],
       ),
       body: SafeArea(
+        top: false,
         child: IndexedStack(
           index: _currentIndex,
           children: _screens,
         ),
       ),
       bottomNavigationBar: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           color: Colors.white,
-          border: Border(top: BorderSide(color: AppColors.border, width: 1)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.08),
+              blurRadius: 12,
+              offset: const Offset(0, -2),
+            ),
+          ],
         ),
         child: BottomNavigationBar(
           currentIndex: _currentIndex,
           onTap: _onTabTapped,
-          type: BottomNavigationBarType.fixed,
-          backgroundColor: Colors.white,
-          selectedItemColor: AppColors.primary,
-          unselectedItemColor: AppColors.textSecondary,
-          showSelectedLabels: true,
-          showUnselectedLabels: true,
-          selectedLabelStyle: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700),
-          unselectedLabelStyle: const TextStyle(fontSize: 10, fontWeight: FontWeight.w500),
-          elevation: 0,
           items: const [
-            BottomNavigationBarItem(icon: Icon(Icons.grid_view_outlined), activeIcon: Icon(Icons.grid_view_rounded), label: 'Home'),
-            BottomNavigationBarItem(icon: Icon(Icons.storefront_outlined), activeIcon: Icon(Icons.storefront_rounded), label: 'Suppliers'),
-            BottomNavigationBarItem(icon: Icon(Icons.inventory_2_outlined), activeIcon: Icon(Icons.inventory_2_rounded), label: 'Orders'),
-            BottomNavigationBarItem(icon: Icon(Icons.account_balance_wallet_outlined), activeIcon: Icon(Icons.account_balance_wallet_rounded), label: 'Finance'),
-            BottomNavigationBarItem(icon: Icon(Icons.business_outlined), activeIcon: Icon(Icons.business_rounded), label: 'CEOs'),
-            BottomNavigationBarItem(icon: Icon(Icons.person_outline_rounded), activeIcon: Icon(Icons.person_rounded), label: 'Profile'),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.grid_view_outlined),
+              activeIcon: Icon(Icons.grid_view_rounded),
+              label: 'Home',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.storefront_outlined),
+              activeIcon: Icon(Icons.storefront_rounded),
+              label: 'Suppliers',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.inventory_2_outlined),
+              activeIcon: Icon(Icons.inventory_2_rounded),
+              label: 'Orders',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.account_balance_wallet_outlined),
+              activeIcon: Icon(Icons.account_balance_wallet_rounded),
+              label: 'Finance',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.business_outlined),
+              activeIcon: Icon(Icons.business_rounded),
+              label: 'CEOs',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.person_outline_rounded),
+              activeIcon: Icon(Icons.person_rounded),
+              label: 'Profile',
+            ),
           ],
         ),
       ),
@@ -114,9 +139,8 @@ class _AdminHomeOverview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final adminVM = context.watch<AdminViewModel>();
-    
+
     return CustomScrollView(
       physics: const BouncingScrollPhysics(),
       slivers: [
@@ -126,11 +150,17 @@ class _AdminHomeOverview extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text("COMMAND CENTER", style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, letterSpacing: 1.5, fontSize: 10)),
+                const AdminSectionLabel('Command Center'),
                 const SizedBox(height: 8),
-                Text("Operational Pulse", style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
+                Text(
+                  'Operational Pulse',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                    color: AdminColors.navy,
+                  ),
+                ),
                 const SizedBox(height: 24),
-                
                 GridView.count(
                   crossAxisCount: 2,
                   shrinkWrap: true,
@@ -143,38 +173,58 @@ class _AdminHomeOverview extends StatelessWidget {
                       stream: adminVM.watchPendingUsersCount(),
                       builder: (context, snapshot) {
                         final count = snapshot.data ?? 0;
-                        return _buildStatCard("Pending Approval", "$count", Icons.how_to_reg_outlined, AppColors.warning, isBadge: count > 0);
-                      }
+                        return _buildStatCard(
+                          'Pending Approval',
+                          '$count',
+                          Icons.how_to_reg_outlined,
+                          AdminColors.amber,
+                          isBadge: count > 0,
+                        );
+                      },
                     ),
                     StreamBuilder<int>(
                       stream: adminVM.watchActiveUsersCount(),
                       builder: (context, snapshot) {
                         final count = snapshot.data ?? 0;
-                        return _buildStatCard("Active Users", "$count", Icons.people_outline, AppColors.primary);
-                      }
+                        return _buildStatCard(
+                          'Active Users',
+                          '$count',
+                          Icons.people_outline,
+                          AdminColors.navy,
+                        );
+                      },
                     ),
                     StreamBuilder<int>(
                       stream: adminVM.watchSuspendedUsersCount(),
                       builder: (context, snapshot) {
                         final count = snapshot.data ?? 0;
-                        return _buildStatCard("Suspended", "$count", Icons.block_flipped, AppColors.error);
-                      }
+                        return _buildStatCard(
+                          'Suspended',
+                          '$count',
+                          Icons.block_flipped,
+                          AdminColors.red,
+                        );
+                      },
                     ),
-                    _buildStatCard("Revenue", "Active", Icons.payments_outlined, AppColors.fieldAccent),
+                    _buildStatCard(
+                      'Revenue',
+                      'Active',
+                      Icons.payments_outlined,
+                      AdminColors.green,
+                    ),
                   ],
                 ),
               ],
             ),
           ),
         ),
-
         SliverPadding(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
           sliver: SliverToBoxAdapter(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text("QUICK ACTION GRID", style: TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w800, fontSize: 10, letterSpacing: 1.5)),
+                const AdminSectionLabel('Quick Actions'),
                 const SizedBox(height: 16),
                 GridView.count(
                   crossAxisCount: 3,
@@ -183,14 +233,44 @@ class _AdminHomeOverview extends StatelessWidget {
                   mainAxisSpacing: 10,
                   crossAxisSpacing: 10,
                   children: [
-                    _buildActionCard("Review\nCEOs", Icons.person_add_alt_1_outlined, () => onAction(4)),
-                    _buildActionCard("Review\nSuppliers", Icons.store_outlined, () => onAction(1)),
-                    _buildActionCard("Global\nOrders", Icons.monitor_heart_outlined, () => onAction(2)),
-                    _buildActionCard("Commission\nLedger", Icons.receipt_long_outlined, () => onAction(3)),
-                    _buildActionCard("Admin\nProfile", Icons.person_outline, () => onAction(5)),
-                    _buildActionCard("Manage\nTaxonomy", Icons.category_outlined, () {
-                      Navigator.push(context, MaterialPageRoute(builder: (context) => const AdminCategoriesView()));
-                    }),
+                    _buildActionCard(
+                      'Review\nCEOs',
+                      Icons.person_add_alt_1_outlined,
+                      () => onAction(4),
+                    ),
+                    _buildActionCard(
+                      'Review\nSuppliers',
+                      Icons.store_outlined,
+                      () => onAction(1),
+                    ),
+                    _buildActionCard(
+                      'Global\nOrders',
+                      Icons.monitor_heart_outlined,
+                      () => onAction(2),
+                    ),
+                    _buildActionCard(
+                      'Commission\nLedger',
+                      Icons.receipt_long_outlined,
+                      () => onAction(3),
+                    ),
+                    _buildActionCard(
+                      'Admin\nProfile',
+                      Icons.person_outline,
+                      () => onAction(5),
+                    ),
+                    _buildActionCard(
+                      'Manage\nTaxonomy',
+                      Icons.category_outlined,
+                      () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) =>
+                                AdminTheme.wrap(const AdminCategoriesView()),
+                          ),
+                        );
+                      },
+                    ),
                   ],
                 ),
               ],
@@ -201,14 +281,16 @@ class _AdminHomeOverview extends StatelessWidget {
     );
   }
 
-  Widget _buildStatCard(String title, String value, IconData icon, Color color, {bool isBadge = false}) {
+  Widget _buildStatCard(
+    String title,
+    String value,
+    IconData icon,
+    Color color, {
+    bool isBadge = false,
+  }) {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
-      ),
+      decoration: AdminTheme.cardDecoration(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -218,14 +300,25 @@ class _AdminHomeOverview extends StatelessWidget {
               Icon(icon, color: color, size: 20),
               if (isBadge)
                 Container(
-                  width: 8, height: 8,
-                  decoration: const BoxDecoration(color: AppColors.error, shape: BoxShape.circle),
-                )
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(
+                    color: AdminColors.red,
+                    shape: BoxShape.circle,
+                  ),
+                ),
             ],
           ),
           const Spacer(),
-          Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: AppColors.textPrimary)),
-          Text(title, style: const TextStyle(fontSize: 10, color: AppColors.textSecondary, fontWeight: FontWeight.w700)),
+          Text(
+            value,
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+              color: AdminColors.navy,
+            ),
+          ),
+          Text(title, style: AdminTheme.mutedStyle(size: 10)),
         ],
       ),
     );
@@ -234,22 +327,22 @@ class _AdminHomeOverview extends StatelessWidget {
   Widget _buildActionCard(String title, IconData icon, VoidCallback onTap) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(12),
       child: Container(
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.border),
-        ),
+        decoration: AdminTheme.cardDecoration(),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, color: AppColors.textPrimary, size: 22),
+            Icon(icon, color: AdminColors.navy, size: 22),
             const SizedBox(height: 8),
             Text(
               title,
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: AppColors.textPrimary),
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 9,
+                fontWeight: FontWeight.w700,
+                color: AdminColors.navy,
+              ),
             ),
           ],
         ),
@@ -265,24 +358,38 @@ class _AdminProfileView extends StatelessWidget {
   Widget build(BuildContext context) {
     final authVM = Provider.of<AuthViewModel>(context);
     return Padding(
-      padding: const EdgeInsets.all(24.0),
+      padding: const EdgeInsets.all(24),
       child: Column(
         children: [
           const CircleAvatar(
             radius: 40,
-            backgroundColor: AppColors.primary,
-            child: Icon(Icons.admin_panel_settings, size: 40, color: Colors.white),
+            backgroundColor: AdminColors.navy,
+            child: Icon(
+              Icons.admin_panel_settings,
+              size: 40,
+              color: Colors.white,
+            ),
           ),
           const SizedBox(height: 16),
-          Text(authVM.user?.name ?? "Admin", style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
-          Text(authVM.user?.email ?? "", style: const TextStyle(color: AppColors.textSecondary)),
+          Text(
+            authVM.user?.name ?? 'Admin',
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+              color: AdminColors.navy,
+            ),
+          ),
+          Text(
+            authVM.user?.email ?? '',
+            style: AdminTheme.mutedStyle(),
+          ),
           const Spacer(),
           SizedBox(
             width: double.infinity,
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+            child: OutlinedButton(
               onPressed: () => authVM.signOut(),
-              child: const Text("LOGOUT SESSION", style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+              style: AdminTheme.destructiveButtonStyle(height: 52),
+              child: const Text('Logout Session'),
             ),
           ),
         ],
@@ -297,6 +404,14 @@ class _PlaceholderView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(child: Text(title, style: const TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.bold)));
+    return Center(
+      child: Text(
+        title,
+        style: GoogleFonts.plusJakartaSans(
+          color: AdminColors.textGrey,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
   }
 }

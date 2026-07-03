@@ -2,16 +2,16 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
-import '../../utils/app_theme.dart';
+import '../../theme/ceo_theme.dart';
 import '../../viewmodels/ceo_viewmodel.dart';
 import '../../viewmodels/auth_viewmodel.dart';
 import '../../models/user_model.dart';
 import '../../widgets/ceo_nav_bar.dart';
-import '../../widgets/app_text_field.dart';
-import '../../constants/app_colors.dart';
+import '../../widgets/ceo/ceo_widgets.dart';
 
 class CeoFieldUsersView extends StatefulWidget {
   const CeoFieldUsersView({super.key});
@@ -41,9 +41,9 @@ class _CeoFieldUsersViewState extends State<CeoFieldUsersView>
     final companyId = context.read<AuthViewModel>().user?.companyId ?? '';
 
     return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('Field Users'),
+      backgroundColor: CeoColors.screenBg,
+      appBar: CeoAppBar(
+        title: 'Field Users',
         actions: [
           IconButton(
             icon: const Icon(Icons.vpn_key_outlined),
@@ -53,9 +53,6 @@ class _CeoFieldUsersViewState extends State<CeoFieldUsersView>
         ],
         bottom: TabBar(
           controller: _tabController,
-          labelColor: AppColors.primary,
-          unselectedLabelColor: AppColors.textSecondary,
-          indicatorColor: AppColors.primary,
           tabs: const [
             Tab(text: 'Pending'),
             Tab(text: 'Active'),
@@ -82,11 +79,11 @@ class _CeoFieldUsersViewState extends State<CeoFieldUsersView>
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           const Icon(Icons.engineering_outlined,
-                              size: 40, color: AppColors.textMuted),
+                              size: 40, color: CeoColors.textGrey),
                           const SizedBox(height: 12),
                           Text(
                             'No ${filters[i]} field users',
-                            style: AppTextStyles.bodyMuted,
+                            style: CeoTheme.mutedStyle(),
                           ),
                           if (i == 0) ...[
                             const SizedBox(height: 8),
@@ -119,9 +116,8 @@ class _CeoFieldUsersViewState extends State<CeoFieldUsersView>
 
   Widget _userCard(BuildContext context, CeoViewModel vm, UserModel user,
       String filter) {
-    return Container(
+    return AdminCard(
       padding: const EdgeInsets.all(14),
-      decoration: appCardDecoration(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -129,14 +125,15 @@ class _CeoFieldUsersViewState extends State<CeoFieldUsersView>
             children: [
               CircleAvatar(
                 radius: 20,
-                backgroundColor: _statusColor(filter).withOpacity(0.12),
+                backgroundColor: _statusColor(filter).withValues(alpha: 0.12),
                 child: Text(
                   user.name.isNotEmpty
                       ? user.name[0].toUpperCase()
                       : 'F',
-                  style: TextStyle(
-                      color: _statusColor(filter),
-                      fontWeight: FontWeight.w700),
+                  style: GoogleFonts.plusJakartaSans(
+                    color: _statusColor(filter),
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
               const SizedBox(width: 10),
@@ -144,21 +141,25 @@ class _CeoFieldUsersViewState extends State<CeoFieldUsersView>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(user.name,
-                        style: const TextStyle(
-                            fontWeight: FontWeight.w600, fontSize: 14)),
-                    Text(user.phone,
-                        style: AppTextStyles.bodyMuted),
+                    Text(
+                      user.name,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                        color: CeoColors.navy,
+                      ),
+                    ),
+                    Text(user.phone, style: CeoTheme.mutedStyle(size: 12)),
                   ],
                 ),
               ),
-              _statusBadge(filter),
+              CeoStatusBadge(status: filter),
             ],
           ),
           const SizedBox(height: 4),
           Text(
             'Joined: ${_fmtDate(user.createdAt)}',
-            style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+            style: CeoTheme.mutedStyle(size: 11),
           ),
           const SizedBox(height: 12),
           const Divider(height: 1),
@@ -179,15 +180,15 @@ class _CeoFieldUsersViewState extends State<CeoFieldUsersView>
           flex: 2,
           child: ElevatedButton(
             onPressed: () => vm.approveFieldUser(user.uid),
-            child: Text('Approve', style: AppTextStyles.button),
+            style: CeoTheme.primaryButtonStyle(height: 44),
+            child: const Text('Approve'),
           ),
         ),
         const SizedBox(width: 8),
         Expanded(
           child: OutlinedButton(
             onPressed: () => _showRejectDialog(context, vm, user.uid),
-            style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.danger),
+            style: CeoTheme.destructiveButtonStyle(height: 44),
             child: const Text('Reject'),
           ),
         ),
@@ -203,20 +204,21 @@ class _CeoFieldUsersViewState extends State<CeoFieldUsersView>
               title: 'Deactivate ${user.name}?',
               body: 'They will lose access to the app immediately.',
               confirmLabel: 'Deactivate',
-              confirmColor: AppColors.warning,
+              isDestructive: false,
+              useAmber: true,
               onConfirm: () => vm.deactivateFieldUser(user.uid),
             ),
             icon: const Icon(Icons.block, size: 16),
             label: const Text('Deactivate'),
             style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.warning,
-                side: const BorderSide(color: AppColors.warning)),
+              foregroundColor: CeoColors.darkAmber,
+              side: const BorderSide(color: CeoColors.darkAmber),
+            ),
           ),
         ),
       ];
     }
 
-    // deactivated
     return [
       Expanded(
         child: ElevatedButton.icon(
@@ -225,13 +227,11 @@ class _CeoFieldUsersViewState extends State<CeoFieldUsersView>
             title: 'Reactivate ${user.name}?',
             body: 'They will regain full access to the field dashboard.',
             confirmLabel: 'Reactivate',
-            confirmColor: AppColors.success,
             onConfirm: () => vm.reactivateFieldUser(user.uid),
           ),
           icon: const Icon(Icons.check_circle_outline, size: 16),
-          label: Text('Reactivate', style: AppTextStyles.button),
-          style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.success),
+          label: const Text('Reactivate'),
+          style: CeoTheme.primaryButtonStyle(height: 44),
         ),
       ),
     ];
@@ -244,24 +244,25 @@ class _CeoFieldUsersViewState extends State<CeoFieldUsersView>
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Reject field user'),
-        content: AppTextField(
-          label: 'REASON',
+        content: TextField(
           controller: reasonCtrl,
           maxLines: 3,
-          hint: 'Let them know why they were rejected...',
+          decoration: CeoTheme.inputDecoration(
+            labelText: 'Reason',
+            hintText: 'Let them know why they were rejected...',
+          ),
         ),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx),
               child: const Text('Cancel')),
-          ElevatedButton(
-            style:
-                ElevatedButton.styleFrom(backgroundColor: AppColors.danger),
+          OutlinedButton(
+            style: CeoTheme.destructiveButtonStyle(height: 40),
             onPressed: () {
               vm.rejectFieldUser(uid, reasonCtrl.text.trim());
               Navigator.pop(ctx);
             },
-            child: Text('Reject', style: AppTextStyles.button),
+            child: const Text('Reject'),
           ),
         ],
       ),
@@ -273,8 +274,9 @@ class _CeoFieldUsersViewState extends State<CeoFieldUsersView>
     required String title,
     required String body,
     required String confirmLabel,
-    required Color confirmColor,
     required VoidCallback onConfirm,
+    bool isDestructive = false,
+    bool useAmber = false,
   }) {
     showDialog(
       context: context,
@@ -285,14 +287,29 @@ class _CeoFieldUsersViewState extends State<CeoFieldUsersView>
           TextButton(
               onPressed: () => Navigator.pop(ctx),
               child: const Text('Cancel')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: confirmColor),
-            onPressed: () {
-              Navigator.pop(ctx);
-              onConfirm();
-            },
-            child: Text(confirmLabel, style: AppTextStyles.button),
-          ),
+          if (isDestructive)
+            OutlinedButton(
+              style: CeoTheme.destructiveButtonStyle(height: 40),
+              onPressed: () {
+                Navigator.pop(ctx);
+                onConfirm();
+              },
+              child: Text(confirmLabel),
+            )
+          else
+            ElevatedButton(
+              style: useAmber
+                  ? ElevatedButton.styleFrom(
+                      backgroundColor: CeoColors.darkAmber,
+                      foregroundColor: Colors.white,
+                    )
+                  : CeoTheme.primaryButtonStyle(height: 40),
+              onPressed: () {
+                Navigator.pop(ctx);
+                onConfirm();
+              },
+              child: Text(confirmLabel),
+            ),
         ],
       ),
     );
@@ -304,9 +321,9 @@ class _CeoFieldUsersViewState extends State<CeoFieldUsersView>
 
     showModalBottomSheet(
       context: context,
+      backgroundColor: CeoColors.screenBg,
       shape: const RoundedRectangleBorder(
-        borderRadius:
-            BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (ctx) => Padding(
         padding: const EdgeInsets.all(24),
@@ -316,50 +333,49 @@ class _CeoFieldUsersViewState extends State<CeoFieldUsersView>
           children: [
             Center(
               child: Container(
-                width: 40, height: 4,
+                width: 40,
+                height: 4,
                 decoration: BoxDecoration(
-                    color: AppColors.border,
+                    color: CeoColors.border,
                     borderRadius: BorderRadius.circular(2)),
               ),
             ),
             const SizedBox(height: 16),
-            const Text('Company Invite Code',
-                style: TextStyle(
-                    fontWeight: FontWeight.w600, fontSize: 16),
-                textAlign: TextAlign.center),
+            Text(
+              'Company Invite Code',
+              style: CeoTheme.titleStyle(size: 16),
+              textAlign: TextAlign.center,
+            ),
             const SizedBox(height: 4),
             Text(
               'Share this code with your field users so they can '
               'register and join your team.',
-              style: AppTextStyles.bodyMuted,
+              style: CeoTheme.mutedStyle(),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.symmetric(
                   horizontal: 20, vertical: 16),
-              decoration: BoxDecoration(
-                color: AppColors.background,
-                borderRadius: BorderRadius.circular(AppRadius.md),
-              ),
+              decoration: CeoTheme.cardDecoration(),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Expanded(
                     child: Text(
                       code,
-                      style: const TextStyle(
+                      style: GoogleFonts.jetBrainsMono(
                         fontSize: 24,
                         fontWeight: FontWeight.w700,
                         letterSpacing: 4,
-                        fontFamily: 'monospace',
+                        color: CeoColors.navy,
                       ),
                       textAlign: TextAlign.center,
                     ),
                   ),
                   IconButton(
                     icon: const Icon(Icons.copy_outlined,
-                        color: AppColors.primary),
+                        color: CeoColors.navy),
                     tooltip: 'Copy',
                     onPressed: () {
                       Clipboard.setData(ClipboardData(text: code));
@@ -383,7 +399,8 @@ class _CeoFieldUsersViewState extends State<CeoFieldUsersView>
                           'Use invite code: $code');
                     },
                     icon: const Icon(Icons.share, size: 16),
-                    label: Text('Share', style: AppTextStyles.button),
+                    label: const Text('Share'),
+                    style: CeoTheme.primaryButtonStyle(height: 44),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -392,16 +409,16 @@ class _CeoFieldUsersViewState extends State<CeoFieldUsersView>
                     onPressed: () => _confirmRegenerate(ctx, vm),
                     icon: const Icon(Icons.refresh, size: 16),
                     label: const Text('Regenerate'),
+                    style: CeoTheme.destructiveButtonStyle(height: 44),
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               '⚠ Regenerating the code will invalidate the old one. '
               'Existing team members are not affected.',
-              style: TextStyle(
-                  fontSize: 11, color: AppColors.textMuted),
+              style: CeoTheme.mutedStyle(size: 11),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
@@ -425,12 +442,13 @@ class _CeoFieldUsersViewState extends State<CeoFieldUsersView>
               child: const Text('Cancel')),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.warning),
+                backgroundColor: CeoColors.darkAmber,
+                foregroundColor: Colors.white),
             onPressed: () {
               Navigator.pop(dlg);
               vm.regenerateInviteCode();
             },
-            child: Text('Regenerate', style: AppTextStyles.button),
+            child: const Text('Regenerate'),
           ),
         ],
       ),
@@ -440,30 +458,12 @@ class _CeoFieldUsersViewState extends State<CeoFieldUsersView>
   Color _statusColor(String filter) {
     switch (filter) {
       case 'active':
-        return AppColors.success;
+        return CeoColors.green;
       case 'deactivated':
-        return AppColors.danger;
+        return CeoColors.red;
       default:
-        return AppColors.warning;
+        return CeoColors.amber;
     }
-  }
-
-  Widget _statusBadge(String status) {
-    final color = _statusColor(status);
-    final label = status[0].toUpperCase() + status.substring(1);
-    return Container(
-      padding:
-          const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
-        borderRadius: BorderRadius.circular(AppRadius.pill),
-      ),
-      child: Text(label,
-          style: TextStyle(
-              color: color,
-              fontSize: 11,
-              fontWeight: FontWeight.w600)),
-    );
   }
 
   String _fmtDate(DateTime d) => '${d.day}/${d.month}/${d.year}';

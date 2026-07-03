@@ -1,17 +1,19 @@
 // MVVM: View — no business logic
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../utils/app_theme.dart';
+import '../../constants/route_names.dart';
+import '../../models/order_model.dart';
+import '../../theme/ceo_theme.dart';
 import '../../utils/formatters.dart';
 import '../../viewmodels/ceo_viewmodel.dart';
 import '../../viewmodels/auth_viewmodel.dart';
 import '../../widgets/ceo_nav_bar.dart';
-import '../../widgets/status_badge.dart';
-import '../../constants/app_colors.dart';
-import '../../models/order_model.dart';
+import '../../widgets/ceo/ceo_widgets.dart';
 
 class CeoDashboardView extends StatefulWidget {
   const CeoDashboardView({super.key});
@@ -21,6 +23,8 @@ class CeoDashboardView extends StatefulWidget {
 }
 
 class _CeoDashboardViewState extends State<CeoDashboardView> {
+  bool _regeneratingCode = false;
+
   @override
   void initState() {
     super.initState();
@@ -29,23 +33,34 @@ class _CeoDashboardViewState extends State<CeoDashboardView> {
     });
   }
 
+  Future<void> _copyInviteCode(String code) async {
+    await Clipboard.setData(ClipboardData(text: code));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Invite code copied')),
+    );
+  }
+
+  Future<void> _regenerateCode(CeoViewModel vm) async {
+    setState(() => _regeneratingCode = true);
+    await vm.regenerateInviteCode();
+    if (mounted) setState(() => _regeneratingCode = false);
+  }
+
   @override
   Widget build(BuildContext context) {
     final authVm = context.read<AuthViewModel>();
     final companyId = authVm.user?.companyId ?? '';
 
     return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: Consumer<CeoViewModel>(
-          builder: (_, vm, __) => Text(
-            vm.company?.name ?? 'Dashboard',
-            style: AppTextStyles.h3,
-          ),
+      backgroundColor: CeoColors.screenBg,
+      appBar: CeoAppBar(
+        title: context.select<CeoViewModel, String>(
+          (vm) => vm.company?.name ?? 'Dashboard',
         ),
         actions: [
-          _buildAppBarAction(
-            icon: Icons.notifications_none_rounded,
+          IconButton(
+            icon: const Icon(Icons.notifications_none_rounded),
             onPressed: () {},
           ),
         ],
@@ -56,8 +71,11 @@ class _CeoDashboardViewState extends State<CeoDashboardView> {
             return const Center(child: CircularProgressIndicator());
           }
 
+          final inviteCode = vm.company?.inviteCode ?? 'RB-XXXXXX';
+
           return RefreshIndicator(
             onRefresh: () => vm.loadDashboard(),
+            color: CeoColors.amber,
             child: StreamBuilder<Map<String, dynamic>>(
               stream: vm.watchDashboardStats(companyId),
               builder: (context, snapshot) {
@@ -80,145 +98,108 @@ class _CeoDashboardViewState extends State<CeoDashboardView> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      // Welcome
                       Container(
                         padding: const EdgeInsets.all(16),
-                        decoration: appCardDecoration(shadow: AppShadows.card),
+                        decoration: CeoTheme.cardDecoration(),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
                               'Welcome back, ${vm.name}',
-                              style: const TextStyle(
-                                  fontSize: 18, fontWeight: FontWeight.w500),
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w600,
+                                color: CeoColors.navy,
+                              ),
                             ),
                             const SizedBox(height: 4),
                             Text(
                               'You have $pendingOrders order approvals and '
                               '$pendingJoin supplier requests waiting.',
-                              style: AppTextStyles.bodyMuted,
+                              style: CeoTheme.mutedStyle(size: 13),
                             ),
                           ],
                         ),
                       ),
                       const SizedBox(height: 16),
-
-                      // Stats row
-                      Row(
+                      CeoInviteCodeCard(
+                        inviteCode: inviteCode,
+                        onCopy: () => _copyInviteCode(inviteCode),
+                        onRegenerate: () => _regenerateCode(vm),
+                        isRegenerating: _regeneratingCode,
+                      ),
+                      if (pendingOrders > 0) ...[
+                        const SizedBox(height: 16),
+                        CeoPendingApprovalBanner(
+                          count: pendingOrders,
+                          onTap: () => context.go(
+                            '${RouteNames.ceoOrders}?tab=1',
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 16),
+                      GridView.count(
+                        crossAxisCount: 2,
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        crossAxisSpacing: 12,
+                        mainAxisSpacing: 12,
+                        childAspectRatio: 1.15,
                         children: [
-                          Expanded(
-                              child: _statCard('Field Users',
-                                  '$fieldUserCount', Icons.engineering_outlined,
-                                  color: AppColors.fieldAccent)),
-                          const SizedBox(width: 12),
-                          Expanded(
-                              child: _statCard('Suppliers', '$supplierCount',
-                                  Icons.store_outlined,
-                                  color: AppColors.supplierAccent)),
-                          const SizedBox(width: 12),
-                          Expanded(
-                              child: _statCard('Pending Reqs', '$pendingJoin',
-                                  Icons.pending_actions,
-                                  color: AppColors.warning)),
+                          CeoStatCard(
+                            icon: Icons.engineering_outlined,
+                            value: '$fieldUserCount',
+                            label: 'Field Users',
+                          ),
+                          CeoStatCard(
+                            icon: Icons.store_outlined,
+                            value: '$supplierCount',
+                            label: 'Active Suppliers',
+                          ),
+                          CeoStatCard(
+                            icon: Icons.pending_actions_outlined,
+                            value: '$pendingJoin',
+                            label: 'Pending Requests',
+                          ),
+                          CeoStatCard(
+                            icon: Icons.receipt_long_outlined,
+                            value: '$pendingOrders',
+                            label: 'Orders to Review',
+                          ),
                         ],
                       ),
                       const SizedBox(height: 16),
-
-                      // Subscription card
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: plan == 'Free'
-                              ? AppColors.surface
-                              : AppColors.primary,
-                          borderRadius: BorderRadius.circular(AppRadius.md),
-                          border: plan == 'Free'
-                              ? Border.all(
-                                  color: AppColors.border, width: 0.5)
-                              : null,
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  plan == 'Free'
-                                      ? 'Free Plan'
-                                      : '$plan Plan',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 16,
-                                    color: plan == 'Free'
-                                        ? AppColors.textPrimary
-                                        : Colors.white,
-                                  ),
-                                ),
-                                TextButton(
-                                  onPressed: () =>
-                                      context.go('/ceo/subscription'),
-                                  child: Text(
-                                    plan == 'Free' ? 'Upgrade' : 'Manage',
-                                    style: TextStyle(
-                                      color: plan == 'Free'
-                                          ? AppColors.primary
-                                          : Colors.white,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            if (expiresAt != null) ...[
-                              Text(
-                                'Expires: ${AppFormatters.date(expiresAt)}',
-                                style: TextStyle(
-                                  color: plan == 'Free'
-                                      ? AppColors.textSecondary
-                                      : Colors.white70,
-                                  fontSize: 12,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(4),
-                                child: LinearProgressIndicator(
-                                  value: (daysLeft / 30).clamp(0.0, 1.0),
-                                  minHeight: 4,
-                                  backgroundColor: Colors.white24,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
+                      _SubscriptionCard(
+                        plan: plan.toString(),
+                        expiresAt: expiresAt,
+                        daysLeft: daysLeft,
                       ),
-
-                      // Expiry warning
                       if (expiresAt != null && daysLeft < 7) ...[
                         const SizedBox(height: 12),
                         Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: AppColors.dangerBg,
-                            borderRadius: BorderRadius.circular(AppRadius.md),
+                            color: CeoColors.red.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(12),
                           ),
                           child: Row(
                             children: [
                               const Icon(Icons.warning_amber_outlined,
-                                  color: AppColors.warning),
+                                  color: CeoColors.amber),
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
                                   'Subscription expiring in $daysLeft days — Renew now',
-                                  style: const TextStyle(
-                                      color: AppColors.warning,
-                                      fontWeight: FontWeight.w500),
+                                  style: GoogleFonts.plusJakartaSans(
+                                    color: CeoColors.darkAmber,
+                                    fontWeight: FontWeight.w500,
+                                    fontSize: 13,
+                                  ),
                                 ),
                               ),
                               TextButton(
                                 onPressed: () =>
-                                    context.go('/ceo/subscription'),
+                                    context.go(RouteNames.ceoSubscription),
                                 child: const Text('Renew'),
                               ),
                             ],
@@ -226,9 +207,7 @@ class _CeoDashboardViewState extends State<CeoDashboardView> {
                         ),
                       ],
                       const SizedBox(height: 24),
-
-                      // Quick Actions
-                      Text('Quick Actions', style: AppTextStyles.h3),
+                      const CeoSectionLabel('Quick Actions'),
                       const SizedBox(height: 12),
                       GridView.count(
                         crossAxisCount: 2,
@@ -242,36 +221,33 @@ class _CeoDashboardViewState extends State<CeoDashboardView> {
                             context,
                             icon: Icons.store_outlined,
                             title: 'My Suppliers',
-                            color: AppColors.supplierAccent,
-                            onTap: () => context.go('/ceo/suppliers'),
+                            onTap: () => context.go(RouteNames.ceoMySuppliers),
                           ),
                           _actionCard(
                             context,
                             icon: Icons.person_add_outlined,
                             title: 'Invite Suppliers',
-                            color: AppColors.primary,
-                            onTap: () => context.go('/ceo/invite'),
+                            onTap: () => context.go(RouteNames.ceoInvite),
                           ),
                           _actionCard(
                             context,
                             icon: Icons.group_outlined,
                             title: 'Field Users',
-                            color: AppColors.fieldAccent,
-                            onTap: () => context.go('/ceo/field-users'),
+                            onTap: () => context.go(RouteNames.ceoFieldUsers),
                           ),
                           _actionCard(
                             context,
                             icon: Icons.receipt_outlined,
                             title: 'All Orders',
-                            color: AppColors.adminAccent,
-                            onTap: () => context.go('/ceo/orders'),
+                            onTap: () => context.go(RouteNames.ceoOrders),
                           ),
                         ],
                       ),
-
-                      // Recent orders
                       const SizedBox(height: 24),
-                      Text('Recent Orders', style: AppTextStyles.h3),
+                      Text(
+                        'Recent Orders',
+                        style: CeoTheme.titleStyle(size: 16),
+                      ),
                       const SizedBox(height: 8),
                       StreamBuilder<List<OrderModel>>(
                         stream: vm.watchCompanyOrders(companyId, 'All'),
@@ -280,8 +256,10 @@ class _CeoDashboardViewState extends State<CeoDashboardView> {
                           if (orders.isEmpty) {
                             return Padding(
                               padding: const EdgeInsets.symmetric(vertical: 16),
-                              child: Text('No orders yet',
-                                  style: AppTextStyles.bodyMuted),
+                              child: Text(
+                                'No orders yet',
+                                style: CeoTheme.mutedStyle(),
+                              ),
                             );
                           }
                           return Column(
@@ -304,58 +282,38 @@ class _CeoDashboardViewState extends State<CeoDashboardView> {
     );
   }
 
-  Widget _buildAppBarAction({required IconData icon, required VoidCallback onPressed, Color color = AppColors.primary}) {
-    return IconButton(
-      icon: Icon(icon, color: color, size: 22),
-      onPressed: onPressed,
-    );
-  }
-
-  Widget _statCard(String label, String value, IconData icon,
-      {Color color = AppColors.primary}) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: appCardDecoration(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, size: 18, color: color),
-          const SizedBox(height: 8),
-          Text(value,
-              style: TextStyle(
-                  fontSize: 20, fontWeight: FontWeight.w700, color: color)),
-          Text(label, style: AppTextStyles.caption),
-        ],
-      ),
-    );
-  }
-
-  Widget _actionCard(BuildContext context,
-      {required IconData icon,
-      required String title,
-      required Color color,
-      required VoidCallback onTap}) {
+  Widget _actionCard(
+    BuildContext context, {
+    required IconData icon,
+    required String title,
+    required VoidCallback onTap,
+  }) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: appCardDecoration(),
+        decoration: CeoTheme.cardDecoration(),
         child: Row(
           children: [
             Container(
               width: 32,
               height: 32,
               decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(AppRadius.sm),
+                color: CeoColors.amber.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
               ),
-              child: Icon(icon, size: 16, color: color),
+              child: Icon(icon, size: 16, color: CeoColors.navy),
             ),
             const SizedBox(width: 10),
             Expanded(
-              child: Text(title,
-                  style: const TextStyle(
-                      fontWeight: FontWeight.w600, fontSize: 13)),
+              child: Text(
+                title,
+                style: GoogleFonts.plusJakartaSans(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                  color: CeoColors.navy,
+                ),
+              ),
             ),
           ],
         ),
@@ -367,33 +325,101 @@ class _CeoDashboardViewState extends State<CeoDashboardView> {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: appCardDecoration(),
+      decoration: CeoTheme.cardDecoration(),
       child: Row(
         children: [
           Expanded(
-            child: Text(order.materialName,
-                style: const TextStyle(fontWeight: FontWeight.w500)),
+            child: Text(
+              order.materialName,
+              style: GoogleFonts.plusJakartaSans(
+                fontWeight: FontWeight.w500,
+                color: CeoColors.navy,
+              ),
+            ),
           ),
-          _statusPill(order.status),
+          CeoStatusBadge(status: order.status),
           const SizedBox(width: 8),
-          Text(AppFormatters.formatPKRCurrency(order.totalAmount),
-              style: const TextStyle(
-                  fontWeight: FontWeight.w600, color: AppColors.primary)),
+          Text(
+            AppFormatters.formatPKRCurrency(order.totalAmount),
+            style: GoogleFonts.plusJakartaSans(
+              fontWeight: FontWeight.w600,
+              color: CeoColors.navy,
+            ),
+          ),
         ],
       ),
     );
   }
+}
 
-  Widget _statusPill(String status) {
-    final style = StatusBadgeStyle.of(status);
+class _SubscriptionCard extends StatelessWidget {
+  final String plan;
+  final DateTime? expiresAt;
+  final int daysLeft;
+
+  const _SubscriptionCard({
+    required this.plan,
+    required this.expiresAt,
+    required this.daysLeft,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isFree = plan.toLowerCase() == 'free';
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-          color: style.bg,
-          borderRadius: BorderRadius.circular(AppRadius.pill)),
-      child: Text(status.toUpperCase(),
-          style: TextStyle(
-              color: style.fg, fontSize: 10, fontWeight: FontWeight.w600)),
+      padding: const EdgeInsets.all(16),
+      decoration: CeoTheme.cardDecoration(
+        borderColor: isFree ? CeoColors.border : null,
+      ).copyWith(
+        color: isFree ? Colors.white : CeoColors.navy,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                isFree ? 'Free Plan' : '$plan Plan',
+                style: GoogleFonts.plusJakartaSans(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 16,
+                  color: isFree ? CeoColors.navy : Colors.white,
+                ),
+              ),
+              TextButton(
+                onPressed: () => context.go(RouteNames.ceoSubscription),
+                child: Text(
+                  isFree ? 'Upgrade' : 'Manage',
+                  style: TextStyle(
+                    color: isFree ? CeoColors.amber : Colors.white,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (expiresAt != null) ...[
+            Text(
+              'Expires: ${AppFormatters.date(expiresAt!)}',
+              style: GoogleFonts.plusJakartaSans(
+                color: isFree ? CeoColors.textGrey : Colors.white70,
+                fontSize: 12,
+              ),
+            ),
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: (daysLeft / 30).clamp(0.0, 1.0),
+                minHeight: 4,
+                backgroundColor:
+                    isFree ? CeoColors.border : Colors.white24,
+                color: CeoColors.amber,
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
+
 import '../../services/firebase_auth_service.dart';
 import '../../constants/app_colors.dart';
 
@@ -26,13 +27,14 @@ class _ForgotPasswordViewState extends State<ForgotPasswordView> {
     final email = _emailController.text.trim();
 
     try {
-      final authService = Provider.of<FirebaseAuthService>(context, listen: false);
+      final authService =
+          Provider.of<FirebaseAuthService>(context, listen: false);
       await authService.sendPasswordReset(email);
-      
+
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("Account recovery instructions dispatched successfully."),
+          content: Text('Account recovery instructions dispatched successfully.'),
           backgroundColor: AppColors.success,
           behavior: SnackBarBehavior.floating,
         ),
@@ -42,7 +44,7 @@ class _ForgotPasswordViewState extends State<ForgotPasswordView> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text("Error: ${e.toString().replaceAll('Exception: ', '')}"),
+          content: Text('Error: ${e.toString().replaceAll('Exception: ', '')}'),
           backgroundColor: AppColors.error,
           behavior: SnackBarBehavior.floating,
         ),
@@ -60,23 +62,9 @@ class _ForgotPasswordViewState extends State<ForgotPasswordView> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: AppColors.screenBg,
       appBar: AppBar(
-        title: Text(
-          "Reset Credentials",
-          style: theme.textTheme.titleLarge?.copyWith(
-            fontWeight: FontWeight.w800,
-            fontSize: 18,
-            letterSpacing: -0.5,
-          ),
-        ),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        surfaceTintColor: Colors.transparent,
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1),
-          child: Container(color: AppColors.border, height: 1),
-        ),
+        title: const Text('Reset Credentials'),
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -87,16 +75,16 @@ class _ForgotPasswordViewState extends State<ForgotPasswordView> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  "Account Recovery",
+                  'Account Recovery',
                   style: theme.textTheme.displayLarge?.copyWith(
                     fontSize: 32,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -1.0,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.navy,
                   ),
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  "Enter the registered email of your corporate workspace below to receive credential recovery configurations.",
+                  'Enter the registered email of your corporate workspace below to receive credential recovery configurations.',
                   style: theme.textTheme.bodyLarge?.copyWith(
                     color: AppColors.textSecondary,
                     height: 1.5,
@@ -105,11 +93,12 @@ class _ForgotPasswordViewState extends State<ForgotPasswordView> {
                 const SizedBox(height: 48),
                 TextFormField(
                   controller: _emailController,
-                  validator: (v) => v == null || !v.contains('@') ? "Enter a valid email address" : null,
+                  validator: (v) =>
+                      v == null || !v.contains('@') ? 'Enter a valid email address' : null,
                   decoration: const InputDecoration(
-                    labelText: "Work Email Address",
-                    hintText: "name@company.com",
-                    prefixIcon: Icon(Icons.email_outlined, size: 20, weight: 300),
+                    labelText: 'Work Email Address',
+                    hintText: 'name@company.com',
+                    prefixIcon: Icon(Icons.email_outlined, size: 20),
                   ),
                 ),
                 const SizedBox(height: 40),
@@ -120,8 +109,15 @@ class _ForgotPasswordViewState extends State<ForgotPasswordView> {
                     child: ElevatedButton(
                       onPressed: _isLoading ? null : _triggerReset,
                       child: _isLoading
-                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                          : const Text("DISPATCH RECOVERY LINK"),
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Text('DISPATCH RECOVERY LINK'),
                     ),
                   ),
                 ),

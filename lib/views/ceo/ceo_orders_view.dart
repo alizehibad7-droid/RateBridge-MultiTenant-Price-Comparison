@@ -1,17 +1,16 @@
 // MVVM: View — no business logic
 
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
-import '../../constants/app_constants.dart';
-import '../../utils/app_theme.dart';
+import '../../theme/ceo_theme.dart';
 import '../../utils/formatters.dart';
 import '../../viewmodels/ceo_viewmodel.dart';
 import '../../viewmodels/auth_viewmodel.dart';
 import '../../models/order_model.dart';
 import '../../widgets/ceo_nav_bar.dart';
-import '../../widgets/status_badge.dart';
-import '../../constants/app_colors.dart';
+import '../../widgets/ceo/ceo_widgets.dart';
 
 const _statusTabs = [
   'All',
@@ -26,7 +25,9 @@ const _statusTabs = [
 ];
 
 class CeoOrdersView extends StatefulWidget {
-  const CeoOrdersView({super.key});
+  final int initialTab;
+
+  const CeoOrdersView({super.key, this.initialTab = 0});
 
   @override
   State<CeoOrdersView> createState() => _CeoOrdersViewState();
@@ -39,8 +40,12 @@ class _CeoOrdersViewState extends State<CeoOrdersView>
   @override
   void initState() {
     super.initState();
-    _tabController =
-        TabController(length: _statusTabs.length, vsync: this);
+    final initial = widget.initialTab.clamp(0, _statusTabs.length - 1);
+    _tabController = TabController(
+      length: _statusTabs.length,
+      vsync: this,
+      initialIndex: initial,
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final vm = context.read<CeoViewModel>();
       if (vm.company == null) {
@@ -62,15 +67,12 @@ class _CeoOrdersViewState extends State<CeoOrdersView>
     final companyId = vm.company?.id ?? authVm.companyId ?? '';
 
     return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('Company Orders'),
+      backgroundColor: CeoColors.screenBg,
+      appBar: CeoAppBar(
+        title: 'Company Orders',
         bottom: TabBar(
           controller: _tabController,
           isScrollable: true,
-          labelColor: AppColors.primary,
-          unselectedLabelColor: AppColors.textSecondary,
-          indicatorColor: AppColors.primary,
           tabs: _statusTabs.map((s) => Tab(text: s)).toList(),
         ),
       ),
@@ -89,7 +91,7 @@ class _CeoOrdersViewState extends State<CeoOrdersView>
                     padding: const EdgeInsets.all(24),
                     child: Text(
                       'Could not load orders. Pull to refresh or try again shortly.',
-                      style: AppTextStyles.bodyMuted,
+                      style: CeoTheme.mutedStyle(),
                       textAlign: TextAlign.center,
                     ),
                   ),
@@ -99,15 +101,17 @@ class _CeoOrdersViewState extends State<CeoOrdersView>
                 return Center(
                   child: Text(
                     'Company profile not loaded yet.',
-                    style: AppTextStyles.bodyMuted,
+                    style: CeoTheme.mutedStyle(),
                   ),
                 );
               }
               final orders = snap.data ?? [];
               if (orders.isEmpty) {
                 return Center(
-                  child: Text('No orders found',
-                      style: AppTextStyles.bodyMuted),
+                  child: Text(
+                    'No orders found',
+                    style: CeoTheme.mutedStyle(),
+                  ),
                 );
               }
               return ListView.separated(
@@ -128,14 +132,11 @@ class _CeoOrdersViewState extends State<CeoOrdersView>
   Widget _orderCard(
       BuildContext context, CeoViewModel vm, OrderModel order) {
     final canCancel = order.status == 'pending' || order.status == 'accepted';
-    final awaitingApproval =
-        order.status == AppConstants.statusPendingApproval;
+    final awaitingApproval = isCeoAwaitingApproval(order.status);
 
     return GestureDetector(
       onTap: () => _showOrderDetail(context, order),
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: appCardDecoration(),
+      child: AdminCard(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -144,53 +145,59 @@ class _CeoOrdersViewState extends State<CeoOrdersView>
                 Expanded(
                   child: Text(
                     order.materialName,
-                    style: const TextStyle(
-                        fontWeight: FontWeight.w600, fontSize: 14),
+                    style: GoogleFonts.plusJakartaSans(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                      color: CeoColors.navy,
+                    ),
                   ),
                 ),
-                _statusPill(order.status),
+                CeoStatusBadge(status: order.status),
               ],
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
             Text(
-              'Supplier: ${order.supplierName}  ·  '
-              'Field User: ${order.fieldUserName}',
-              style: AppTextStyles.bodyMuted,
+              'Supplier: ${order.supplierName}',
+              style: CeoTheme.mutedStyle(size: 12),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 4),
+            Text(
+              'Field User: ${order.fieldUserName}',
+              style: CeoTheme.mutedStyle(size: 12),
+            ),
+            const SizedBox(height: 8),
             Row(
               children: [
                 Text(
                   '${order.quantity} ${order.unit}',
-                  style: AppTextStyles.bodyMuted,
+                  style: CeoTheme.mutedStyle(size: 12),
                 ),
                 const Spacer(),
                 Text(
                   AppFormatters.formatPKRCurrency(order.totalAmount),
-                  style: const TextStyle(
-                      color: AppColors.primary,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 15),
+                  style: GoogleFonts.plusJakartaSans(
+                    color: CeoColors.navy,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 15,
+                  ),
                 ),
-                const SizedBox(width: 10),
-                Text(AppFormatters.date(order.createdAt),
-                    style: const TextStyle(
-                        fontSize: 11, color: AppColors.textMuted)),
               ],
             ),
+            const SizedBox(height: 4),
+            Text(
+              AppFormatters.date(order.createdAt),
+              style: CeoTheme.mutedStyle(size: 11),
+            ),
             if (awaitingApproval) ...[
-              const SizedBox(height: 10),
+              const SizedBox(height: 12),
               const Divider(height: 1),
-              const SizedBox(height: 8),
+              const SizedBox(height: 10),
               Row(
                 children: [
                   Expanded(
                     child: OutlinedButton(
                       onPressed: () => _confirmReject(context, vm, order),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.danger,
-                        side: const BorderSide(color: AppColors.danger),
-                      ),
+                      style: CeoTheme.destructiveButtonStyle(height: 44),
                       child: const Text('Reject'),
                     ),
                   ),
@@ -198,6 +205,7 @@ class _CeoOrdersViewState extends State<CeoOrdersView>
                   Expanded(
                     child: ElevatedButton(
                       onPressed: () => vm.approveOrder(order),
+                      style: CeoTheme.primaryButtonStyle(height: 44),
                       child: const Text('Approve'),
                     ),
                   ),
@@ -212,9 +220,13 @@ class _CeoOrdersViewState extends State<CeoOrdersView>
                 alignment: Alignment.centerRight,
                 child: TextButton(
                   onPressed: () => _confirmCancel(context, vm, order),
-                  style: TextButton.styleFrom(
-                      foregroundColor: AppColors.danger),
-                  child: const Text('Cancel Order'),
+                  child: Text(
+                    'Cancel Order',
+                    style: GoogleFonts.plusJakartaSans(
+                      color: CeoColors.red,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ),
               ),
             ],
@@ -233,7 +245,7 @@ class _CeoOrdersViewState extends State<CeoOrdersView>
         title: const Text('Reject order?'),
         content: TextField(
           controller: reasonController,
-          decoration: const InputDecoration(
+          decoration: CeoTheme.inputDecoration(
             labelText: 'Reason (optional)',
           ),
           maxLines: 2,
@@ -243,8 +255,8 @@ class _CeoOrdersViewState extends State<CeoOrdersView>
             onPressed: () => Navigator.pop(ctx),
             child: const Text('Cancel'),
           ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger),
+          OutlinedButton(
+            style: CeoTheme.destructiveButtonStyle(height: 40),
             onPressed: () {
               Navigator.pop(ctx);
               vm.rejectOrder(order, reason: reasonController.text);
@@ -269,15 +281,14 @@ class _CeoOrdersViewState extends State<CeoOrdersView>
           TextButton(
               onPressed: () => Navigator.pop(ctx),
               child: const Text('No, keep it')),
-          ElevatedButton(
-            style:
-                ElevatedButton.styleFrom(backgroundColor: AppColors.danger),
+          OutlinedButton(
+            style: CeoTheme.destructiveButtonStyle(height: 40),
             onPressed: () {
               Navigator.pop(ctx);
               vm.cancelOrder(order.id,
                   context.read<AuthViewModel>().companyId ?? '');
             },
-            child: Text('Yes, cancel', style: AppTextStyles.button),
+            child: const Text('Yes, cancel'),
           ),
         ],
       ),
@@ -288,9 +299,9 @@ class _CeoOrdersViewState extends State<CeoOrdersView>
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      backgroundColor: CeoColors.screenBg,
       shape: const RoundedRectangleBorder(
-        borderRadius:
-            BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (ctx) => Padding(
         padding: const EdgeInsets.all(20),
@@ -300,18 +311,22 @@ class _CeoOrdersViewState extends State<CeoOrdersView>
           children: [
             Center(
               child: Container(
-                width: 40, height: 4,
+                width: 40,
+                height: 4,
                 decoration: BoxDecoration(
-                    color: AppColors.border,
-                    borderRadius: BorderRadius.circular(2)),
+                  color: CeoColors.border,
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
             ),
             const SizedBox(height: 16),
-            Text('Order #${order.id}',
-                style: AppTextStyles.h2,
-                textAlign: TextAlign.center),
+            Text(
+              'Order #${order.id}',
+              style: CeoTheme.titleStyle(size: 18),
+              textAlign: TextAlign.center,
+            ),
             const SizedBox(height: 6),
-            Center(child: _statusPill(order.status)),
+            Center(child: CeoStatusBadge(status: order.status)),
             const SizedBox(height: 20),
             _detailSection('Material', order.materialName),
             _detailSection('Quantity', '${order.quantity} ${order.unit}'),
@@ -323,10 +338,10 @@ class _CeoOrdersViewState extends State<CeoOrdersView>
                 AppFormatters.formatPKRCurrency(order.unitPrice)),
             _detailSection('Total',
                 AppFormatters.formatPKRCurrency(order.totalAmount),
-                valueColor: AppColors.primary),
+                valueColor: CeoColors.navy),
             _detailSection('Commission',
                 '-${AppFormatters.formatPKRCurrency(order.commissionAmount)}',
-                valueColor: AppColors.danger),
+                valueColor: CeoColors.red),
             const SizedBox(height: 12),
           ],
         ),
@@ -340,29 +355,19 @@ class _CeoOrdersViewState extends State<CeoOrdersView>
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: AppTextStyles.bodyMuted),
-          Text(value,
-              style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  color: valueColor ?? AppColors.textPrimary)),
+          Text(label, style: CeoTheme.mutedStyle(size: 13)),
+          Flexible(
+            child: Text(
+              value,
+              textAlign: TextAlign.right,
+              style: GoogleFonts.plusJakartaSans(
+                fontWeight: FontWeight.w600,
+                color: valueColor ?? CeoColors.navy,
+              ),
+            ),
+          ),
         ],
       ),
-    );
-  }
-
-  Widget _statusPill(String status) {
-    final style = StatusBadgeStyle.of(status);
-    return Container(
-      padding:
-          const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-          color: style.bg,
-          borderRadius: BorderRadius.circular(AppRadius.pill)),
-      child: Text(status.toUpperCase(),
-          style: TextStyle(
-              color: style.fg,
-              fontSize: 11,
-              fontWeight: FontWeight.w600)),
     );
   }
 }

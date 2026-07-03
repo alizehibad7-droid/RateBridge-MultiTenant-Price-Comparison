@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
-import '../../constants/app_colors.dart';
 import '../../constants/route_names.dart';
+import '../../theme/ceo_theme.dart';
 import '../../viewmodels/auth_viewmodel.dart';
 import '../../widgets/ceo_nav_bar.dart';
 
@@ -21,10 +22,10 @@ class CeoCompanyProfileView extends StatelessWidget {
             onPressed: () => Navigator.pop(context, false),
             child: const Text('Cancel'),
           ),
-          ElevatedButton(
+          OutlinedButton(
             onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger),
-            child: const Text('Log out', style: TextStyle(color: Colors.white)),
+            style: CeoTheme.destructiveButtonStyle(height: 40),
+            child: const Text('Log out'),
           ),
         ],
       ),
@@ -41,22 +42,24 @@ class CeoCompanyProfileView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('Profile'),
-      ),
+      backgroundColor: CeoColors.screenBg,
+      appBar: const CeoAppBar(title: 'Profile'),
       body: ListView(
+        padding: const EdgeInsets.all(16),
         children: [
-          ListTile(
-            leading: const Icon(Icons.logout, color: AppColors.danger),
-            title: const Text(
-              'Log out',
-              style: TextStyle(
-                color: AppColors.danger,
-                fontWeight: FontWeight.w600,
+          Container(
+            decoration: CeoTheme.cardDecoration(),
+            child: ListTile(
+              leading: const Icon(Icons.logout, color: CeoColors.red),
+              title: Text(
+                'Log out',
+                style: GoogleFonts.plusJakartaSans(
+                  color: CeoColors.red,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
+              onTap: () => _logout(context),
             ),
-            onTap: () => _logout(context),
           ),
         ],
       ),

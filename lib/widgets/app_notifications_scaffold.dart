@@ -60,17 +60,12 @@ class AppNotificationsScaffold extends StatelessWidget {
     return Scaffold(
       backgroundColor: backgroundColor ?? FieldColors.screenBackground,
       appBar: AppBar(
-        title: Text(title, style: FieldTypography.headlineMedium),
+        title: Text(title),
         actions: [
           if (vm.unreadCount > 0)
             TextButton(
               onPressed: () => _markAllRead(context),
-              child: Text(
-                'Mark all read',
-                style: FieldTypography.labelSmall.copyWith(
-                  color: FieldColors.primaryNavy,
-                ),
-              ),
+              child: const Text('Mark all read'),
             ),
         ],
       ),

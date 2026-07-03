@@ -1,5 +1,3 @@
-// Widget — atomic, reusable. No business logic.
-
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -19,26 +17,56 @@ class CeoNavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return NavigationBar(
-      selectedIndex: currentIndex,
-      onDestinationSelected: (i) {
-        if (i == currentIndex) return;
-        context.go(_routes[i]);
-      },
-      destinations: const [
-        NavigationDestination(
-            icon: Icon(Icons.home_outlined), label: 'Dashboard'),
-        NavigationDestination(
-            icon: Icon(Icons.store_outlined), label: 'Suppliers'),
-        NavigationDestination(
-            icon: Icon(Icons.person_add_outlined), label: 'Invite'),
-        NavigationDestination(
-            icon: Icon(Icons.group_outlined), label: 'Field Users'),
-        NavigationDestination(
-            icon: Icon(Icons.receipt_outlined), label: 'Orders'),
-        NavigationDestination(
-            icon: Icon(Icons.person_outline), label: 'Profile'),
-      ],
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 12,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
+      child: BottomNavigationBar(
+        currentIndex: currentIndex,
+        onTap: (i) {
+          if (i == currentIndex) return;
+          context.go(_routes[i]);
+        },
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.home_outlined),
+            activeIcon: Icon(Icons.home_rounded),
+            label: 'Dashboard',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.store_outlined),
+            activeIcon: Icon(Icons.store_rounded),
+            label: 'Suppliers',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.person_add_outlined),
+            activeIcon: Icon(Icons.person_add_rounded),
+            label: 'Invite',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.group_outlined),
+            activeIcon: Icon(Icons.group_rounded),
+            label: 'Field Users',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.receipt_outlined),
+            activeIcon: Icon(Icons.receipt_long_rounded),
+            label: 'Orders',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.person_outline),
+            activeIcon: Icon(Icons.person_rounded),
+            label: 'Profile',
+          ),
+        ],
+      ),
     );
   }
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import '../utils/app_theme.dart';
+import 'package:google_fonts/google_fonts.dart';
+
 import '../constants/app_colors.dart';
 
 class AppTextField extends StatelessWidget {
@@ -29,11 +30,11 @@ class AppTextField extends StatelessWidget {
       children: [
         Text(
           label,
-          style: const TextStyle(
+          style: GoogleFonts.plusJakartaSans(
             fontSize: 11,
-            fontWeight: FontWeight.w700,
+            fontWeight: FontWeight.w600,
             color: AppColors.textSecondary,
-            letterSpacing: 1.1,
+            letterSpacing: 0.5,
           ),
         ),
         const SizedBox(height: 8),
@@ -42,21 +43,24 @@ class AppTextField extends StatelessWidget {
           readOnly: readOnly,
           keyboardType: keyboardType,
           maxLines: maxLines,
-          style: AppTextStyles.body,
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: 15,
+            color: AppColors.navy,
+          ),
           decoration: InputDecoration(
             hintText: hint,
             prefixIcon: prefixIcon != null
                 ? Icon(prefixIcon, color: AppColors.textSecondary, size: 20)
                 : null,
-            filled: readOnly,
-            fillColor: readOnly ? AppColors.surface : null,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(AppRadius.md),
+            filled: true,
+            fillColor: readOnly ? AppColors.screenBg : Colors.white,
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
               borderSide: const BorderSide(color: AppColors.border),
             ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(AppRadius.md),
-              borderSide: const BorderSide(color: AppColors.border),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: AppColors.amber, width: 2),
             ),
           ),
         ),

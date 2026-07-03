@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../constants/app_colors.dart';
+import '../../theme/admin_theme.dart';
 import 'admin_commission_ledger_view.dart';
 import 'admin_payment_queue_view.dart';
 import 'admin_subscription_payments_view.dart';
@@ -11,17 +11,13 @@ class AdminFinanceView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DefaultTabController(
+    return const DefaultTabController(
       length: 3,
       child: Column(
         children: [
-          Container(
-            color: Colors.white,
-            child: const TabBar(
-              labelColor: AppColors.primary,
-              unselectedLabelColor: AppColors.textSecondary,
-              indicatorColor: AppColors.primary,
-              labelStyle: TextStyle(fontWeight: FontWeight.w700, fontSize: 11),
+          Material(
+            color: AdminColors.navy,
+            child: TabBar(
               isScrollable: true,
               tabs: [
                 Tab(text: 'Subscription Payments'),
@@ -30,11 +26,11 @@ class AdminFinanceView extends StatelessWidget {
               ],
             ),
           ),
-          const Expanded(
+          Expanded(
             child: TabBarView(
               children: [
-                AdminSubscriptionPaymentsView(),
-                AdminPaymentQueueView(),
+                AdminSubscriptionPaymentsView(embedded: true),
+                AdminPaymentQueueView(embedded: true),
                 AdminCommissionLedgerView(),
               ],
             ),

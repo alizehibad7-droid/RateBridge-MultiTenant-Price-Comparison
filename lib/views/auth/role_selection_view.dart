@@ -2,55 +2,57 @@
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
 
-import '../../utils/app_theme.dart';
-import '../../constants/app_colors.dart';
 import '../../constants/route_names.dart';
 
 class _RoleOption {
   final IconData icon;
   final String title;
-  final String description;
-  final String image;
-  final Color accent;
+  final String subtitle;
+  final Color iconBackground;
+  final Color iconColor;
   final String route;
 
   const _RoleOption({
     required this.icon,
     required this.title,
-    required this.description,
-    required this.image,
-    required this.accent,
+    required this.subtitle,
+    required this.iconBackground,
+    required this.iconColor,
     required this.route,
   });
 }
 
+const _navy = Color(0xFF1E326E);
+const _amber = Color(0xFFFBB03C);
+const _green = Color(0xFF1D9E75);
+const _screenBg = Color(0xFFF5F6FA);
+
 const _roles = <_RoleOption>[
   _RoleOption(
-    icon: Icons.architecture,
-    title: 'I am a CEO',
-    description:
-        'Manage company and procurement operations at the highest level.',
-    image: 'assets/images/ceo_bg.jpg',
-    accent: AppColors.ceoAccent,
-    route: RouteNames.registerCEO,
-  ),
-  _RoleOption(
-    icon: Icons.inventory_2_outlined,
-    title: 'I am a Supplier',
-    description:
-        'Sell construction materials and manage global distribution logistics.',
-    image: 'assets/images/supplier_bg.jpg',
-    accent: AppColors.supplierAccent,
+    icon: Icons.store_outlined,
+    title: 'Material Supplier',
+    subtitle:
+        'List and sell construction materials to verified companies',
+    iconBackground: Color(0x26FBB03C),
+    iconColor: _amber,
     route: RouteNames.registerSupplier,
   ),
   _RoleOption(
-    icon: Icons.group_outlined,
-    title: 'I am a Field User',
-    description:
-        'Join my company team to manage site deliveries and inventory on-the-go.',
-    image: 'assets/images/field_bg.jpg',
-    accent: AppColors.fieldAccent,
+    icon: Icons.business_outlined,
+    title: 'Company / CEO',
+    subtitle: 'Register your company and manage procurement',
+    iconBackground: Color(0x1A1E326E),
+    iconColor: _navy,
+    route: RouteNames.registerCEO,
+  ),
+  _RoleOption(
+    icon: Icons.engineering_outlined,
+    title: 'Field Employee',
+    subtitle: 'Join your company using an invite code from your CEO',
+    iconBackground: Color(0x1A1D9E75),
+    iconColor: _green,
     route: RouteNames.registerFieldUser,
   ),
 ];
@@ -90,64 +92,132 @@ class _RoleSelectionViewState extends State<RoleSelectionView>
     );
   }
 
+  void _onBack() {
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    } else {
+      context.go(RouteNames.login);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.surface,
-      body: SafeArea(
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
-              child: Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.arrow_back),
-                    onPressed: () {
-                      if (Navigator.of(context).canPop()) {
-                        Navigator.of(context).pop();
-                      } else {
-                        context.go(RouteNames.login);
-                      }
-                    },
+      backgroundColor: _screenBg,
+      body: Stack(
+        children: [
+          Column(
+            children: [
+              SizedBox(
+                height: 220,
+                width: double.infinity,
+                child: DecoratedBox(
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [Color(0xFF1E326E), Color(0xFF0F1D42)],
+                    ),
                   ),
-                ],
+                  child: SafeArea(
+                    bottom: false,
+                    child: Stack(
+                      children: [
+                        Positioned(
+                          left: 4,
+                          top: 0,
+                          child: IconButton(
+                            icon: const Icon(
+                              Icons.arrow_back_ios_new_rounded,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                            onPressed: _onBack,
+                          ),
+                        ),
+                        Align(
+                          alignment: Alignment.bottomCenter,
+                          child: Padding(
+                            padding: const EdgeInsets.only(bottom: 24),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: 96,
+                                  height: 96,
+                                  decoration: const BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: Colors.white,
+                                  ),
+                                  child: const Icon(
+                                    Icons.construction,
+                                    color: _navy,
+                                    size: 32,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                Text(
+                                  'Welcome to RateBridge',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  'Select how you want to continue',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w400,
+                                    color: Colors.white.withValues(alpha: 0.7),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ),
-            ),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
+              const Expanded(child: SizedBox()),
+            ],
+          ),
+          Positioned(
+            top: 200,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: SingleChildScrollView(
+              child: Container(
+                decoration: const BoxDecoration(
+                  color: _screenBg,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                ),
+                padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     FadeTransition(
                       opacity: _fade(0),
-                      child: const Text(
-                        'How will you use RateBridge?',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 26,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textPrimary,
+                      child: Text(
+                        'I am a...',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          color: _navy,
                         ),
                       ),
                     ),
-                    const SizedBox(height: 10),
-                    FadeTransition(
-                      opacity: _fade(0),
-                      child: Text(
-                        'Select the profile that best describes your daily '
-                        'activities to personalize your dashboard experience.',
-                        textAlign: TextAlign.center,
-                        style: AppTextStyles.bodyMuted,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 20),
                     for (var i = 0; i < _roles.length; i++) ...[
                       FadeTransition(
                         opacity: _fade(i + 1),
                         child: SlideTransition(
                           position: Tween<Offset>(
-                            begin: const Offset(0, 0.12),
+                            begin: const Offset(0, 0.08),
                             end: Offset.zero,
                           ).animate(_fade(i + 1)),
                           child: _RoleCard(
@@ -156,36 +226,71 @@ class _RoleSelectionViewState extends State<RoleSelectionView>
                           ),
                         ),
                       ),
-                      const SizedBox(height: 16),
+                      if (i < _roles.length - 1) const SizedBox(height: 14),
                     ],
+                    const SizedBox(height: 32),
                     FadeTransition(
                       opacity: _fade(_roles.length + 1),
                       child: Column(
                         children: [
                           Text(
-                            'Not sure which one to pick?',
-                            style: AppTextStyles.bodyMuted,
+                            'Already have an account?',
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 13,
+                              color: Colors.grey.shade600,
+                            ),
                           ),
-                          TextButton(
-                            onPressed: () {},
-                            child: const Text(
-                              'Contact Support',
-                              style: TextStyle(
-                                color: AppColors.primary,
-                                fontWeight: FontWeight.w500,
+                          const SizedBox(height: 8),
+                          SizedBox(
+                            width: double.infinity,
+                            height: 48,
+                            child: OutlinedButton(
+                              onPressed: () => context.push(RouteNames.login),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: _navy,
+                                side: const BorderSide(color: _navy, width: 1.5),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
                               ),
+                              child: Text(
+                                'Sign In',
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          Text(
+                            'By continuing you agree to RateBridge\'s',
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 11,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                          Text(
+                            'Terms of Service & Privacy Policy',
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 11,
+                              color: _amber,
+                              decoration: TextDecoration.underline,
+                              decorationColor: _amber,
                             ),
                           ),
                         ],
                       ),
                     ),
-                    const SizedBox(height: 12),
                   ],
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -215,65 +320,76 @@ class _RoleCardState extends State<_RoleCard> {
       child: AnimatedScale(
         scale: _scale,
         duration: const Duration(milliseconds: 120),
-        child: Container(
-          padding: const EdgeInsets.all(20),
-          decoration: appCardDecoration(shadow: AppShadows.card),
-          child: Column(
-            children: [
-              Container(
-                width: 56,
-                height: 56,
-                decoration: BoxDecoration(
-                  color: AppColors.infoBg,
-                  borderRadius: BorderRadius.circular(AppRadius.pill),
-                ),
-                child: Icon(option.icon, color: option.accent, size: 28),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: widget.onTap,
+            borderRadius: BorderRadius.circular(16),
+            child: Ink(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.06),
+                    blurRadius: 10,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
               ),
-              const SizedBox(height: 12),
-              Text(
-                option.title,
-                style: const TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                option.description,
-                textAlign: TextAlign.center,
-                style: AppTextStyles.bodyMuted,
-              ),
-              const SizedBox(height: 14),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(AppRadius.sm),
-                child: Image.asset(
-                  option.image,
-                  height: 130,
-                  width: double.infinity,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) => Container(
-                    height: 130,
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          option.accent.withOpacity(0.18),
-                          option.accent.withOpacity(0.45),
+              child: Padding(
+                padding: const EdgeInsets.all(18),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 52,
+                      height: 52,
+                      decoration: BoxDecoration(
+                        color: option.iconBackground,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(
+                        option.icon,
+                        color: option.iconColor,
+                        size: 28,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            option.title,
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: _navy,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            option.subtitle,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 12,
+                              color: Colors.grey.shade600,
+                              height: 1.35,
+                            ),
+                          ),
                         ],
                       ),
                     ),
-                    child: Icon(
-                      option.icon,
-                      color: Colors.white.withOpacity(0.85),
-                      size: 36,
+                    Icon(
+                      Icons.arrow_forward_ios,
+                      size: 16,
+                      color: Colors.grey.shade400,
                     ),
-                  ),
+                  ],
                 ),
               ),
-            ],
+            ),
           ),
         ),
       ),

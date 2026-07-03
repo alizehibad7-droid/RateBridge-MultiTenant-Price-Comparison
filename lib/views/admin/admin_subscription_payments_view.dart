@@ -1,69 +1,103 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
-import '../../constants/app_colors.dart';
+import '../../theme/admin_theme.dart';
 import '../../models/subscription_model.dart';
 import '../../models/subscription_payment_model.dart';
 import '../../repositories/subscription_payment_repository.dart';
 import '../../viewmodels/auth_viewmodel.dart';
+import '../../widgets/admin/admin_widgets.dart';
 import 'admin_payment_settings_view.dart';
 
 class AdminSubscriptionPaymentsView extends StatelessWidget {
-  const AdminSubscriptionPaymentsView({super.key});
+  final bool embedded;
+
+  const AdminSubscriptionPaymentsView({super.key, this.embedded = false});
 
   @override
   Widget build(BuildContext context) {
     final repo = context.read<SubscriptionPaymentRepository>();
 
+    final body = StreamBuilder<List<SubscriptionPaymentModel>>(
+      stream: repo.watchPendingPayments(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snapshot.hasError) {
+          return Center(
+            child: Text(
+              'Error: ${snapshot.error}',
+              style: AdminTheme.mutedStyle(),
+            ),
+          );
+        }
+
+        final payments = snapshot.data ?? [];
+        if (payments.isEmpty) {
+          return Center(
+            child: Text(
+              'No pending subscription payments.',
+              style: AdminTheme.mutedStyle(),
+            ),
+          );
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: payments.length,
+          itemBuilder: (context, index) {
+            return _PaymentReviewCard(payment: payments[index]);
+          },
+        );
+      },
+    );
+
+    if (embedded) {
+      return Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: IconButton(
+                tooltip: 'Payment settings',
+                icon: const Icon(Icons.settings_outlined, color: AdminColors.navy),
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => AdminTheme.wrap(
+                      const AdminPaymentSettingsView(),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Expanded(child: body),
+        ],
+      );
+    }
+
     return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        automaticallyImplyLeading: false,
-        title: const Text(
-          'Subscription Payments',
-          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-        ),
+      backgroundColor: AdminColors.screenBg,
+      appBar: AdminAppBar(
+        title: 'Subscription Payments',
+        automaticallyImplyLeading: true,
         actions: [
           IconButton(
             tooltip: 'Payment settings',
             icon: const Icon(Icons.settings_outlined),
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute<void>(
-                builder: (_) => const AdminPaymentSettingsView(),
+                builder: (_) => AdminTheme.wrap(const AdminPaymentSettingsView()),
               ),
             ),
           ),
         ],
       ),
-      body: StreamBuilder<List<SubscriptionPaymentModel>>(
-        stream: repo.watchPendingPayments(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
-          }
-
-          final payments = snapshot.data ?? [];
-          if (payments.isEmpty) {
-            return const Center(
-              child: Text('No pending subscription payments.'),
-            );
-          }
-
-          return ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: payments.length,
-            itemBuilder: (context, index) {
-              return _PaymentReviewCard(payment: payments[index]);
-            },
-          );
-        },
-      ),
+      body: body,
     );
   }
 }
@@ -96,8 +130,8 @@ class _PaymentReviewCardState extends State<_PaymentReviewCard> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            AppBar(
-              title: const Text('Payment screenshot'),
+            AdminAppBar(
+              title: 'Payment screenshot',
               automaticallyImplyLeading: false,
               actions: [
                 IconButton(
@@ -111,10 +145,12 @@ class _PaymentReviewCardState extends State<_PaymentReviewCard> {
                 child: Image.network(
                   widget.payment.paymentProofUrl,
                   fit: BoxFit.contain,
-                  errorBuilder: (_, __, ___) =>
-                      const Padding(
-                    padding: EdgeInsets.all(24),
-                    child: Text('Could not load image'),
+                  errorBuilder: (_, __, ___) => Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Text(
+                      'Could not load image',
+                      style: AdminTheme.mutedStyle(),
+                    ),
                   ),
                 ),
               ),
@@ -148,7 +184,7 @@ class _PaymentReviewCardState extends State<_PaymentReviewCard> {
         content: TextField(
           controller: reasonController,
           maxLines: 3,
-          decoration: const InputDecoration(
+          decoration: AdminTheme.inputDecoration(
             labelText: 'Reason for rejection',
             hintText: 'e.g. Payment screenshot unclear',
           ),
@@ -158,9 +194,9 @@ class _PaymentReviewCardState extends State<_PaymentReviewCard> {
             onPressed: () => Navigator.pop(ctx),
             child: const Text('Cancel'),
           ),
-          FilledButton(
-            onPressed: () =>
-                Navigator.pop(ctx, reasonController.text.trim()),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, reasonController.text.trim()),
+            style: AdminTheme.primaryButtonStyle(height: 44),
             child: const Text('Reject'),
           ),
         ],
@@ -183,113 +219,109 @@ class _PaymentReviewCardState extends State<_PaymentReviewCard> {
   Widget build(BuildContext context) {
     final payment = widget.payment;
 
-    return Card(
+    return AdminCard(
       margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: const BorderSide(color: AppColors.border),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: AppColors.primary.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Icon(Icons.workspace_premium,
-                      color: AppColors.primary, size: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AdminColors.navy.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(payment.companyName,
-                          style: const TextStyle(
-                              fontWeight: FontWeight.bold, fontSize: 15)),
-                      Text('${payment.planLabel} plan',
-                          style: const TextStyle(
-                              fontSize: 12, color: AppColors.textSecondary)),
-                    ],
-                  ),
+                child: const Icon(Icons.workspace_premium,
+                    color: AdminColors.navy, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      payment.companyName,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                        color: AdminColors.navy,
+                      ),
+                    ),
+                    Text(
+                      '${payment.planLabel} plan',
+                      style: AdminTheme.mutedStyle(size: 12),
+                    ),
+                  ],
                 ),
-                Text(
-                  'Rs ${payment.amount}',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w900,
-                    fontSize: 16,
-                    color: AppColors.primary,
-                  ),
+              ),
+              Text(
+                'Rs ${payment.amount}',
+                style: GoogleFonts.plusJakartaSans(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 16,
+                  color: AdminColors.navy,
                 ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              DateFormat('MMM dd, yyyy • hh:mm a').format(payment.submittedAt),
-              style: const TextStyle(
-                  fontSize: 12, color: AppColors.textSecondary),
-            ),
-            const SizedBox(height: 12),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(10),
-              child: InkWell(
-                onTap: _viewProof,
-                child: Image.network(
-                  payment.paymentProofUrl,
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            DateFormat('MMM dd, yyyy • hh:mm a').format(payment.submittedAt),
+            style: AdminTheme.mutedStyle(size: 12),
+          ),
+          const SizedBox(height: 12),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: InkWell(
+              onTap: _viewProof,
+              child: Image.network(
+                payment.paymentProofUrl,
+                height: 120,
+                width: double.infinity,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => Container(
                   height: 120,
-                  width: double.infinity,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Container(
-                    height: 120,
-                    color: AppColors.surface,
-                    alignment: Alignment.center,
-                    child: const Text('Tap to view screenshot'),
+                  color: AdminColors.screenBg,
+                  alignment: Alignment.center,
+                  child: Text(
+                    'Tap to view screenshot',
+                    style: AdminTheme.mutedStyle(size: 12),
                   ),
                 ),
               ),
             ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: _processing ? null : _reject,
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.error,
-                      side: const BorderSide(color: AppColors.error),
-                    ),
-                    child: const Text('Reject'),
-                  ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: _processing ? null : _reject,
+                  style: AdminTheme.destructiveButtonStyle(),
+                  child: const Text('Reject'),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: _processing ? null : _approve,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.success,
-                    ),
-                    child: _processing
-                        ? const SizedBox(
-                            height: 18,
-                            width: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Text('Approve'),
-                  ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: _processing ? null : _approve,
+                  style: AdminTheme.primaryButtonStyle(height: 46),
+                  child: _processing
+                      ? const SizedBox(
+                          height: 18,
+                          width: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text('Approve'),
                 ),
-              ],
-            ),
-          ],
-        ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

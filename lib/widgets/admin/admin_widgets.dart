@@ -1,10 +1,10 @@
 // MVVM: Widgets — pure presentation, no business logic.
 
 import 'package:flutter/material.dart';
-import '../../utils/app_theme.dart';
+import 'package:google_fonts/google_fonts.dart';
+
+import '../../theme/admin_theme.dart';
 import '../../utils/chat_image_utils.dart';
-import '../../constants/app_colors.dart';
-import '../status_badge.dart';
 
 /// Compact stat card for the admin dashboard grid.
 class AdminStatCard extends StatelessWidget {
@@ -18,14 +18,14 @@ class AdminStatCard extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.value,
-    this.color = AppColors.adminAccent,
+    this.color = AdminColors.amber,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: appCardDecoration(shadow: AppShadows.card),
+      decoration: AdminTheme.cardDecoration(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -33,15 +33,22 @@ class AdminStatCard extends StatelessWidget {
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
+              color: color.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(icon, color: color, size: 18),
           ),
           const SizedBox(height: 12),
-          Text(value, style: AppTextStyles.h1.copyWith(fontSize: 24)),
+          Text(
+            value,
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 24,
+              fontWeight: FontWeight.w700,
+              color: AdminColors.navy,
+            ),
+          ),
           const SizedBox(height: 2),
-          Text(label, style: AppTextStyles.bodyMuted),
+          Text(label, style: AdminTheme.mutedStyle(size: 12)),
         ],
       ),
     );
@@ -66,19 +73,18 @@ class AdminSectionHeader extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(title, style: AppTextStyles.h2),
+        Text(title, style: AdminTheme.titleStyle()),
         if (actionLabel != null)
           TextButton(
             onPressed: onAction,
-            child: Text(actionLabel!,
-                style: const TextStyle(color: AppColors.adminAccent)),
+            child: Text(actionLabel!),
           ),
       ],
     );
   }
 }
 
-/// Status pill using the shared StatusBadgeStyle color mapping.
+/// Status pill for admin lists.
 class StatusChip extends StatelessWidget {
   final String status;
 
@@ -86,16 +92,19 @@ class StatusChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final style = StatusBadgeStyle.of(status);
+    final style = AdminTheme.statusColors(status);
+    final label = status.isEmpty
+        ? status
+        : status[0].toUpperCase() + status.substring(1);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         color: style.bg,
-        borderRadius: BorderRadius.circular(AppRadius.pill),
+        borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
-        status[0].toUpperCase() + status.substring(1),
-        style: TextStyle(
+        label,
+        style: GoogleFonts.plusJakartaSans(
           color: style.fg,
           fontSize: 11,
           fontWeight: FontWeight.w600,
@@ -122,10 +131,13 @@ class AdminEmptyState extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 48),
       child: Column(
         children: [
-          Icon(icon, size: 40, color: AppColors.textMuted),
+          Icon(icon, size: 40, color: AdminColors.textGrey),
           const SizedBox(height: 12),
-          Text(message,
-              style: AppTextStyles.bodyMuted, textAlign: TextAlign.center),
+          Text(
+            message,
+            style: AdminTheme.mutedStyle(),
+            textAlign: TextAlign.center,
+          ),
         ],
       ),
     );
@@ -133,7 +145,6 @@ class AdminEmptyState extends StatelessWidget {
 }
 
 /// Approve / Reject action row used on pending approval cards.
-/// Reject opens a dialog requiring a reason before calling [onReject].
 class ApprovalActions extends StatelessWidget {
   final VoidCallback onApprove;
   final ValueChanged<String> onReject;
@@ -155,7 +166,7 @@ class ApprovalActions extends StatelessWidget {
         content: TextField(
           controller: controller,
           maxLines: 3,
-          decoration: const InputDecoration(
+          decoration: AdminTheme.inputDecoration(
             hintText: 'Reason for rejection (shown to the applicant)',
           ),
         ),
@@ -169,8 +180,10 @@ class ApprovalActions extends StatelessWidget {
               if (controller.text.trim().isEmpty) return;
               Navigator.pop(context, controller.text.trim());
             },
-            child: const Text('Reject',
-                style: TextStyle(color: AppColors.danger)),
+            child: Text(
+              'Reject',
+              style: GoogleFonts.plusJakartaSans(color: AdminColors.red),
+            ),
           ),
         ],
       ),
@@ -188,12 +201,9 @@ class ApprovalActions extends StatelessWidget {
         Expanded(
           child: OutlinedButton.icon(
             onPressed: isLoading ? null : () => _showRejectDialog(context),
-            icon: const Icon(Icons.close, size: 16, color: AppColors.danger),
-            label: const Text('Reject',
-                style: TextStyle(color: AppColors.danger)),
-            style: OutlinedButton.styleFrom(
-              side: const BorderSide(color: AppColors.danger),
-            ),
+            icon: const Icon(Icons.close, size: 16),
+            label: const Text('Reject'),
+            style: AdminTheme.destructiveButtonStyle(),
           ),
         ),
         const SizedBox(width: 10),
@@ -205,14 +215,13 @@ class ApprovalActions extends StatelessWidget {
                     width: 14,
                     height: 14,
                     child: CircularProgressIndicator(
-                        color: Colors.white, strokeWidth: 2),
+                      color: Colors.white,
+                      strokeWidth: 2,
+                    ),
                   )
                 : const Icon(Icons.check, size: 16),
             label: const Text('Approve'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.success,
-              foregroundColor: Colors.white,
-            ),
+            style: AdminTheme.primaryButtonStyle(height: 46),
           ),
         ),
       ],
@@ -236,15 +245,7 @@ class AdminApprovalSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(
-          title,
-          style: const TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w800,
-            color: AppColors.textSecondary,
-            letterSpacing: 0.6,
-          ),
-        ),
+        AdminSectionLabel(title),
         const SizedBox(height: 10),
         ...children,
       ],
@@ -275,23 +276,17 @@ class AdminDetailRow extends StatelessWidget {
         children: [
           SizedBox(
             width: 132,
-            child: Text(
-              label,
-              style: const TextStyle(
-                fontSize: 12,
-                color: AppColors.textSecondary,
-              ),
-            ),
+            child: Text(label, style: AdminTheme.mutedStyle(size: 12)),
           ),
           Expanded(
             child: Text(
               display,
               maxLines: maxLines,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
+              style: GoogleFonts.plusJakartaSans(
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
-                color: AppColors.textPrimary,
+                color: AdminColors.navy,
               ),
             ),
           ),
@@ -315,9 +310,9 @@ class AdminChipList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (items.isEmpty) {
-      return const Text('—', style: TextStyle(fontSize: 13, color: AppColors.textSecondary));
+      return Text('—', style: AdminTheme.mutedStyle(size: 13));
     }
-    final chipColor = color ?? AppColors.primary;
+    final chipColor = color ?? AdminColors.navy;
     return Wrap(
       spacing: 8,
       runSpacing: 8,
@@ -326,12 +321,12 @@ class AdminChipList extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
             color: chipColor.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(AppRadius.pill),
+            borderRadius: BorderRadius.circular(20),
             border: Border.all(color: chipColor.withValues(alpha: 0.25)),
           ),
           child: Text(
             item,
-            style: TextStyle(
+            style: GoogleFonts.plusJakartaSans(
               fontSize: 12,
               fontWeight: FontWeight.w600,
               color: chipColor,
@@ -365,13 +360,13 @@ class AdminDocumentThumbnail extends StatelessWidget {
             label,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+            style: AdminTheme.mutedStyle(size: 11),
           ),
           const SizedBox(height: 6),
           AspectRatio(
             aspectRatio: 4 / 3,
             child: Material(
-              color: AppColors.surface,
+              color: AdminColors.screenBg,
               borderRadius: BorderRadius.circular(10),
               clipBehavior: Clip.antiAlias,
               child: InkWell(
@@ -383,7 +378,7 @@ class AdminDocumentThumbnail extends StatelessWidget {
                     : null,
                 child: DecoratedBox(
                   decoration: BoxDecoration(
-                    border: Border.all(color: AppColors.border),
+                    border: Border.all(color: AdminColors.border),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: hasImage
@@ -430,15 +425,14 @@ class _MissingDocPlaceholder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
+    return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(Icons.image_not_supported_outlined,
-              size: 22, color: AppColors.textMuted),
-          SizedBox(height: 4),
-          Text('Not uploaded',
-              style: TextStyle(fontSize: 10, color: AppColors.textMuted)),
+              size: 22, color: AdminColors.textGrey),
+          const SizedBox(height: 4),
+          Text('Not uploaded', style: AdminTheme.mutedStyle(size: 10)),
         ],
       ),
     );
@@ -464,6 +458,30 @@ class AdminDocumentThumbnailRow extends StatelessWidget {
           ),
         ],
       ],
+    );
+  }
+}
+
+/// White card container matching admin panel style.
+class AdminCard extends StatelessWidget {
+  final Widget child;
+  final EdgeInsetsGeometry padding;
+  final EdgeInsetsGeometry? margin;
+
+  const AdminCard({
+    super.key,
+    required this.child,
+    this.padding = const EdgeInsets.all(16),
+    this.margin,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: margin,
+      padding: padding,
+      decoration: AdminTheme.cardDecoration(),
+      child: child,
     );
   }
 }

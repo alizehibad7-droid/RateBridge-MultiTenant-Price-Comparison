@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
-import '../../constants/app_colors.dart';
 import '../../constants/app_constants.dart';
-import '../../utils/app_theme.dart';
+import '../../theme/ceo_theme.dart';
 import '../../models/partnership_request_model.dart';
 import '../../models/supplier_model.dart';
 import '../../viewmodels/ceo_viewmodel.dart';
-import '../../widgets/app_text_field.dart';
 import '../../widgets/ceo_nav_bar.dart';
+import '../../widgets/ceo/ceo_widgets.dart';
 
 class CeoInviteHubView extends StatefulWidget {
   const CeoInviteHubView({super.key});
@@ -16,18 +16,30 @@ class CeoInviteHubView extends StatefulWidget {
   State<CeoInviteHubView> createState() => _CeoInviteHubViewState();
 }
 
-class _CeoInviteHubViewState extends State<CeoInviteHubView> {
+class _CeoInviteHubViewState extends State<CeoInviteHubView>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabController;
   String _selectedCategory = 'All';
   String _selectedCity = 'All';
   bool _verifiedOnly = false;
   String _sortBy = 'Rating';
   final _searchController = TextEditingController();
 
-  final List<String> _cities = ['All', 'Lahore', 'Karachi', 'Islamabad', 'Rawalpindi', 'Faisalabad', 'Multan', 'Peshawar'];
+  final List<String> _cities = [
+    'All',
+    'Lahore',
+    'Karachi',
+    'Islamabad',
+    'Rawalpindi',
+    'Faisalabad',
+    'Multan',
+    'Peshawar'
+  ];
 
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 3, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final vm = Provider.of<CeoViewModel>(context, listen: false);
       final companyId = vm.company?.id;
@@ -40,6 +52,7 @@ class _CeoInviteHubViewState extends State<CeoInviteHubView> {
 
   @override
   void dispose() {
+    _tabController.dispose();
     _searchController.dispose();
     super.dispose();
   }
@@ -57,91 +70,90 @@ class _CeoInviteHubViewState extends State<CeoInviteHubView> {
     final vm = Provider.of<CeoViewModel>(context);
     final companyId = vm.company?.id ?? '';
 
-    return DefaultTabController(
-      length: 3,
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Supplier Hub'),
-          bottom: const TabBar(
-            tabs: [
-              Tab(text: 'Marketplace'),
-              Tab(text: 'Join Requests'),
-              Tab(text: 'Sent'),
-            ],
-          ),
+    return Scaffold(
+      backgroundColor: CeoColors.screenBg,
+      appBar: CeoAppBar(
+        title: 'Supplier Hub',
+        bottom: TabBar(
+          controller: _tabController,
+          tabs: const [
+            Tab(text: 'Marketplace'),
+            Tab(text: 'Join Requests'),
+            Tab(text: 'Sent'),
+          ],
         ),
-        body: Column(
-          children: [
-            if (vm.errorMessage != null)
-              Container(
-                width: double.infinity,
-                color: AppColors.dangerBg,
-                padding: const EdgeInsets.all(12),
-                child: Row(
-                  children: [
-                    const Icon(Icons.error_outline, color: AppColors.danger, size: 20),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        vm.errorMessage!,
-                        style: const TextStyle(color: AppColors.danger, fontSize: 13),
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close, size: 18, color: AppColors.danger),
-                      onPressed: () => vm.clearMessages(),
-                    ),
-                  ],
-                ),
-              ),
-            Expanded(
-              child: TabBarView(
+      ),
+      body: Column(
+        children: [
+          if (vm.errorMessage != null)
+            Container(
+              width: double.infinity,
+              color: CeoColors.red.withValues(alpha: 0.1),
+              padding: const EdgeInsets.all(12),
+              child: Row(
                 children: [
-                  _buildMarketplace(vm, companyId),
-                  _buildJoinRequests(companyId),
-                  _buildSentRequests(companyId),
+                  const Icon(Icons.error_outline,
+                      color: CeoColors.red, size: 20),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      vm.errorMessage!,
+                      style: GoogleFonts.plusJakartaSans(
+                        color: CeoColors.red,
+                        fontSize: 13,
+                      ),
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close,
+                        size: 18, color: CeoColors.red),
+                    onPressed: () => vm.clearMessages(),
+                  ),
                 ],
               ),
             ),
-          ],
-        ),
-        bottomNavigationBar: const CeoNavBar(currentIndex: 2),
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                _buildMarketplace(vm, companyId),
+                _buildJoinRequests(companyId),
+                _buildSentRequests(companyId),
+              ],
+            ),
+          ),
+        ],
       ),
+      bottomNavigationBar: const CeoNavBar(currentIndex: 2),
     );
   }
-
-  // =====================================================================
-  // TAB 1 — MARKETPLACE (browsing all suppliers)
-  // =====================================================================
 
   Widget _buildMarketplace(CeoViewModel vm, String companyId) {
     return Column(
       children: [
-        // Search & Filter bar
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          color: AppColors.surface,
+          color: Colors.white,
           child: Column(
             children: [
               TextField(
                 key: const ValueKey('marketplace_supplier_search'),
                 controller: _searchController,
-                decoration: InputDecoration(
+                decoration: CeoTheme.inputDecoration(
                   hintText: 'Search by name or email...',
                   prefixIcon: const Icon(Icons.search, size: 20),
-                  suffixIcon: _searchController.text.isNotEmpty 
-                    ? IconButton(
-                        icon: const Icon(Icons.clear, size: 18),
-                        onPressed: () {
-                          _searchController.clear();
-                          vm.loadMarketplace();
-                          setState(() {});
-                        },
-                      )
-                    : null,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                  suffixIcon: _searchController.text.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear, size: 18),
+                          onPressed: () {
+                            _searchController.clear();
+                            vm.loadMarketplace();
+                            setState(() {});
+                          },
+                        )
+                      : null,
                 ),
                 onChanged: (val) {
                   setState(() {});
@@ -182,23 +194,31 @@ class _CeoInviteHubViewState extends State<CeoInviteHubView> {
                 child: Row(
                   children: [
                     FilterChip(
-                      label: const Text('Verified Only', style: TextStyle(fontSize: 12)),
+                      label: Text('Verified Only',
+                          style: CeoTheme.mutedStyle(size: 12)),
                       selected: _verifiedOnly,
                       onSelected: (v) {
                         setState(() => _verifiedOnly = v);
                         _applyFilters(vm);
                       },
-                      selectedColor: AppColors.infoBg,
-                      checkmarkColor: AppColors.primary,
+                      selectedColor: CeoColors.navy.withValues(alpha: 0.12),
+                      checkmarkColor: CeoColors.navy,
                     ),
                     const SizedBox(width: 8),
                     DropdownButton<String>(
                       value: _sortBy,
                       underline: const SizedBox.shrink(),
                       isDense: true,
+                      style: CeoTheme.mutedStyle(size: 12),
                       items: const [
-                        DropdownMenuItem(value: 'Rating', child: Text('By Rating', style: TextStyle(fontSize: 12))),
-                        DropdownMenuItem(value: 'Name', child: Text('By Name', style: TextStyle(fontSize: 12))),
+                        DropdownMenuItem(
+                            value: 'Rating',
+                            child: Text('By Rating',
+                                style: TextStyle(fontSize: 12))),
+                        DropdownMenuItem(
+                            value: 'Name',
+                            child: Text('By Name',
+                                style: TextStyle(fontSize: 12))),
                       ],
                       onChanged: (v) {
                         if (v != null) {
@@ -222,9 +242,11 @@ class _CeoInviteHubViewState extends State<CeoInviteHubView> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Icon(Icons.search_off, size: 48, color: AppColors.textMuted),
+                          const Icon(Icons.search_off,
+                              size: 48, color: CeoColors.textGrey),
                           const SizedBox(height: 12),
-                          Text('No suppliers found', style: AppTextStyles.bodyMuted),
+                          Text('No suppliers found',
+                              style: CeoTheme.mutedStyle()),
                           TextButton(
                             onPressed: () {
                               _searchController.clear();
@@ -244,7 +266,8 @@ class _CeoInviteHubViewState extends State<CeoInviteHubView> {
                       separatorBuilder: (_, __) => const SizedBox(height: 12),
                       itemBuilder: (context, i) {
                         final supplier = vm.marketplaceSuppliers[i];
-                        return _supplierCard(context, vm, supplier, companyId);
+                        return _supplierCard(
+                            context, vm, supplier, companyId);
                       },
                     ),
         ),
@@ -252,10 +275,10 @@ class _CeoInviteHubViewState extends State<CeoInviteHubView> {
     );
   }
 
-  Widget _supplierCard(BuildContext context, CeoViewModel vm, SupplierModel supplier, String companyId) {
-    return Container(
+  Widget _supplierCard(BuildContext context, CeoViewModel vm,
+      SupplierModel supplier, String companyId) {
+    return AdminCard(
       padding: const EdgeInsets.all(14),
-      decoration: appCardDecoration(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -263,10 +286,16 @@ class _CeoInviteHubViewState extends State<CeoInviteHubView> {
             children: [
               CircleAvatar(
                 radius: 24,
-                backgroundColor: AppColors.infoBg,
+                backgroundColor: CeoColors.navy.withValues(alpha: 0.12),
                 child: Text(
-                  supplier.name.isNotEmpty ? supplier.name[0].toUpperCase() : 'S',
-                  style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w700, fontSize: 18),
+                  supplier.name.isNotEmpty
+                      ? supplier.name[0].toUpperCase()
+                      : 'S',
+                  style: GoogleFonts.plusJakartaSans(
+                    color: CeoColors.navy,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 18,
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
@@ -274,9 +303,18 @@ class _CeoInviteHubViewState extends State<CeoInviteHubView> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(supplier.name, style: AppTextStyles.h3.copyWith(fontSize: 15)),
-                    Text(supplier.email, style: AppTextStyles.bodyMuted.copyWith(fontSize: 12)),
-                    Text(supplier.city, style: AppTextStyles.bodyMuted.copyWith(fontSize: 12)),
+                    Text(
+                      supplier.name,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 15,
+                        color: CeoColors.navy,
+                      ),
+                    ),
+                    Text(supplier.email,
+                        style: CeoTheme.mutedStyle(size: 12)),
+                    Text(supplier.city,
+                        style: CeoTheme.mutedStyle(size: 12)),
                     const SizedBox(height: 4),
                     Row(
                       children: [
@@ -284,23 +322,14 @@ class _CeoInviteHubViewState extends State<CeoInviteHubView> {
                         const SizedBox(width: 6),
                         Text(
                           '${supplier.rating.toStringAsFixed(1)} (${supplier.activeContracts})',
-                          style: AppTextStyles.bodyMuted.copyWith(fontSize: 12),
+                          style: CeoTheme.mutedStyle(size: 12),
                         ),
                       ],
                     ),
                   ],
                 ),
               ),
-              if (supplier.isVerified)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: AppColors.successBg,
-                    borderRadius: BorderRadius.circular(AppRadius.pill),
-                  ),
-                  child: const Text('Verified',
-                      style: TextStyle(color: AppColors.success, fontSize: 10, fontWeight: FontWeight.w600)),
-                ),
+              if (supplier.isVerified) _verifiedBadge(),
             ],
           ),
           const SizedBox(height: 12),
@@ -321,8 +350,8 @@ class _CeoInviteHubViewState extends State<CeoInviteHubView> {
       return OutlinedButton(
         onPressed: null,
         style: OutlinedButton.styleFrom(
-          foregroundColor: AppColors.success,
-          side: const BorderSide(color: AppColors.success),
+          foregroundColor: CeoColors.green,
+          side: const BorderSide(color: CeoColors.green),
         ),
         child: const Text('Already Partners'),
       );
@@ -330,7 +359,9 @@ class _CeoInviteHubViewState extends State<CeoInviteHubView> {
     if (status == 'Request Pending') {
       return OutlinedButton(
         onPressed: null,
-        style: OutlinedButton.styleFrom(foregroundColor: AppColors.textMuted),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: CeoColors.textGrey,
+        ),
         child: const Text('Request Pending'),
       );
     }
@@ -344,18 +375,22 @@ class _CeoInviteHubViewState extends State<CeoInviteHubView> {
               margin: const EdgeInsets.only(bottom: 10),
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: AppColors.dangerBg,
-                borderRadius: BorderRadius.circular(AppRadius.sm),
+                color: CeoColors.red.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
                 'Rejected: $reason',
-                style: const TextStyle(color: AppColors.danger, fontSize: 12),
+                style: GoogleFonts.plusJakartaSans(
+                  color: CeoColors.red,
+                  fontSize: 12,
+                ),
               ),
             ),
           ElevatedButton.icon(
             onPressed: () => _showPartnershipSheet(context, vm, supplier),
             icon: const Icon(Icons.refresh, size: 16),
             label: const Text('Send Again'),
+            style: CeoTheme.primaryButtonStyle(height: 44),
           ),
         ],
       );
@@ -363,13 +398,10 @@ class _CeoInviteHubViewState extends State<CeoInviteHubView> {
     return ElevatedButton.icon(
       onPressed: () => _showPartnershipSheet(context, vm, supplier),
       icon: const Icon(Icons.send_outlined, size: 16),
-      label: Text('Send Partnership Request', style: AppTextStyles.button),
+      label: const Text('Send Partnership Request'),
+      style: CeoTheme.primaryButtonStyle(height: 44),
     );
   }
-
-  // =====================================================================
-  // TAB 3 — SENT REQUESTS (CEO-initiated partnership requests)
-  // =====================================================================
 
   Widget _buildSentRequests(String companyId) {
     if (companyId.isEmpty) {
@@ -388,9 +420,11 @@ class _CeoInviteHubViewState extends State<CeoInviteHubView> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.send_outlined, size: 48, color: AppColors.textMuted),
+                const Icon(Icons.send_outlined,
+                    size: 48, color: CeoColors.textGrey),
                 const SizedBox(height: 12),
-                Text('No sent partnership requests', style: AppTextStyles.bodyMuted),
+                Text('No sent partnership requests',
+                    style: CeoTheme.mutedStyle()),
               ],
             ),
           );
@@ -407,42 +441,30 @@ class _CeoInviteHubViewState extends State<CeoInviteHubView> {
   }
 
   Widget _sentRequestCard(PartnershipRequestModel req) {
-    Color statusColor = AppColors.warning;
-    if (req.status == 'accepted') statusColor = AppColors.success;
-    if (req.status == 'rejected') statusColor = AppColors.danger;
-
-    return Container(
+    return AdminCard(
       padding: const EdgeInsets.all(14),
-      decoration: appCardDecoration(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
               Expanded(
-                child: Text(req.supplierName, style: AppTextStyles.h3.copyWith(fontSize: 15)),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: statusColor.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(AppRadius.pill),
-                ),
                 child: Text(
-                  req.status.toUpperCase(),
-                  style: TextStyle(
-                    color: statusColor,
-                    fontSize: 10,
+                  req.supplierName,
+                  style: GoogleFonts.plusJakartaSans(
                     fontWeight: FontWeight.w600,
+                    fontSize: 15,
+                    color: CeoColors.navy,
                   ),
                 ),
               ),
+              CeoStatusBadge(status: req.status),
             ],
           ),
           const SizedBox(height: 4),
           Text(
             'Sent: ${req.createdAt.toLocal().toString().split(' ').first}',
-            style: AppTextStyles.bodyMuted.copyWith(fontSize: 12),
+            style: CeoTheme.mutedStyle(size: 12),
           ),
           if (req.status == 'rejected' &&
               req.rejectionReason != null &&
@@ -451,12 +473,15 @@ class _CeoInviteHubViewState extends State<CeoInviteHubView> {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: AppColors.dangerBg,
-                borderRadius: BorderRadius.circular(AppRadius.sm),
+                color: CeoColors.red.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
                 'Rejection reason: ${req.rejectionReason}',
-                style: const TextStyle(color: AppColors.danger, fontSize: 12),
+                style: GoogleFonts.plusJakartaSans(
+                  color: CeoColors.red,
+                  fontSize: 12,
+                ),
               ),
             ),
           ],
@@ -464,10 +489,6 @@ class _CeoInviteHubViewState extends State<CeoInviteHubView> {
       ),
     );
   }
-
-  // =====================================================================
-  // TAB 2 — JOIN REQUESTS (suppliers requesting to join)
-  // =====================================================================
 
   Widget _buildJoinRequests(String companyId) {
     if (companyId.isEmpty) {
@@ -486,9 +507,11 @@ class _CeoInviteHubViewState extends State<CeoInviteHubView> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.inbox_outlined, size: 48, color: AppColors.textMuted),
-                SizedBox(height: 12),
-                Text('No pending join requests', style: AppTextStyles.bodyMuted),
+                const Icon(Icons.inbox_outlined,
+                    size: 48, color: CeoColors.textGrey),
+                const SizedBox(height: 12),
+                Text('No pending join requests',
+                    style: CeoTheme.mutedStyle()),
               ],
             ),
           );
@@ -497,16 +520,17 @@ class _CeoInviteHubViewState extends State<CeoInviteHubView> {
           padding: const EdgeInsets.all(16),
           itemCount: requests.length,
           separatorBuilder: (_, __) => const SizedBox(height: 12),
-          itemBuilder: (context, i) => _joinRequestCard(context, vm, requests[i]),
+          itemBuilder: (context, i) =>
+              _joinRequestCard(context, vm, requests[i]),
         );
       },
     );
   }
 
-  Widget _joinRequestCard(BuildContext context, CeoViewModel vm, PartnershipRequestModel req) {
-    return Container(
+  Widget _joinRequestCard(
+      BuildContext context, CeoViewModel vm, PartnershipRequestModel req) {
+    return AdminCard(
       padding: const EdgeInsets.all(14),
-      decoration: appCardDecoration(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -514,10 +538,16 @@ class _CeoInviteHubViewState extends State<CeoInviteHubView> {
             children: [
               CircleAvatar(
                 radius: 24,
-                backgroundColor: AppColors.infoBg,
+                backgroundColor: CeoColors.navy.withValues(alpha: 0.12),
                 child: Text(
-                  req.supplierName.isNotEmpty ? req.supplierName[0].toUpperCase() : 'S',
-                  style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w700, fontSize: 18),
+                  req.supplierName.isNotEmpty
+                      ? req.supplierName[0].toUpperCase()
+                      : 'S',
+                  style: GoogleFonts.plusJakartaSans(
+                    color: CeoColors.navy,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 18,
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
@@ -525,19 +555,30 @@ class _CeoInviteHubViewState extends State<CeoInviteHubView> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(req.supplierName, style: AppTextStyles.h3.copyWith(fontSize: 15)),
-                    if (req.supplierEmail != null && req.supplierEmail!.isNotEmpty)
-                      Text(req.supplierEmail!, style: AppTextStyles.bodyMuted.copyWith(fontSize: 12)),
-                    if (req.supplierCity != null && req.supplierCity!.isNotEmpty)
-                      Text(req.supplierCity!, style: AppTextStyles.bodyMuted.copyWith(fontSize: 12)),
+                    Text(
+                      req.supplierName,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 15,
+                        color: CeoColors.navy,
+                      ),
+                    ),
+                    if (req.supplierEmail != null &&
+                        req.supplierEmail!.isNotEmpty)
+                      Text(req.supplierEmail!,
+                          style: CeoTheme.mutedStyle(size: 12)),
+                    if (req.supplierCity != null &&
+                        req.supplierCity!.isNotEmpty)
+                      Text(req.supplierCity!,
+                          style: CeoTheme.mutedStyle(size: 12)),
                     const SizedBox(height: 4),
                     Row(
                       children: [
                         _ratingStars(req.supplierRating),
                         const SizedBox(width: 6),
                         Text(
-                          '${req.supplierRating.toStringAsFixed(1)}',
-                          style: AppTextStyles.bodyMuted.copyWith(fontSize: 12),
+                          req.supplierRating.toStringAsFixed(1),
+                          style: CeoTheme.mutedStyle(size: 12),
                         ),
                       ],
                     ),
@@ -551,12 +592,16 @@ class _CeoInviteHubViewState extends State<CeoInviteHubView> {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: AppColors.background,
-                borderRadius: BorderRadius.circular(AppRadius.sm),
+                color: CeoColors.screenBg,
+                borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
                 '"${req.message}"',
-                style: const TextStyle(fontStyle: FontStyle.italic, color: AppColors.textSecondary, fontSize: 13),
+                style: GoogleFonts.plusJakartaSans(
+                  fontStyle: FontStyle.italic,
+                  color: CeoColors.textGrey,
+                  fontSize: 13,
+                ),
               ),
             ),
           ],
@@ -566,24 +611,19 @@ class _CeoInviteHubViewState extends State<CeoInviteHubView> {
               Expanded(
                 flex: 2,
                 child: ElevatedButton(
-                  onPressed: () => vm.acceptPartnershipRequest(req.requestId),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    minimumSize: const Size(0, 44),
-                  ),
-                  child: const Text('Accept Request', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white)),
+                  onPressed: () =>
+                      vm.acceptPartnershipRequest(req.requestId),
+                  style: CeoTheme.primaryButtonStyle(height: 44),
+                  child: const Text('Accept Request'),
                 ),
               ),
               const SizedBox(width: 8),
               Expanded(
                 child: OutlinedButton(
-                  onPressed: () => _showRejectDialog(context, vm, req.requestId),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.danger,
-                    side: const BorderSide(color: AppColors.danger),
-                    minimumSize: const Size(0, 44),
-                  ),
-                  child: const Text('Reject', style: TextStyle(fontSize: 13)),
+                  onPressed: () =>
+                      _showRejectDialog(context, vm, req.requestId),
+                  style: CeoTheme.destructiveButtonStyle(height: 44),
+                  child: const Text('Reject'),
                 ),
               ),
             ],
@@ -593,27 +633,33 @@ class _CeoInviteHubViewState extends State<CeoInviteHubView> {
     );
   }
 
-  void _showRejectDialog(BuildContext context, CeoViewModel vm, String reqId) {
+  void _showRejectDialog(
+      BuildContext context, CeoViewModel vm, String reqId) {
     final reasonController = TextEditingController();
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Reject request'),
-        content: AppTextField(
-          label: 'REASON',
+        content: TextField(
           controller: reasonController,
           maxLines: 3,
-          hint: 'Let the supplier know why...',
+          decoration: CeoTheme.inputDecoration(
+            labelText: 'Reason',
+            hintText: 'Let the supplier know why...',
+          ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel')),
+          OutlinedButton(
+            style: CeoTheme.destructiveButtonStyle(height: 40),
             onPressed: () {
-              vm.rejectPartnershipRequest(reqId, reasonController.text.trim());
+              vm.rejectPartnershipRequest(
+                  reqId, reasonController.text.trim());
               Navigator.pop(ctx);
             },
-            child: Text('Reject', style: AppTextStyles.button),
+            child: const Text('Reject'),
           ),
         ],
       ),
@@ -629,6 +675,7 @@ class _CeoInviteHubViewState extends State<CeoInviteHubView> {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      backgroundColor: CeoColors.screenBg,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -643,19 +690,18 @@ class _CeoInviteHubViewState extends State<CeoInviteHubView> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('Partnership request', style: AppTextStyles.h3),
+            Text('Partnership request', style: CeoTheme.titleStyle(size: 16)),
             const SizedBox(height: 8),
             Text(
               'Send a request to ${supplier.name}. They must accept before your field team can see their materials.',
-              style: AppTextStyles.bodyMuted,
+              style: CeoTheme.mutedStyle(),
             ),
             const SizedBox(height: 16),
             TextField(
               controller: messageController,
               maxLines: 3,
-              decoration: const InputDecoration(
+              decoration: CeoTheme.inputDecoration(
                 labelText: 'Optional message',
-                border: OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 16),
@@ -670,11 +716,14 @@ class _CeoInviteHubViewState extends State<CeoInviteHubView> {
                 );
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Request sent to ${supplier.name}')),
+                    SnackBar(
+                        content:
+                            Text('Request sent to ${supplier.name}')),
                   );
                 }
               },
-              child: Text('Send Request', style: AppTextStyles.button),
+              style: CeoTheme.primaryButtonStyle(height: 48),
+              child: const Text('Send Request'),
             ),
           ],
         ),
@@ -682,31 +731,57 @@ class _CeoInviteHubViewState extends State<CeoInviteHubView> {
     );
   }
 
-  Widget _filterChip(String label, String current, List<String> options, void Function(String) onSelect) {
+  Widget _filterChip(String label, String current, List<String> options,
+      void Function(String) onSelect) {
+    final isActive = current != 'All' && current.isNotEmpty;
     return PopupMenuButton<String>(
       initialValue: current,
       onSelected: onSelect,
-      itemBuilder: (_) => options.map((o) => PopupMenuItem(value: o, child: Text(o))).toList(),
+      itemBuilder: (_) =>
+          options.map((o) => PopupMenuItem(value: o, child: Text(o))).toList(),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: (current != 'All' && current.isNotEmpty) ? AppColors.infoBg : AppColors.surface,
-          borderRadius: BorderRadius.circular(AppRadius.pill),
-          border: Border.all(color: (current != 'All' && current.isNotEmpty) ? AppColors.primary : AppColors.border),
+          color: isActive
+              ? CeoColors.navy.withValues(alpha: 0.12)
+              : CeoColors.screenBg,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+              color: isActive ? CeoColors.navy : CeoColors.border),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
               (current == 'All' || current.isEmpty) ? label : current,
-              style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  color: (current != 'All' && current.isNotEmpty) ? AppColors.primary : AppColors.textSecondary),
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: isActive ? CeoColors.navy : CeoColors.textGrey,
+              ),
             ),
             const SizedBox(width: 4),
-            const Icon(Icons.arrow_drop_down, size: 16, color: AppColors.textMuted),
+            const Icon(Icons.arrow_drop_down,
+                size: 16, color: CeoColors.textGrey),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _verifiedBadge() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: CeoColors.green.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        'Verified',
+        style: GoogleFonts.plusJakartaSans(
+          color: CeoColors.green,
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
         ),
       ),
     );
@@ -717,9 +792,13 @@ class _CeoInviteHubViewState extends State<CeoInviteHubView> {
       mainAxisSize: MainAxisSize.min,
       children: List.generate(5, (i) {
         return Icon(
-          value >= i + 1 ? Icons.star : value > i ? Icons.star_half : Icons.star_border,
+          value >= i + 1
+              ? Icons.star
+              : value > i
+                  ? Icons.star_half
+                  : Icons.star_border,
           size: 14,
-          color: const Color(0xFFE8A317),
+          color: CeoColors.amber,
         );
       }),
     );

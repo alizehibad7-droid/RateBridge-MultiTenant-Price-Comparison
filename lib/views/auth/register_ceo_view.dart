@@ -14,7 +14,7 @@ import '../../viewmodels/auth_viewmodel.dart';
 import '../../widgets/auth/auth_text_field.dart';
 import '../../widgets/auth/auth_widgets.dart';
 
-const _ceoAccent = AppColors.ceoAccent;
+const _ceoAccent = AppColors.amber;
 const _totalSteps = 3;
 
 class RegisterCeoView extends StatefulWidget {

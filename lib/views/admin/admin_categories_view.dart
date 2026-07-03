@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/category_model.dart';
+import '../../theme/admin_theme.dart';
 import '../../viewmodels/admin_viewmodel.dart';
-import '../../constants/app_colors.dart';
+import '../../widgets/admin/admin_widgets.dart';
 
 class AdminCategoriesView extends StatefulWidget {
   const AdminCategoriesView({super.key});
@@ -16,22 +18,10 @@ class _AdminCategoriesViewState extends State<AdminCategoriesView> {
   @override
   Widget build(BuildContext context) {
     final adminVM = Provider.of<AdminViewModel>(context);
-    final theme = Theme.of(context);
 
     return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: Text(
-          'Manage Categories',
-          style: theme.textTheme.headlineMedium?.copyWith(
-            fontWeight: FontWeight.w800,
-            fontSize: 24,
-            letterSpacing: -0.5,
-          ),
-        ),
-        backgroundColor: Colors.white,
-        elevation: 0,
-      ),
+      backgroundColor: AdminColors.screenBg,
+      appBar: const AdminAppBar(title: 'Manage Categories'),
       body: StreamBuilder<List<CategoryModel>>(
         stream: adminVM.watchCategories(),
         builder: (context, snapshot) {
@@ -51,11 +41,7 @@ class _AdminCategoriesViewState extends State<AdminCategoriesView> {
                 child: Text(
                   'Categories are pre-loaded for Pakistan construction materials. '
                   'Toggle active status, update brands/grades, or add a custom category when needed.',
-                  style: TextStyle(
-                    color: AppColors.textSecondary.withValues(alpha: 0.9),
-                    fontSize: 13,
-                    height: 1.4,
-                  ),
+                  style: AdminTheme.mutedStyle(size: 13).copyWith(height: 1.4),
                 ),
               ),
               Expanded(
@@ -74,6 +60,7 @@ class _AdminCategoriesViewState extends State<AdminCategoriesView> {
                     onPressed: () => _showCategoryFormDialog(null, adminVM),
                     icon: const Icon(Icons.add, size: 18),
                     label: const Text('Add custom category (edge case)'),
+                    style: AdminTheme.secondaryButtonStyle(),
                   ),
                 ),
               ),
@@ -87,23 +74,18 @@ class _AdminCategoriesViewState extends State<AdminCategoriesView> {
   Widget _buildCategoryRow(CategoryModel category, AdminViewModel adminVM) {
     final icon = category.icon;
 
-    return Container(
+    return AdminCard(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
-      ),
       child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: AppColors.surface,
+              color: AdminColors.navy.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(icon, color: AppColors.primary, size: 22),
+            child: Icon(icon, color: AdminColors.navy, size: 22),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -112,10 +94,10 @@ class _AdminCategoriesViewState extends State<AdminCategoriesView> {
               children: [
                 Text(
                   category.name,
-                  style: const TextStyle(
+                  style: GoogleFonts.plusJakartaSans(
                     fontWeight: FontWeight.w700,
                     fontSize: 16,
-                    color: AppColors.textPrimary,
+                    color: AdminColors.navy,
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -123,18 +105,15 @@ class _AdminCategoriesViewState extends State<AdminCategoriesView> {
                   'Unit: ${category.unit}  ·  '
                   '${category.brands.length} brands  ·  '
                   '${category.grades.length} grades',
-                  style: const TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                  ),
+                  style: AdminTheme.mutedStyle(size: 11),
                 ),
               ],
             ),
           ),
           Switch(
             value: category.isActive,
-            activeThumbColor: AppColors.primary,
+            activeThumbColor: AdminColors.amber,
+            activeTrackColor: AdminColors.amber.withValues(alpha: 0.4),
             onChanged: (value) =>
                 adminVM.setCategoryActive(category.id, value),
           ),
@@ -143,7 +122,7 @@ class _AdminCategoriesViewState extends State<AdminCategoriesView> {
             onPressed: () => _showCategoryFormDialog(category, adminVM),
             icon: const Icon(
               Icons.edit_outlined,
-              color: AppColors.textSecondary,
+              color: AdminColors.textGrey,
               size: 20,
             ),
           ),
@@ -162,22 +141,22 @@ class _AdminCategoriesViewState extends State<AdminCategoriesView> {
             Icon(
               Icons.category_outlined,
               size: 64,
-              color: AppColors.textSecondary.withValues(alpha: 0.2),
+              color: AdminColors.textGrey.withValues(alpha: 0.35),
             ),
             const SizedBox(height: 16),
-            const Text(
+            Text(
               'No categories in Firestore yet.',
-              style: TextStyle(
-                color: AppColors.textSecondary,
+              style: GoogleFonts.plusJakartaSans(
+                color: AdminColors.textGrey,
                 fontWeight: FontWeight.w600,
               ),
             ),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               'Sign in once — the app auto-seeds 12 Pakistan construction '
               'categories on first launch. Pull to refresh after login.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+              style: AdminTheme.mutedStyle(size: 12),
             ),
           ],
         ),
@@ -201,11 +180,7 @@ class _AdminCategoriesViewState extends State<AdminCategoriesView> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(
-          isNew ? 'Add Custom Category' : 'Edit ${existing.name}',
-          style: const TextStyle(fontWeight: FontWeight.w800),
-        ),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(isNew ? 'Add Custom Category' : 'Edit ${existing.name}'),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -213,22 +188,27 @@ class _AdminCategoriesViewState extends State<AdminCategoriesView> {
               if (isNew)
                 TextField(
                   controller: nameController,
-                  decoration: const InputDecoration(
+                  decoration: AdminTheme.inputDecoration(
                     labelText: 'Category name',
                   ),
                 )
               else
                 InputDecorator(
-                  decoration: const InputDecoration(labelText: 'Category name'),
+                  decoration: AdminTheme.inputDecoration(
+                    labelText: 'Category name',
+                  ),
                   child: Text(
                     existing.name,
-                    style: const TextStyle(fontWeight: FontWeight.w600),
+                    style: GoogleFonts.plusJakartaSans(
+                      fontWeight: FontWeight.w600,
+                      color: AdminColors.navy,
+                    ),
                   ),
                 ),
               const SizedBox(height: 16),
               TextField(
                 controller: unitController,
-                decoration: const InputDecoration(
+                decoration: AdminTheme.inputDecoration(
                   labelText: 'Unit of measure',
                   hintText: 'e.g. bag, ton, cft',
                 ),
@@ -236,7 +216,7 @@ class _AdminCategoriesViewState extends State<AdminCategoriesView> {
               const SizedBox(height: 16),
               TextField(
                 controller: brandsController,
-                decoration: const InputDecoration(
+                decoration: AdminTheme.inputDecoration(
                   labelText: 'Brands (comma separated)',
                   hintText: 'DG Khan, Lucky, Bestway',
                 ),
@@ -245,7 +225,7 @@ class _AdminCategoriesViewState extends State<AdminCategoriesView> {
               const SizedBox(height: 16),
               TextField(
                 controller: gradesController,
-                decoration: const InputDecoration(
+                decoration: AdminTheme.inputDecoration(
                   labelText: 'Grades / types (comma separated)',
                   hintText: 'OPC, PPC, SRC — leave empty if not applicable',
                 ),
@@ -290,6 +270,7 @@ class _AdminCategoriesViewState extends State<AdminCategoriesView> {
               }
               Navigator.pop(context);
             },
+            style: AdminTheme.primaryButtonStyle(height: 44),
             child: Text(isNew ? 'Add' : 'Save'),
           ),
         ],

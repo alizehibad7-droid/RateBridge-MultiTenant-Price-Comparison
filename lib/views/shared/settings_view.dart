@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+
+import '../../constants/app_colors.dart';
 
 class SettingsView extends StatelessWidget {
   const SettingsView({super.key});
@@ -6,20 +9,64 @@ class SettingsView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("System configurations")),
+      backgroundColor: AppColors.screenBg,
+      appBar: AppBar(title: const Text('System configurations')),
       body: Padding(
         padding: const EdgeInsets.all(24.0),
         child: Column(
           children: [
-            ListTile(
-              title: const Text("Language Dialect"),
-              subtitle: const Text("Urdu / English"),
-              trailing: Switch(value: true, onChanged: (b) {}),
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Column(
+                children: [
+                  ListTile(
+                    title: Text(
+                      'Language Dialect',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.navy,
+                      ),
+                    ),
+                    subtitle: Text(
+                      'Urdu / English',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                    trailing: Switch(
+                      value: true,
+                      activeThumbColor: AppColors.amber,
+                      onChanged: (b) {},
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  ListTile(
+                    title: Text(
+                      'Device Biometrics',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.navy,
+                      ),
+                    ),
+                    trailing: Switch(
+                      value: false,
+                      activeThumbColor: AppColors.amber,
+                      onChanged: (b) {},
+                    ),
+                  ),
+                ],
+              ),
             ),
-            ListTile(
-              title: const Text("Device Biometrics"),
-              trailing: Switch(value: false, onChanged: (b) {}),
-            )
           ],
         ),
       ),

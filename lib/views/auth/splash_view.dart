@@ -1,10 +1,10 @@
 // MVVM: View — no business logic
 
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../constants/app_colors.dart';
 import '../../constants/route_names.dart';
 import '../../viewmodels/auth_viewmodel.dart';
 
@@ -164,142 +164,152 @@ class _SplashViewState extends State<SplashView>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Stack(
-        fit: StackFit.expand,
-        children: [
-          // Background image of a construction site
-          Image.asset(
-            'assets/images/construction_bg.jpg',
-            fit: BoxFit.cover,
-            errorBuilder: (context, error, stackTrace) => Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [AppColors.primaryDark, Color(0xFF060D1A)],
-                ),
-              ),
-            ),
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF1E326E), Color(0xFF0F1D42)],
           ),
-
-          // Dark overlay for text contrast
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.55),
-            ),
-          ),
-
-          // Subtle gradient toward bottom for extra depth
-          Container(
-            decoration: const BoxDecoration(
-              gradient: AppColors.heroOverlay,
-            ),
-          ),
-
-          // Centered animated content
-          AnimatedBuilder(
-            animation: _controller,
-            builder: (context, _) {
-              return Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    FadeTransition(
-                      opacity: _logoFade,
-                      child: ScaleTransition(
-                        scale: _logoScale,
-                        child: Container(
-                          width: 96,
-                          height: 96,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: Colors.white.withOpacity(0.12),
-                            border: Border.all(
-                              color: Colors.white.withOpacity(0.35),
-                              width: 1.2,
+        ),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            AnimatedBuilder(
+              animation: _controller,
+              builder: (context, _) {
+                return Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      FadeTransition(
+                        opacity: _logoFade,
+                        child: ScaleTransition(
+                          scale: _logoScale,
+                          child: Container(
+                            width: 160,
+                            height: 160,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Colors.white,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.white.withValues(alpha: 0.15),
+                                  blurRadius: 24,
+                                  spreadRadius: 4,
+                                ),
+                              ],
+                            ),
+                            child: const Icon(
+                              Icons.construction,
+                              color: Color(0xFF1E326E),
+                              size: 52,
                             ),
                           ),
-                          child: const Icon(
-                            Icons.architecture,
-                            size: 48,
-                            color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      FadeTransition(
+                        opacity: _titleFade,
+                        child: SlideTransition(
+                          position: _titleSlide,
+                          child: Text(
+                            'RateBridge',
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 32,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                              letterSpacing: 1.2,
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 20),
-                    FadeTransition(
-                      opacity: _titleFade,
-                      child: SlideTransition(
-                        position: _titleSlide,
-                        child: const Text(
-                          'RateBridge',
-                          style: TextStyle(
-                            fontSize: 36,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white,
-                            letterSpacing: 1.5,
-                            fontFamily: 'Inter',
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    FadeTransition(
-                      opacity: _taglineFade,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 40),
+                      const SizedBox(height: 8),
+                      FadeTransition(
+                        opacity: _taglineFade,
                         child: Text(
-                          'Smart Procurement. Real-time Prices.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
+                          'Smart Material Procurement',
+                          style: GoogleFonts.plusJakartaSans(
                             fontSize: 14,
-                            color: Colors.white.withOpacity(0.75),
-                            letterSpacing: 0.4,
-                            fontFamily: 'Inter',
+                            fontWeight: FontWeight.w400,
+                            color: Colors.white.withValues(alpha: 0.7),
+                            letterSpacing: 0.5,
                           ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 48),
-                    FadeTransition(
-                      opacity: _loaderFade,
-                      child: const SizedBox(
-                        width: 28,
-                        height: 28,
-                        child: CircularProgressIndicator(
-                          color: Colors.white,
-                          strokeWidth: 2.4,
+                    ],
+                  ),
+                );
+              },
+            ),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 48,
+              child: FadeTransition(
+                opacity: _loaderFade,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      width: 120,
+                      height: 2,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(1),
+                        child: const LinearProgressIndicator(
+                          color: Color(0xFFFBB03C),
+                          backgroundColor: Color(0x33FFFFFF),
+                          minHeight: 2,
                         ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Pakistan\'s B2B Construction Platform',
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 11,
+                                fontStyle: FontStyle.italic,
+                                color: Colors.white.withValues(alpha: 0.5),
+                              ),
+                            ),
+                          ),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 6,
+                                height: 6,
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFFFBB03C),
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                'v1.0',
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 11,
+                                  color: Colors.white.withValues(alpha: 0.5),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
-              );
-            },
-          ),
-
-          // Bottom version / branding strip
-          Positioned(
-            bottom: 24,
-            left: 0,
-            right: 0,
-            child: FadeTransition(
-              opacity: _loaderFade,
-              child: Center(
-                child: Text(
-                  'Built for Pakistan\'s construction industry',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Colors.white.withOpacity(0.5),
-                    letterSpacing: 0.6,
-                    fontFamily: 'Inter',
-                  ),
-                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 // Constants & Models
 import 'constants/route_names.dart';
-import 'constants/app_colors.dart';
+import 'theme/ratebridge_theme.dart';
 import 'models/material_model.dart';
 import 'models/chat_thread_model.dart';
 
@@ -29,6 +27,7 @@ import 'views/auth/invite_landing_view.dart';
 import 'views/auth/status_screens.dart';
 
 // CEO Views
+import 'theme/ceo_theme.dart';
 import 'views/ceo/ceo_dashboard_view.dart';
 import 'views/ceo/ceo_pending_view.dart';
 import 'views/ceo/ceo_invite_hub_view.dart';
@@ -121,16 +120,57 @@ class _RateBridgeAppState extends State<RateBridgeApp> {
         GoRoute(path: RouteNames.suspended, builder: (context, state) => const SuspendedView()),
         GoRoute(path: RouteNames.rejected, builder: (context, state) => const RejectedView()),
 
-        GoRoute(path: RouteNames.ceoDashboard, builder: (context, state) => const CeoDashboardView()),
-        GoRoute(path: RouteNames.ceoPending, builder: (context, state) => const CeoPendingView()),
-        GoRoute(path: RouteNames.ceoInvite, builder: (context, state) => const CeoInviteHubView()),
-        GoRoute(path: RouteNames.ceoMarketplace, builder: (context, state) => const CeoSupplierMarketplaceView()),
-        GoRoute(path: RouteNames.ceoJoinRequests, builder: (context, state) => const CeoJoinRequestsView()),
-        GoRoute(path: RouteNames.ceoMySuppliers, builder: (context, state) => const CeoMySuppliersView()),
-        GoRoute(path: RouteNames.ceoFieldUsers, builder: (context, state) => const CeoFieldUsersView()),
-        GoRoute(path: RouteNames.ceoOrders, builder: (context, state) => const CeoOrdersView()),
-        GoRoute(path: RouteNames.ceoSubscription, builder: (context, state) => const CeoSubscriptionView()),
-        GoRoute(path: RouteNames.ceoProfile, builder: (context, state) => const CeoCompanyProfileView()),
+        GoRoute(
+          path: RouteNames.ceoDashboard,
+          builder: (context, state) =>
+              CeoTheme.wrap(const CeoDashboardView()),
+        ),
+        GoRoute(
+          path: RouteNames.ceoPending,
+          builder: (context, state) => CeoTheme.wrap(const CeoPendingView()),
+        ),
+        GoRoute(
+          path: RouteNames.ceoInvite,
+          builder: (context, state) => CeoTheme.wrap(const CeoInviteHubView()),
+        ),
+        GoRoute(
+          path: RouteNames.ceoMarketplace,
+          builder: (context, state) =>
+              CeoTheme.wrap(const CeoSupplierMarketplaceView()),
+        ),
+        GoRoute(
+          path: RouteNames.ceoJoinRequests,
+          builder: (context, state) =>
+              CeoTheme.wrap(const CeoJoinRequestsView()),
+        ),
+        GoRoute(
+          path: RouteNames.ceoMySuppliers,
+          builder: (context, state) =>
+              CeoTheme.wrap(const CeoMySuppliersView()),
+        ),
+        GoRoute(
+          path: RouteNames.ceoFieldUsers,
+          builder: (context, state) =>
+              CeoTheme.wrap(const CeoFieldUsersView()),
+        ),
+        GoRoute(
+          path: RouteNames.ceoOrders,
+          builder: (context, state) {
+            final tab =
+                int.tryParse(state.uri.queryParameters['tab'] ?? '0') ?? 0;
+            return CeoTheme.wrap(CeoOrdersView(initialTab: tab));
+          },
+        ),
+        GoRoute(
+          path: RouteNames.ceoSubscription,
+          builder: (context, state) =>
+              CeoTheme.wrap(const CeoSubscriptionView()),
+        ),
+        GoRoute(
+          path: RouteNames.ceoProfile,
+          builder: (context, state) =>
+              CeoTheme.wrap(const CeoCompanyProfileView()),
+        ),
 
         GoRoute(
           path: RouteNames.fieldHome,
@@ -370,12 +410,12 @@ class _RateBridgeAppState extends State<RateBridgeApp> {
         ),
         GoRoute(path: RouteNames.supplierNotifications, builder: (context, state) => SupplierTheme.wrap(const SupplierNotificationsView())),
 
-        GoRoute(path: RouteNames.adminDashboard, builder: (context, state) => const AdminDashboardView()),
-        GoRoute(path: RouteNames.adminNotifications, builder: (context, state) => const AdminNotificationsView()),
-        GoRoute(path: RouteNames.adminCompanies, builder: (context, state) => const AdminCeoManagementView()),
-        GoRoute(path: RouteNames.adminCategories, builder: (context, state) => const AdminCategoriesView()),
-        GoRoute(path: RouteNames.adminPayments, builder: (context, state) => const AdminPaymentQueueView()),
-        GoRoute(path: RouteNames.adminSubscription, builder: (context, state) => const AdminSubscriptionView()),
+        GoRoute(path: RouteNames.adminDashboard, builder: (context, state) => AdminTheme.wrap(const AdminDashboardView())),
+        GoRoute(path: RouteNames.adminNotifications, builder: (context, state) => AdminTheme.wrap(const AdminNotificationsView())),
+        GoRoute(path: RouteNames.adminCompanies, builder: (context, state) => AdminTheme.wrap(const AdminCeoManagementView())),
+        GoRoute(path: RouteNames.adminCategories, builder: (context, state) => AdminTheme.wrap(const AdminCategoriesView())),
+        GoRoute(path: RouteNames.adminPayments, builder: (context, state) => AdminTheme.wrap(const AdminPaymentQueueView())),
+        GoRoute(path: RouteNames.adminSubscription, builder: (context, state) => AdminTheme.wrap(const AdminSubscriptionView())),
       ],
       redirect: (context, state) {
         final authVM = Provider.of<AuthViewModel>(context, listen: false);
@@ -436,118 +476,7 @@ class _RateBridgeAppState extends State<RateBridgeApp> {
       debugShowCheckedModeBanner: false,
       themeMode: ThemeMode.light,
       locale: const Locale('en'),
-      theme: ThemeData(
-        useMaterial3: true,
-        brightness: Brightness.light,
-        primaryColor: AppColors.primary,
-        scaffoldBackgroundColor: AppColors.background,
-        colorScheme: const ColorScheme.light(
-          primary: AppColors.primary,
-          onPrimary: Colors.white,
-          secondary: AppColors.secondary,
-          onSecondary: Colors.white,
-          surface: AppColors.background,
-          onSurface: AppColors.textPrimary,
-          error: AppColors.error,
-          surfaceContainerHighest: AppColors.surface,
-          surfaceContainer: Colors.white,
-          outline: AppColors.border,
-        ),
-        
-        fontFamily: GoogleFonts.plusJakartaSans().fontFamily,
-        pageTransitionsTheme: const PageTransitionsTheme(
-          builders: {
-            TargetPlatform.android: CupertinoPageTransitionsBuilder(),
-            TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
-          },
-        ),
-        textTheme: TextTheme(
-          displayLarge: GoogleFonts.plusJakartaSans(fontSize: 32, fontWeight: FontWeight.w800, letterSpacing: -1.2, height: 1.2, color: AppColors.textPrimary),
-          displayMedium: GoogleFonts.plusJakartaSans(fontSize: 28, fontWeight: FontWeight.w800, letterSpacing: -1.0, height: 1.2, color: AppColors.textPrimary),
-          headlineMedium: GoogleFonts.plusJakartaSans(fontSize: 24, fontWeight: FontWeight.w700, letterSpacing: -0.8, height: 1.3, color: AppColors.textPrimary),
-          titleLarge: GoogleFonts.plusJakartaSans(fontSize: 18, fontWeight: FontWeight.w600, letterSpacing: -0.5, color: AppColors.textPrimary),
-          bodyLarge: GoogleFonts.plusJakartaSans(fontSize: 16, color: AppColors.textPrimary, height: 1.5, letterSpacing: 0.1),
-          bodyMedium: GoogleFonts.plusJakartaSans(fontSize: 14, color: AppColors.textSecondary, height: 1.5),
-          labelLarge: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w600, letterSpacing: 0.5, color: AppColors.textSecondary),
-        ),
-
-        cardTheme: CardThemeData(
-          color: Colors.white,
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side: const BorderSide(color: AppColors.border, width: 1),
-          ),
-          margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 0),
-        ),
-
-        appBarTheme: AppBarTheme(
-          backgroundColor: Colors.white,
-          surfaceTintColor: Colors.transparent,
-          elevation: 0,
-          centerTitle: false,
-          systemOverlayStyle: SystemUiOverlayStyle.dark,
-          titleTextStyle: GoogleFonts.plusJakartaSans(
-            color: AppColors.textPrimary,
-            fontSize: 20,
-            fontWeight: FontWeight.w800,
-            letterSpacing: -0.5,
-          ),
-          iconTheme: IconThemeData(color: AppColors.textPrimary, size: 24),
-        ),
-
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.primary,
-            foregroundColor: Colors.white,
-            minimumSize: const Size(double.infinity, 56),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            elevation: 0,
-            textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, letterSpacing: 0.3),
-          ),
-        ),
-        
-        outlinedButtonTheme: OutlinedButtonThemeData(
-          style: OutlinedButton.styleFrom(
-            foregroundColor: AppColors.textPrimary,
-            minimumSize: const Size(double.infinity, 56),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            side: const BorderSide(color: AppColors.border, width: 1.5),
-            textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-          ),
-        ),
-
-        inputDecorationTheme: InputDecorationTheme(
-          filled: true,
-          fillColor: AppColors.surface,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(16),
-            borderSide: const BorderSide(color: AppColors.border, width: 1),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(16),
-            borderSide: const BorderSide(color: AppColors.border, width: 1),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(16),
-            borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
-          ),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-          hintStyle: const TextStyle(color: AppColors.textSecondary, fontSize: 14),
-          labelStyle: const TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w500),
-        ),
-
-        dividerTheme: const DividerThemeData(
-          color: AppColors.border,
-          thickness: 1,
-          space: 1,
-        ),
-
-        iconTheme: const IconThemeData(
-          color: AppColors.textPrimary,
-          weight: 300, 
-        ),
-      ),
+      theme: RateBridgeTheme.light(),
       localizationsDelegates: const [
         AppLocalizations.delegate,
         GlobalMaterialLocalizations.delegate,

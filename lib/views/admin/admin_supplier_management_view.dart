@@ -1,16 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import '../../models/user_model.dart';
 import '../../models/supplier_model.dart';
 import '../../viewmodels/admin_viewmodel.dart';
-import '../../constants/app_colors.dart';
+import '../../theme/admin_theme.dart';
 import '../../utils/pakistan_validators.dart';
 import '../../widgets/admin/admin_widgets.dart';
 
 class AdminSupplierManagementView extends StatefulWidget {
-  const AdminSupplierManagementView({super.key});
+  final bool embedded;
+
+  const AdminSupplierManagementView({super.key, this.embedded = false});
 
   @override
   State<AdminSupplierManagementView> createState() =>
@@ -37,16 +40,42 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
   Widget build(BuildContext context) {
     final adminVM = Provider.of<AdminViewModel>(context);
 
+    final content = TabBarView(
+      controller: _tabController,
+      children: [
+        _buildSupplierList('pending', adminVM),
+        _buildSupplierList('active', adminVM),
+        _buildSupplierList('suspended', adminVM),
+        _buildSupplierList('rejected', adminVM),
+      ],
+    );
+
+    if (widget.embedded) {
+      return Column(
+        children: [
+          Material(
+            color: AdminColors.navy,
+            child: TabBar(
+              controller: _tabController,
+              tabs: const [
+                Tab(text: 'Pending'),
+                Tab(text: 'Active'),
+                Tab(text: 'Suspended'),
+                Tab(text: 'Rejected'),
+              ],
+            ),
+          ),
+          Expanded(child: content),
+        ],
+      );
+    }
+
     return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('Supplier Management',
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+      backgroundColor: AdminColors.screenBg,
+      appBar: AdminAppBar(
+        title: 'Supplier Management',
         bottom: TabBar(
           controller: _tabController,
-          indicatorColor: AppColors.primary,
-          labelColor: AppColors.primary,
-          unselectedLabelColor: Colors.grey,
           tabs: const [
             Tab(text: 'Pending'),
             Tab(text: 'Active'),
@@ -55,15 +84,7 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
           ],
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _buildSupplierList('pending', adminVM),
-          _buildSupplierList('active', adminVM),
-          _buildSupplierList('suspended', adminVM),
-          _buildSupplierList('rejected', adminVM),
-        ],
-      ),
+      body: content,
     );
   }
 
@@ -131,16 +152,9 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
     final rejectionReason =
         supplier.rejectionReason ?? profile?.rejectionReason ?? '';
 
-    return Card(
+    return AdminCard(
       margin: const EdgeInsets.only(bottom: 16),
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: AppColors.border),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
+      child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Row(
@@ -148,9 +162,9 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
               children: [
                 CircleAvatar(
                   radius: 24,
-                  backgroundColor: AppColors.supplierAccent.withValues(alpha: 0.1),
+                  backgroundColor: AdminColors.amber.withValues(alpha: 0.1),
                   child: const Icon(Icons.storefront_rounded,
-                      color: AppColors.supplierAccent),
+                      color: AdminColors.amber),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -162,14 +176,14 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
                               fontWeight: FontWeight.bold, fontSize: 16)),
                       Text(supplier.email,
                           style: const TextStyle(
-                              color: AppColors.textSecondary, fontSize: 12)),
+                              color: AdminColors.textGrey, fontSize: 12)),
                       if (businessType.isNotEmpty)
                         Padding(
                           padding: const EdgeInsets.only(top: 4),
                           child: Text(
                             businessType,
                             style: const TextStyle(
-                              color: AppColors.primary,
+                              color: AdminColors.navy,
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
                             ),
@@ -185,19 +199,19 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
             Row(
               children: [
                 const Icon(Icons.location_on_outlined,
-                    size: 14, color: AppColors.textSecondary),
+                    size: 14, color: AdminColors.textGrey),
                 const SizedBox(width: 4),
                 Text(city,
                     style: const TextStyle(
-                        fontSize: 12, color: AppColors.textSecondary)),
+                        fontSize: 12, color: AdminColors.textGrey)),
                 const SizedBox(width: 16),
                 const Icon(Icons.calendar_today_outlined,
-                    size: 14, color: AppColors.textSecondary),
+                    size: 14, color: AdminColors.textGrey),
                 const SizedBox(width: 4),
                 Text(
                   DateFormat('MMM d, yyyy').format(supplier.createdAt),
                   style: const TextStyle(
-                      fontSize: 12, color: AppColors.textSecondary),
+                      fontSize: 12, color: AdminColors.textGrey),
                 ),
               ],
             ),
@@ -207,11 +221,11 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
                 child: Row(
                   children: [
                     const Icon(Icons.phone_outlined,
-                        size: 14, color: AppColors.textSecondary),
+                        size: 14, color: AdminColors.textGrey),
                     const SizedBox(width: 4),
                     Text(supplier.phone,
                         style: const TextStyle(
-                            fontSize: 12, color: AppColors.textSecondary)),
+                            fontSize: 12, color: AdminColors.textGrey)),
                   ],
                 ),
               ),
@@ -255,12 +269,12 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
                 const SizedBox(height: 4),
                 const Text(
                   'Delivery coverage',
-                  style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                  style: TextStyle(fontSize: 12, color: AdminColors.textGrey),
                 ),
                 const SizedBox(height: 8),
                 AdminChipList(
                   items: profile?.deliveryCoverageAreas ?? const [],
-                  color: AppColors.supplierAccent,
+                  color: AdminColors.amber,
                 ),
               ],
             ),
@@ -283,7 +297,7 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
               children: [
                 AdminChipList(
                   items: profile?.declaredCategories ?? profile?.categories ?? const [],
-                  color: AppColors.primary,
+                  color: AdminColors.navy,
                 ),
               ],
             ),
@@ -293,9 +307,9 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
                 width: double.infinity,
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: AppColors.danger.withValues(alpha: 0.06),
+                  color: AdminColors.red.withValues(alpha: 0.06),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppColors.danger.withValues(alpha: 0.2)),
+                  border: Border.all(color: AdminColors.red.withValues(alpha: 0.2)),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -305,7 +319,7 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
-                        color: AppColors.danger,
+                        color: AdminColors.red,
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -318,7 +332,6 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
             _buildActionButtons(supplier, adminVM),
           ],
         ),
-      ),
     );
   }
 
@@ -342,19 +355,12 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
               'This will activate the supplier and grant access to their dashboard.',
               () => adminVM.approveSupplier(supplier.uid),
             ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
-              foregroundColor: Colors.white,
-              elevation: 0,
-            ),
+            style: AdminTheme.primaryButtonStyle(height: 46),
             child: const Text('Approve'),
           ),
           OutlinedButton(
             onPressed: () => _showRejectDialog(context, supplier.uid, adminVM),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: Colors.red,
-              side: const BorderSide(color: Colors.red),
-            ),
+            style: AdminTheme.destructiveButtonStyle(),
             child: const Text('Reject'),
           ),
         ],
@@ -366,25 +372,19 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
               'The supplier will lose dashboard access immediately.',
               () => adminVM.suspendSupplier(supplier.uid),
             ),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: Colors.amber,
-              side: const BorderSide(color: Colors.amber),
-            ),
+            style: AdminTheme.destructiveButtonStyle(),
             child: const Text('Suspend'),
           ),
         ],
         if (status == 'suspended' || status == 'rejected') ...[
-          OutlinedButton(
+          ElevatedButton(
             onPressed: () => _confirmAction(
               context,
               'Activate Supplier?',
               'The supplier will regain full access to the platform.',
               () => adminVM.approveSupplier(supplier.uid),
             ),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: Colors.green,
-              side: const BorderSide(color: Colors.green),
-            ),
+            style: AdminTheme.primaryButtonStyle(height: 46),
             child: const Text('Activate'),
           ),
         ],
@@ -396,10 +396,7 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
             () => adminVM.deleteSupplierPermanently(supplier.uid),
             isDestructive: true,
           ),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: Colors.red,
-            side: const BorderSide(color: Colors.red),
-          ),
+          style: AdminTheme.destructiveButtonStyle(),
           child: const Text('Delete'),
         ),
       ],
@@ -444,7 +441,7 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
             child: Text(
               'CONFIRM',
               style: TextStyle(
-                color: isDestructive ? Colors.red : AppColors.primary,
+                color: isDestructive ? AdminColors.red : AdminColors.navy,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -466,9 +463,8 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
         title: const Text('Reject Supplier Application'),
         content: TextField(
           controller: reasonController,
-          decoration: const InputDecoration(
+          decoration: AdminTheme.inputDecoration(
             labelText: 'Reason for rejection',
-            border: OutlineInputBorder(),
             hintText: 'Shown to the applicant',
           ),
           maxLines: 2,
@@ -484,8 +480,13 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
               await adminVM.rejectSupplier(uid, reason);
               if (context.mounted) Navigator.pop(context);
             },
-            child: const Text('REJECT',
-                style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+            child: Text(
+              'REJECT',
+              style: GoogleFonts.plusJakartaSans(
+                color: AdminColors.red,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ),
         ],
       ),

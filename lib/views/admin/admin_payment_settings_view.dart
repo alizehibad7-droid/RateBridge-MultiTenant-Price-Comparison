@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
-import '../../constants/app_colors.dart';
+import '../../theme/admin_theme.dart';
 import '../../models/payment_details_config.dart';
 import '../../viewmodels/subscription_viewmodel.dart';
 
@@ -59,7 +60,8 @@ class _AdminPaymentSettingsViewState extends State<AdminPaymentSettingsView> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(vm.error ?? vm.successMessage ?? 'Saved'),
-        backgroundColor: vm.error != null ? AppColors.error : AppColors.success,
+        backgroundColor:
+            vm.error != null ? AdminColors.red : AdminColors.green,
       ),
     );
   }
@@ -69,22 +71,19 @@ class _AdminPaymentSettingsViewState extends State<AdminPaymentSettingsView> {
     final vm = context.watch<SubscriptionViewModel>();
 
     return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('Payment Details',
-            style: TextStyle(fontWeight: FontWeight.w800)),
-      ),
+      backgroundColor: AdminColors.screenBg,
+      appBar: const AdminAppBar(title: 'Payment Details'),
       body: ListView(
         padding: const EdgeInsets.all(24),
         children: [
-          const Text(
+          Text(
             'These details are shown to CEOs when they pay for a subscription via JazzCash or bank transfer.',
-            style: TextStyle(color: AppColors.textSecondary, height: 1.4),
+            style: AdminTheme.mutedStyle().copyWith(height: 1.4),
           ),
           const SizedBox(height: 24),
           TextField(
             controller: _jazzCashController,
-            decoration: const InputDecoration(
+            decoration: AdminTheme.inputDecoration(
               labelText: 'JazzCash number',
               hintText: '03XX XXXXXXX',
             ),
@@ -92,26 +91,23 @@ class _AdminPaymentSettingsViewState extends State<AdminPaymentSettingsView> {
           const SizedBox(height: 16),
           TextField(
             controller: _bankNameController,
-            decoration: const InputDecoration(labelText: 'Bank name'),
+            decoration: AdminTheme.inputDecoration(labelText: 'Bank name'),
           ),
           const SizedBox(height: 16),
           TextField(
             controller: _accountTitleController,
-            decoration: const InputDecoration(labelText: 'Account title'),
+            decoration: AdminTheme.inputDecoration(labelText: 'Account title'),
           ),
           const SizedBox(height: 16),
           TextField(
             controller: _accountNumberController,
-            decoration: const InputDecoration(labelText: 'Bank account number'),
+            decoration:
+                AdminTheme.inputDecoration(labelText: 'Bank account number'),
           ),
           const SizedBox(height: 28),
           ElevatedButton(
             onPressed: vm.isLoading ? null : _save,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 14),
-            ),
+            style: AdminTheme.primaryButtonStyle(height: 52),
             child: vm.isLoading
                 ? const SizedBox(
                     height: 20,
@@ -121,7 +117,12 @@ class _AdminPaymentSettingsViewState extends State<AdminPaymentSettingsView> {
                       color: Colors.white,
                     ),
                   )
-                : const Text('Save payment details'),
+                : Text(
+                    'Save payment details',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
           ),
         ],
       ),

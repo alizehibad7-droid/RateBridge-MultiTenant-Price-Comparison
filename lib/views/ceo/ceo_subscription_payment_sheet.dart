@@ -1,10 +1,11 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
-import '../../constants/app_colors.dart';
+import '../../theme/ceo_theme.dart';
 import '../../models/payment_details_config.dart';
 import '../../models/subscription_model.dart';
 import '../../repositories/company_repository.dart';
@@ -51,18 +52,19 @@ class _CeoSubscriptionPaymentSheetState
   Future<void> _showImageSourceSheet() async {
     final source = await showModalBottomSheet<ImageSource>(
       context: context,
+      backgroundColor: CeoColors.screenBg,
       builder: (ctx) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
               leading: const Icon(Icons.photo_library_outlined),
-              title: const Text('Gallery'),
+              title: Text('Gallery', style: CeoTheme.bodyStyle()),
               onTap: () => Navigator.pop(ctx, ImageSource.gallery),
             ),
             ListTile(
               leading: const Icon(Icons.photo_camera_outlined),
-              title: const Text('Camera'),
+              title: Text('Camera', style: CeoTheme.bodyStyle()),
               onTap: () => Navigator.pop(ctx, ImageSource.camera),
             ),
           ],
@@ -115,7 +117,7 @@ class _CeoSubscriptionPaymentSheetState
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(vm.successMessage ?? 'Payment submitted'),
-        backgroundColor: AppColors.success,
+        backgroundColor: CeoColors.green,
       ),
     );
   }
@@ -130,6 +132,7 @@ class _CeoSubscriptionPaymentSheetState
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: CeoColors.border),
       ),
       child: Padding(
         padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + bottom),
@@ -143,30 +146,27 @@ class _CeoSubscriptionPaymentSheetState
                   Expanded(
                     child: Text(
                       'Pay for ${widget.plan.name}',
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
-                      ),
+                      style: CeoTheme.titleStyle(size: 18),
                     ),
                   ),
                   IconButton(
                     onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.close),
+                    icon: const Icon(Icons.close, color: CeoColors.navy),
                   ),
                 ],
               ),
               Text(
                 'Rs. ${widget.plan.priceRs}',
-                style: const TextStyle(
+                style: GoogleFonts.plusJakartaSans(
                   fontSize: 24,
                   fontWeight: FontWeight.w900,
-                  color: AppColors.primary,
+                  color: CeoColors.navy,
                 ),
               ),
               const SizedBox(height: 16),
-              const Text(
+              Text(
                 'Pay outside the app via JazzCash or bank transfer, then upload your payment screenshot.',
-                style: TextStyle(color: AppColors.textSecondary, height: 1.4),
+                style: CeoTheme.mutedStyle().copyWith(height: 1.4),
               ),
               const SizedBox(height: 20),
               _PaymentDetailsCard(details: details),
@@ -176,6 +176,7 @@ class _CeoSubscriptionPaymentSheetState
                   onPressed: _submitting ? null : _showImageSourceSheet,
                   icon: const Icon(Icons.upload_file_outlined, size: 18),
                   label: const Text('Upload payment screenshot'),
+                  style: CeoTheme.secondaryButtonStyle(height: 44),
                 )
               else
                 _ProofPreview(
@@ -188,11 +189,7 @@ class _CeoSubscriptionPaymentSheetState
               const SizedBox(height: 20),
               ElevatedButton(
                 onPressed: _submitting || _proofFile == null ? null : _submit,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                ),
+                style: CeoTheme.primaryButtonStyle(height: 48),
                 child: _submitting
                     ? const SizedBox(
                         height: 20,
@@ -202,10 +199,7 @@ class _CeoSubscriptionPaymentSheetState
                           color: Colors.white,
                         ),
                       )
-                    : const Text(
-                        'Submit payment for review',
-                        style: TextStyle(fontWeight: FontWeight.w700),
-                      ),
+                    : const Text('Submit payment for review'),
               ),
             ],
           ),
@@ -226,48 +220,55 @@ class _PaymentDetailsCard extends StatelessWidget {
       return Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: AppColors.warning.withValues(alpha: 0.1),
+          color: CeoColors.amber.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.warning.withValues(alpha: 0.3)),
+          border: Border.all(color: CeoColors.amber.withValues(alpha: 0.3)),
         ),
-        child: const Text(
+        child: Text(
           'Payment details are not configured yet. Please contact support.',
-          style: TextStyle(fontSize: 13),
+          style: CeoTheme.mutedStyle(size: 13),
         ),
       );
     }
 
     return Container(
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border),
-      ),
+      decoration: CeoTheme.cardDecoration(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Payment details',
-            style: TextStyle(fontWeight: FontWeight.w700),
-          ),
+          Text('Payment details', style: CeoTheme.titleStyle(size: 14)),
           if (details.jazzCashNumber.trim().isNotEmpty) ...[
             const SizedBox(height: 12),
-            const Text('JazzCash', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
-            Text(details.jazzCashNumber, style: const TextStyle(fontWeight: FontWeight.w600)),
+            const CeoSectionLabel('JazzCash'),
+            Text(
+              details.jazzCashNumber,
+              style: GoogleFonts.plusJakartaSans(
+                fontWeight: FontWeight.w600,
+                color: CeoColors.navy,
+              ),
+            ),
           ],
           if (details.bankName.trim().isNotEmpty) ...[
             const SizedBox(height: 12),
-            const Text('Bank', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
-            Text(details.bankName, style: const TextStyle(fontWeight: FontWeight.w600)),
+            const CeoSectionLabel('Bank'),
+            Text(
+              details.bankName,
+              style: GoogleFonts.plusJakartaSans(
+                fontWeight: FontWeight.w600,
+                color: CeoColors.navy,
+              ),
+            ),
           ],
           if (details.accountTitle.trim().isNotEmpty) ...[
             const SizedBox(height: 8),
-            Text('Account title: ${details.accountTitle}'),
+            Text('Account title: ${details.accountTitle}',
+                style: CeoTheme.bodyStyle()),
           ],
           if (details.bankAccountNumber.trim().isNotEmpty) ...[
             const SizedBox(height: 4),
-            Text('Account #: ${details.bankAccountNumber}'),
+            Text('Account #: ${details.bankAccountNumber}',
+                style: CeoTheme.bodyStyle()),
           ],
         ],
       ),
@@ -292,7 +293,8 @@ class _ProofPreview extends StatelessWidget {
       children: [
         ClipRRect(
           borderRadius: BorderRadius.circular(12),
-          child: Image.file(file, height: 160, width: double.infinity, fit: BoxFit.cover),
+          child: Image.file(file,
+              height: 160, width: double.infinity, fit: BoxFit.cover),
         ),
         if (onRemove != null)
           Positioned(
@@ -305,7 +307,7 @@ class _ProofPreview extends StatelessWidget {
                 padding: EdgeInsets.zero,
                 iconSize: 18,
                 onPressed: onRemove,
-                icon: const Icon(Icons.close),
+                icon: const Icon(Icons.close, color: CeoColors.navy),
               ),
             ),
           ),

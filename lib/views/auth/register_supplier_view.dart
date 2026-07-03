@@ -20,7 +20,7 @@ import '../../viewmodels/auth_viewmodel.dart';
 import '../../widgets/auth/auth_text_field.dart';
 import '../../widgets/auth/auth_widgets.dart';
 
-const _supplierAccent = AppColors.supplierAccent;
+const _supplierAccent = AppColors.amber;
 const _totalSteps = 3;
 
 class RegisterSupplierView extends StatefulWidget {

@@ -120,29 +120,18 @@ class _InviteLandingViewState extends State<InviteLandingView> {
     final theme = Theme.of(context);
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: AppColors.screenBg,
       appBar: AppBar(
-        title: Text(
-          "Team Invitation",
-          style: theme.textTheme.titleLarge?.copyWith(
-            fontWeight: FontWeight.w800,
-            fontSize: 18,
-            letterSpacing: -0.5,
-          ),
-        ),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        surfaceTintColor: Colors.transparent,
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1),
-          child: Container(color: AppColors.border, height: 1),
-        ),
+        title: const Text('Team Invitation'),
       ),
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 32.0, vertical: 40.0),
           child: _isValidating
-              ? const CircularProgressIndicator(color: AppColors.primary, strokeWidth: 2)
+              ? const CircularProgressIndicator(
+                  color: AppColors.amber,
+                  strokeWidth: 2,
+                )
               : _validationError != null
                   ? _buildErrorUI(_validationError!, theme)
                   : _buildInvitationDetailsUI(authViewModel, inviteVM, theme),
@@ -158,7 +147,7 @@ class _InviteLandingViewState extends State<InviteLandingView> {
         Container(
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
-            color: AppColors.error.withOpacity(0.08),
+            color: AppColors.error.withValues(alpha: 0.08),
             shape: BoxShape.circle,
           ),
           child: const Icon(Icons.error_outline_rounded, size: 64, color: AppColors.error, weight: 300),
@@ -200,10 +189,15 @@ class _InviteLandingViewState extends State<InviteLandingView> {
         Container(
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
-            color: AppColors.primary.withOpacity(0.08),
+            color: AppColors.amber.withValues(alpha: 0.12),
             shape: BoxShape.circle,
           ),
-          child: const Icon(Icons.mark_email_read_outlined, size: 64, color: AppColors.primary, weight: 300),
+          child: const Icon(
+            Icons.mark_email_read_outlined,
+            size: 64,
+            color: AppColors.navy,
+            weight: 300,
+          ),
         ),
         const SizedBox(height: 32),
         Text(
@@ -223,10 +217,14 @@ class _InviteLandingViewState extends State<InviteLandingView> {
           padding: const EdgeInsets.all(28),
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(24),
+            borderRadius: BorderRadius.circular(12),
             border: Border.all(color: AppColors.border),
             boxShadow: [
-              BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 30, offset: const Offset(0, 10)),
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.05),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
             ],
           ),
           child: Column(

@@ -1,11 +1,12 @@
 // MVVM: View — no business logic
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import '../../viewmodels/auth_viewmodel.dart';
 import '../../viewmodels/ceo_viewmodel.dart';
 import '../../models/user_model.dart';
-import '../../constants/app_colors.dart';
+import '../../theme/ceo_theme.dart';
 import '../../constants/route_names.dart';
 import 'package:intl/intl.dart';
 
@@ -38,7 +39,7 @@ class _CeoPendingViewState extends State<CeoPendingView> {
         }
 
         return Scaffold(
-          backgroundColor: AppColors.background,
+          backgroundColor: CeoColors.screenBg,
           body: SafeArea(
             child: Padding(
               padding: const EdgeInsets.all(32.0),
@@ -65,40 +66,34 @@ class _CeoPendingViewState extends State<CeoPendingView> {
           width: 100,
           height: 100,
           decoration: BoxDecoration(
-            color: Colors.amber.shade50,
+            color: CeoColors.amber.withValues(alpha: 0.12),
             shape: BoxShape.circle,
           ),
           child: const Icon(
             Icons.hourglass_empty_rounded,
             size: 56,
-            color: Colors.amber,
+            color: CeoColors.amber,
           ),
         ),
         const SizedBox(height: 32),
-        const Text(
+        Text(
           'Application Under Review',
-          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+          style: CeoTheme.titleStyle(size: 24),
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 16),
         Text(
           'Your company registration is under review.',
           textAlign: TextAlign.center,
-          style: TextStyle(
-            color: Colors.grey.shade600,
-            fontSize: 15,
-            height: 1.6,
-          ),
+          style: CeoTheme.mutedStyle(size: 15).copyWith(height: 1.6),
         ),
         const SizedBox(height: 32),
         if (user != null)
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.amber.shade200),
+            decoration: CeoTheme.cardDecoration().copyWith(
+              border: Border.all(color: CeoColors.amber.withValues(alpha: 0.3)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -109,16 +104,16 @@ class _CeoPendingViewState extends State<CeoPendingView> {
                       width: 8,
                       height: 8,
                       decoration: const BoxDecoration(
-                        color: Colors.amber,
+                        color: CeoColors.amber,
                         shape: BoxShape.circle,
                       ),
                     ),
                     const SizedBox(width: 8),
-                    const Text(
+                    Text(
                       'Status: Pending Admin Approval',
-                      style: TextStyle(
+                      style: GoogleFonts.plusJakartaSans(
                         fontWeight: FontWeight.w600,
-                        color: Colors.amber,
+                        color: CeoColors.darkAmber,
                       ),
                     ),
                   ],
@@ -145,7 +140,7 @@ class _CeoPendingViewState extends State<CeoPendingView> {
             const SizedBox(width: 12),
             Text(
               'Waiting for admin review...',
-              style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+              style: CeoTheme.mutedStyle(size: 13),
             ),
           ],
         ),
@@ -165,11 +160,11 @@ class _CeoPendingViewState extends State<CeoPendingView> {
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         const Spacer(),
-        const Icon(Icons.cancel_rounded, size: 80, color: AppColors.danger),
+        const Icon(Icons.cancel_rounded, size: 80, color: CeoColors.red),
         const SizedBox(height: 24),
-        const Text(
+        Text(
           'Registration Rejected',
-          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+          style: CeoTheme.titleStyle(size: 24),
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 16),
@@ -177,26 +172,24 @@ class _CeoPendingViewState extends State<CeoPendingView> {
           width: double.infinity,
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: AppColors.dangerBg,
+            color: CeoColors.red.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.danger.withValues(alpha: 0.2)),
+            border: Border.all(color: CeoColors.red.withValues(alpha: 0.2)),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 'REASON:',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.danger,
-                  fontSize: 12,
+                style: CeoTheme.sectionHeaderStyle().copyWith(
+                  color: CeoColors.red,
                 ),
               ),
               const SizedBox(height: 4),
               Text(
                 user.rejectionReason ??
                     'Information provided was insufficient for verification.',
-                style: const TextStyle(color: AppColors.danger),
+                style: GoogleFonts.plusJakartaSans(color: CeoColors.red),
               ),
             ],
           ),
@@ -209,16 +202,14 @@ class _CeoPendingViewState extends State<CeoPendingView> {
   }
 
   Widget _signOutButton(BuildContext context, AuthViewModel authVM) {
-    return TextButton.icon(
+    return OutlinedButton.icon(
       onPressed: () async {
         await authVM.signOut();
         if (context.mounted) context.go(RouteNames.login);
       },
-      icon: const Icon(Icons.logout, color: Colors.red, size: 18),
-      label: const Text(
-        'Sign Out',
-        style: TextStyle(color: Colors.red, fontWeight: FontWeight.w600),
-      ),
+      style: CeoTheme.destructiveButtonStyle(height: 44),
+      icon: const Icon(Icons.logout, size: 18),
+      label: const Text('Sign Out'),
     );
   }
 
@@ -227,13 +218,14 @@ class _CeoPendingViewState extends State<CeoPendingView> {
       padding: const EdgeInsets.only(top: 8),
       child: Row(
         children: [
-          Text(
-            '$label: ',
-            style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
-          ),
+          Text('$label: ', style: CeoTheme.mutedStyle(size: 13)),
           Text(
             value,
-            style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
+            style: GoogleFonts.plusJakartaSans(
+              fontWeight: FontWeight.w500,
+              fontSize: 13,
+              color: CeoColors.navy,
+            ),
           ),
         ],
       ),

@@ -35,7 +35,9 @@ class SubscriptionGateWidget extends StatelessWidget {
         
         // If snapshot is still loading and we don't have data yet, show a loader or just the blurred child
         if (snapshot.connectionState == ConnectionState.waiting && sub == null) {
-          return const Center(child: CircularProgressIndicator());
+          return const Center(
+            child: CircularProgressIndicator(color: AppColors.amber),
+          );
         }
 
         if (aiUnlocked) return child;
@@ -61,8 +63,8 @@ class SubscriptionGateWidget extends StatelessWidget {
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
                       colors: [
-                        AppColors.sidebarBackground.withOpacity(0.4),
-                        AppColors.background.withOpacity(0.8),
+                        AppColors.navy.withValues(alpha: 0.4),
+                        AppColors.screenBg.withValues(alpha: 0.9),
                       ],
                     ),
                   ),
@@ -72,11 +74,18 @@ class SubscriptionGateWidget extends StatelessWidget {
                       Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: AppColors.primary.withOpacity(0.1),
+                          color: AppColors.amber.withValues(alpha: 0.12),
                           shape: BoxShape.circle,
-                          border: Border.all(color: AppColors.primary.withOpacity(0.2), width: 1),
+                          border: Border.all(
+                            color: AppColors.amber.withValues(alpha: 0.3),
+                            width: 1,
+                          ),
                         ),
-                        child: const Icon(Icons.lock_outline_rounded, color: AppColors.primary, size: 32),
+                        child: const Icon(
+                          Icons.lock_outline_rounded,
+                          color: AppColors.navy,
+                          size: 32,
+                        ),
                       ),
                       const SizedBox(height: 20),
                       Text(
@@ -103,9 +112,11 @@ class SubscriptionGateWidget extends StatelessWidget {
                           padding: const EdgeInsets.symmetric(horizontal: 40),
                           child: ElevatedButton(
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.primary,
+                              backgroundColor: AppColors.amber,
                               minimumSize: const Size(160, 48),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
                             ),
                             onPressed: () => context.go(RouteNames.ceoSubscription),
                             child: const Text('Upgrade Now'),
@@ -116,14 +127,14 @@ class SubscriptionGateWidget extends StatelessWidget {
                           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                           margin: const EdgeInsets.symmetric(horizontal: 32),
                           decoration: BoxDecoration(
-                            color: AppColors.infoBg.withOpacity(0.5),
+                            color: AppColors.amber.withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: const Text(
                             'Please ask your CEO to upgrade the company plan to unlock this feature.',
                             textAlign: TextAlign.center,
                             style: TextStyle(
-                              color: AppColors.primary,
+                              color: AppColors.navy,
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
                             ),

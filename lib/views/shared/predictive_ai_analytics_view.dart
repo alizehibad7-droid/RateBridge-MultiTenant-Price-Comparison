@@ -32,24 +32,9 @@ class _PredictiveAiAnalyticsViewState extends State<PredictiveAiAnalyticsView> {
     final theme = Theme.of(context);
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: AppColors.screenBg,
       appBar: AppBar(
-        title: Text(
-          "Gemini Analytics",
-          style: theme.textTheme.titleLarge?.copyWith(
-            fontWeight: FontWeight.w800,
-            fontSize: 18,
-            letterSpacing: -0.5,
-          ),
-        ),
-        centerTitle: false,
-        backgroundColor: Colors.white,
-        elevation: 0,
-        surfaceTintColor: Colors.transparent,
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1),
-          child: Container(color: AppColors.border, height: 1),
-        ),
+        title: const Text('Gemini Analytics'),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
@@ -84,13 +69,13 @@ class _PredictiveAiAnalyticsViewState extends State<PredictiveAiAnalyticsView> {
               padding: const EdgeInsets.all(28),
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: AppColors.border.withOpacity(0.8)),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.border),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.03),
-                    blurRadius: 30,
-                    offset: const Offset(0, 10),
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
                   ),
                 ],
               ),
@@ -102,10 +87,15 @@ class _PredictiveAiAnalyticsViewState extends State<PredictiveAiAnalyticsView> {
                       Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: AppColors.primary.withOpacity(0.08),
+                          color: AppColors.amber.withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: const Icon(Icons.analytics_outlined, color: AppColors.primary, size: 20, weight: 300),
+                        child: const Icon(
+                          Icons.analytics_outlined,
+                          color: AppColors.navy,
+                          size: 20,
+                          weight: 300,
+                        ),
                       ),
                       const SizedBox(width: 14),
                       Text(
@@ -126,7 +116,7 @@ class _PredictiveAiAnalyticsViewState extends State<PredictiveAiAnalyticsView> {
                     style: const TextStyle(fontSize: 15, color: AppColors.textPrimary, fontWeight: FontWeight.w600),
                     decoration: InputDecoration(
                       hintText: "Enter market scenario...",
-                      fillColor: AppColors.surface, // Soft off-white
+                      fillColor: Colors.white,
                       filled: true,
                       contentPadding: const EdgeInsets.all(20),
                       border: OutlineInputBorder(
@@ -153,19 +143,21 @@ class _PredictiveAiAnalyticsViewState extends State<PredictiveAiAnalyticsView> {
                           duration: const Duration(milliseconds: 200),
                           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                           decoration: BoxDecoration(
-                            color: isSelected ? AppColors.primary : Colors.white,
+                            color: isSelected
+                                ? AppColors.amber.withValues(alpha: 0.15)
+                                : Colors.white,
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
-                              color: isSelected ? AppColors.primary : AppColors.border,
+                              color: isSelected ? AppColors.amber : AppColors.border,
                               width: 1.5,
                             ),
                           ),
                           child: Text(
                             scenario,
                             style: TextStyle(
-                              fontSize: 12, 
+                              fontSize: 12,
                               fontWeight: FontWeight.w700,
-                              color: isSelected ? Colors.white : AppColors.textSecondary,
+                              color: isSelected ? AppColors.navy : AppColors.textSecondary,
                             ),
                           ),
                         ),
@@ -184,8 +176,10 @@ class _PredictiveAiAnalyticsViewState extends State<PredictiveAiAnalyticsView> {
                         onPressed: aiViewModel.isAnalyzing ? null : () => aiViewModel.runMarketAnalysis(_promptController.text),
                         style: ElevatedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 20),
-                          backgroundColor: AppColors.primary,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          backgroundColor: AppColors.amber,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                           elevation: 0,
                         ),
                         child: aiViewModel.isAnalyzing 
@@ -230,9 +224,16 @@ class _PredictiveAiAnalyticsViewState extends State<PredictiveAiAnalyticsView> {
                     child: Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: AppColors.surface,
+                        color: Colors.white,
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(color: AppColors.border),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.05),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
                       ),
                       child: const Icon(Icons.share_outlined, size: 20, color: AppColors.textPrimary, weight: 300),
                     ),
@@ -249,7 +250,7 @@ class _PredictiveAiAnalyticsViewState extends State<PredictiveAiAnalyticsView> {
                     children: [
                       const CircularProgressIndicator(
                         strokeWidth: 3, 
-                        valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+                        valueColor: AlwaysStoppedAnimation<Color>(AppColors.amber),
                       ),
                       const SizedBox(height: 24),
                       Text(
@@ -269,15 +270,22 @@ class _PredictiveAiAnalyticsViewState extends State<PredictiveAiAnalyticsView> {
                 width: double.infinity,
                 padding: const EdgeInsets.all(28),
                 decoration: BoxDecoration(
-                  color: AppColors.surface, // Depth through soft off-white depth
-                  borderRadius: BorderRadius.circular(24),
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: AppColors.border),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.05),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
                 child: Text(
                   aiViewModel.statusFeedback,
                   style: theme.textTheme.bodyLarge?.copyWith(
                     height: 1.8,
-                    color: AppColors.textPrimary.withOpacity(0.9),
+                    color: AppColors.navy.withValues(alpha: 0.9),
                     fontSize: 15,
                     fontWeight: FontWeight.w500,
                   ),
@@ -291,13 +299,13 @@ class _PredictiveAiAnalyticsViewState extends State<PredictiveAiAnalyticsView> {
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: AppColors.primary.withOpacity(0.15)),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.amber.withValues(alpha: 0.2)),
                 boxShadow: [
                   BoxShadow(
-                    color: AppColors.primary.withOpacity(0.04),
-                    blurRadius: 20,
-                    offset: const Offset(0, 4),
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
                   ),
                 ],
               ),
@@ -306,10 +314,15 @@ class _PredictiveAiAnalyticsViewState extends State<PredictiveAiAnalyticsView> {
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: AppColors.primary.withOpacity(0.08),
+                      color: AppColors.amber.withValues(alpha: 0.12),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.lightbulb_outline, color: AppColors.primary, size: 22, weight: 300),
+                    child: const Icon(
+                      Icons.lightbulb_outline,
+                      color: AppColors.navy,
+                      size: 22,
+                      weight: 300,
+                    ),
                   ),
                   const SizedBox(width: 16),
                   Expanded(

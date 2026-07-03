@@ -182,10 +182,10 @@ class _RegisterFieldUserViewState extends State<RegisterFieldUserView> {
                       width: 44,
                       height: 44,
                       decoration: BoxDecoration(
-                        color: AppColors.fieldAccent.withOpacity(0.1),
+                        color: AppColors.amber.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: const Icon(Icons.group_outlined, color: AppColors.fieldAccent),
+                      child: const Icon(Icons.group_outlined, color: AppColors.amber),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -437,7 +437,7 @@ class _RegisterFieldUserViewState extends State<RegisterFieldUserView> {
                 AuthPrimaryButton(
                   label: 'Create Account',
                   isLoading: authVm.isLoading,
-                  color: AppColors.fieldAccent,
+                  color: AppColors.amber,
                   onPressed: canSubmit ? () => _submit(authVm) : null,
                 ),
                 const SizedBox(height: 10),

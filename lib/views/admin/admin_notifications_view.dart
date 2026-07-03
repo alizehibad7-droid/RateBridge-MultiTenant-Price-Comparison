@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../constants/app_colors.dart';
+import '../../theme/admin_theme.dart';
 import '../../utils/notification_utils.dart';
 import '../../widgets/app_notifications_scaffold.dart';
 
@@ -11,7 +11,7 @@ class AdminNotificationsView extends StatelessWidget {
   Widget build(BuildContext context) {
     return AppNotificationsScaffold(
       title: 'Notifications',
-      backgroundColor: AppColors.background,
+      backgroundColor: AdminColors.screenBg,
       onNotificationTap: navigateForAdminNotification,
     );
   }

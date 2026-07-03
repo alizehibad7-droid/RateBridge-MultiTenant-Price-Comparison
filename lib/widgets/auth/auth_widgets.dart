@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+
 import '../../utils/app_theme.dart';
 import '../../constants/app_colors.dart';
 
@@ -14,22 +16,26 @@ class AuthPrimaryButton extends StatelessWidget {
     required this.label,
     required this.onPressed,
     this.isLoading = false,
-    this.color = AppColors.primary,
+    this.color = AppColors.amber,
   });
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
       width: double.infinity,
-      height: 52,
+      height: 50,
       child: ElevatedButton(
         onPressed: isLoading ? null : onPressed,
         style: ElevatedButton.styleFrom(
           backgroundColor: color,
           foregroundColor: Colors.white,
-          disabledBackgroundColor: color.withOpacity(0.6),
+          disabledBackgroundColor: color.withValues(alpha: 0.5),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          textStyle: GoogleFonts.plusJakartaSans(
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
           ),
         ),
         child: isLoading
@@ -52,20 +58,20 @@ class StepBadge extends StatelessWidget {
   final String label;
   final Color color;
 
-  const StepBadge({super.key, required this.label, this.color = AppColors.primary});
+  const StepBadge({super.key, required this.label, this.color = AppColors.amber});
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(AppRadius.pill),
       ),
       child: Text(
         label,
         style: AppTextStyles.caption.copyWith(
-          color: color,
+          color: color == AppColors.amber ? AppColors.navy : color,
           fontWeight: FontWeight.w600,
           letterSpacing: 0.3,
         ),
@@ -86,7 +92,7 @@ class TrustInfoRow extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.subtitle,
-    this.color = AppColors.primary,
+    this.color = AppColors.amber,
   });
 
   @override
@@ -100,10 +106,10 @@ class TrustInfoRow extends StatelessWidget {
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
+              color: color.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(icon, color: color, size: 18),
+            child: Icon(icon, color: AppColors.navy, size: 18),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -141,15 +147,19 @@ class AuthFooter extends StatelessWidget {
           children: [
             TextButton(
               onPressed: () {},
-              child: const Text('Privacy Policy',
-                  style: TextStyle(fontSize: 12)),
+              child: Text(
+                'Privacy Policy',
+                style: AppTextStyles.caption.copyWith(fontSize: 12),
+              ),
             ),
             Text('|',
                 style: AppTextStyles.bodyMuted.copyWith(fontSize: 12)),
             TextButton(
               onPressed: () {},
-              child: const Text('Terms of Service',
-                  style: TextStyle(fontSize: 12)),
+              child: Text(
+                'Terms of Service',
+                style: AppTextStyles.caption.copyWith(fontSize: 12),
+              ),
             ),
           ],
         ),

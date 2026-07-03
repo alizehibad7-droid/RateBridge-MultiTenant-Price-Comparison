@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
-import '../../constants/app_colors.dart';
+import '../../theme/admin_theme.dart';
 import '../../models/transaction_model.dart';
 import '../../repositories/transaction_repository.dart';
 import '../../utils/app_exception.dart';
+import '../../widgets/admin/admin_widgets.dart';
 
 class AdminCommissionLedgerView extends StatefulWidget {
   const AdminCommissionLedgerView({super.key});
@@ -35,8 +37,9 @@ class _AdminCommissionLedgerViewState extends State<AdminCommissionLedgerView> {
             onPressed: () => Navigator.pop(ctx, false),
             child: const Text('Cancel'),
           ),
-          FilledButton(
+          ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
+            style: AdminTheme.primaryButtonStyle(height: 44),
             child: const Text('Mark as Settled'),
           ),
         ],
@@ -61,7 +64,7 @@ class _AdminCommissionLedgerViewState extends State<AdminCommissionLedgerView> {
             'Settled ${_currency.format(supplier.unsettledAmount)} from '
             '${supplier.supplierName}',
           ),
-          backgroundColor: AppColors.success,
+          backgroundColor: AdminColors.green,
         ),
       );
     } catch (e) {
@@ -88,7 +91,7 @@ class _AdminCommissionLedgerViewState extends State<AdminCommissionLedgerView> {
               child: Text(
                 snapshot.error.toString(),
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: AppColors.error),
+                style: GoogleFonts.plusJakartaSans(color: AdminColors.red),
               ),
             ),
           );
@@ -108,13 +111,18 @@ class _AdminCommissionLedgerViewState extends State<AdminCommissionLedgerView> {
                 padding: const EdgeInsets.all(12),
                 margin: const EdgeInsets.only(bottom: 12),
                 decoration: BoxDecoration(
-                  color: AppColors.dangerBg,
+                  color: AdminColors.red.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
+                  border: Border.all(
+                    color: AdminColors.red.withValues(alpha: 0.3),
+                  ),
                 ),
                 child: Text(
                   _errorMessage!,
-                  style: const TextStyle(color: AppColors.error, fontSize: 13),
+                  style: GoogleFonts.plusJakartaSans(
+                    color: AdminColors.red,
+                    fontSize: 13,
+                  ),
                 ),
               ),
             ],
@@ -125,28 +133,14 @@ class _AdminCommissionLedgerViewState extends State<AdminCommissionLedgerView> {
               currency: _currency,
             ),
             const SizedBox(height: 20),
-            const Text(
-              'OUTSTANDING COMMISSIONS',
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1.2,
-                color: AppColors.textSecondary,
-              ),
-            ),
+            const AdminSectionLabel('Outstanding Commissions'),
             const SizedBox(height: 12),
             if (ledger.suppliers.isEmpty)
-              Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppColors.border),
-                ),
-                child: const Center(
+              AdminCard(
+                child: Center(
                   child: Text(
                     'No suppliers with unsettled commissions.',
-                    style: TextStyle(color: AppColors.textSecondary),
+                    style: AdminTheme.mutedStyle(),
                   ),
                 ),
               )
@@ -190,7 +184,7 @@ class _SummaryStrip extends StatelessWidget {
                 label: 'Outstanding this month',
                 value: currency.format(outstanding),
                 icon: Icons.pending_actions_outlined,
-                color: AppColors.warning,
+                color: AdminColors.amber,
               ),
             ),
             const SizedBox(width: 10),
@@ -199,7 +193,7 @@ class _SummaryStrip extends StatelessWidget {
                 label: 'Collected this month',
                 value: currency.format(collected),
                 icon: Icons.check_circle_outline,
-                color: AppColors.success,
+                color: AdminColors.green,
               ),
             ),
           ],
@@ -209,7 +203,7 @@ class _SummaryStrip extends StatelessWidget {
           label: 'Grand total ever collected',
           value: currency.format(grandTotal),
           icon: Icons.account_balance_wallet_outlined,
-          color: AppColors.primary,
+          color: AdminColors.navy,
           fullWidth: true,
         ),
       ],
@@ -237,11 +231,7 @@ class _SummaryCard extends StatelessWidget {
     return Container(
       width: fullWidth ? double.infinity : null,
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border),
-      ),
+      decoration: AdminTheme.cardDecoration(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -249,21 +239,14 @@ class _SummaryCard extends StatelessWidget {
           const SizedBox(height: 10),
           Text(
             value,
-            style: const TextStyle(
+            style: GoogleFonts.plusJakartaSans(
               fontSize: 18,
-              fontWeight: FontWeight.w900,
-              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w700,
+              color: AdminColors.navy,
             ),
           ),
           const SizedBox(height: 4),
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w700,
-              color: AppColors.textSecondary,
-            ),
-          ),
+          Text(label, style: AdminTheme.mutedStyle(size: 10)),
         ],
       ),
     );
@@ -285,72 +268,65 @@ class _SupplierLedgerCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
+    return AdminCard(
       margin: const EdgeInsets.only(bottom: 10),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: const BorderSide(color: AppColors.border),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Row(
-          children: [
-            CircleAvatar(
-              radius: 20,
-              backgroundColor: AppColors.warning.withValues(alpha: 0.12),
-              child: const Icon(
-                Icons.storefront_outlined,
-                size: 18,
-                color: AppColors.warning,
-              ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 20,
+            backgroundColor: AdminColors.amber.withValues(alpha: 0.15),
+            child: const Icon(
+              Icons.storefront_outlined,
+              size: 18,
+              color: AdminColors.amber,
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    supplier.supplierName,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 14,
-                    ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  supplier.supplierName,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                    color: AdminColors.navy,
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${currency.format(supplier.unsettledAmount)} · '
-                    '${supplier.orderCount} order(s)',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.textSecondary,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '${currency.format(supplier.unsettledAmount)} · '
+                  '${supplier.orderCount} order(s)',
+                  style: AdminTheme.mutedStyle(size: 12),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          ElevatedButton(
+            onPressed: isSettling ? null : onSettle,
+            style: AdminTheme.primaryButtonStyle(height: 40).copyWith(
+              minimumSize: const WidgetStatePropertyAll(Size(0, 40)),
+              padding: const WidgetStatePropertyAll(
+                EdgeInsets.symmetric(horizontal: 12),
+              ),
+            ),
+            child: isSettling
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
                     ),
+                  )
+                : const Text(
+                    'Mark as Settled',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
                   ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            FilledButton(
-              onPressed: isSettling ? null : onSettle,
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              ),
-              child: isSettling
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Text(
-                      'Mark as Settled',
-                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
-                    ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

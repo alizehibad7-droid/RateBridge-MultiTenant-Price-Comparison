@@ -1,10 +1,16 @@
 import 'package:flutter/material.dart';
 
+import '../constants/app_colors.dart';
+
 class LoadingOverlayWidget extends StatelessWidget {
   final bool isLoading;
   final Widget child;
 
-  const LoadingOverlayWidget({super.key, required this.isLoading, required this.child});
+  const LoadingOverlayWidget({
+    super.key,
+    required this.isLoading,
+    required this.child,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -12,13 +18,16 @@ class LoadingOverlayWidget extends StatelessWidget {
       children: [
         child,
         if (isLoading)
-          const Opacity(
+          Opacity(
             opacity: 0.6,
-            child: ModalBarrier(dismissible: false, color: Colors.black),
+            child: ModalBarrier(
+              dismissible: false,
+              color: AppColors.navy.withValues(alpha: 0.4),
+            ),
           ),
         if (isLoading)
           const Center(
-            child: CircularProgressIndicator(color: Color(0xFF6366F1)),
+            child: CircularProgressIndicator(color: AppColors.amber),
           ),
       ],
     );

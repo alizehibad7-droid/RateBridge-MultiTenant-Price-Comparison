@@ -1,16 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import '../../viewmodels/admin_viewmodel.dart';
 import '../../models/user_model.dart';
 import '../../models/company_model.dart';
-import '../../constants/app_colors.dart';
+import '../../theme/admin_theme.dart';
 import '../../utils/pakistan_validators.dart';
 import '../../widgets/admin/admin_widgets.dart';
 
 class AdminCeoManagementView extends StatefulWidget {
-  const AdminCeoManagementView({super.key});
+  final bool embedded;
+
+  const AdminCeoManagementView({super.key, this.embedded = false});
 
   @override
   State<AdminCeoManagementView> createState() => _AdminCeoManagementViewState();
@@ -36,11 +39,40 @@ class _AdminCeoManagementViewState extends State<AdminCeoManagementView>
   Widget build(BuildContext context) {
     final adminVM = Provider.of<AdminViewModel>(context);
 
+    final content = TabBarView(
+      controller: _tabController,
+      children: [
+        _buildCeoStream('pending', adminVM),
+        _buildCeoStream('active', adminVM),
+        _buildCeoStream('suspended', adminVM),
+        _buildCeoStream('rejected', adminVM),
+      ],
+    );
+
+    if (widget.embedded) {
+      return Column(
+        children: [
+          Material(
+            color: AdminColors.navy,
+            child: TabBar(
+              controller: _tabController,
+              tabs: const [
+                Tab(text: 'Pending'),
+                Tab(text: 'Active'),
+                Tab(text: 'Suspended'),
+                Tab(text: 'Rejected'),
+              ],
+            ),
+          ),
+          Expanded(child: content),
+        ],
+      );
+    }
+
     return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('CEO Management',
-            style: TextStyle(fontWeight: FontWeight.bold)),
+      backgroundColor: AdminColors.screenBg,
+      appBar: AdminAppBar(
+        title: 'CEO Management',
         bottom: TabBar(
           controller: _tabController,
           tabs: const [
@@ -51,15 +83,7 @@ class _AdminCeoManagementViewState extends State<AdminCeoManagementView>
           ],
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _buildCeoStream('pending', adminVM),
-          _buildCeoStream('active', adminVM),
-          _buildCeoStream('suspended', adminVM),
-          _buildCeoStream('rejected', adminVM),
-        ],
-      ),
+      body: content,
     );
   }
 
@@ -122,16 +146,9 @@ class _AdminCeoManagementViewState extends State<AdminCeoManagementView>
     final rejectionReason =
         ceo.rejectionReason ?? company?.rejectionReason ?? '';
 
-    return Card(
+    return AdminCard(
       margin: const EdgeInsets.only(bottom: 16),
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: AppColors.border),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
+      child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Row(
@@ -139,9 +156,9 @@ class _AdminCeoManagementViewState extends State<AdminCeoManagementView>
               children: [
                 CircleAvatar(
                   radius: 24,
-                  backgroundColor: AppColors.ceoAccent.withValues(alpha: 0.1),
+                  backgroundColor: AdminColors.navy.withValues(alpha: 0.1),
                   child: const Icon(Icons.business_center_outlined,
-                      color: AppColors.ceoAccent),
+                      color: AdminColors.navy),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -149,18 +166,19 @@ class _AdminCeoManagementViewState extends State<AdminCeoManagementView>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(ceoName,
-                          style: const TextStyle(
-                              fontWeight: FontWeight.bold, fontSize: 16)),
+                          style: GoogleFonts.plusJakartaSans(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 16,
+                              color: AdminColors.navy)),
                       Text(ceo.email,
-                          style: const TextStyle(
-                              color: AppColors.textSecondary, fontSize: 12)),
+                          style: AdminTheme.mutedStyle(size: 12)),
                       if (company != null)
                         Padding(
                           padding: const EdgeInsets.only(top: 4),
                           child: Text(
                             company.name,
-                            style: const TextStyle(
-                              color: AppColors.primary,
+                            style: GoogleFonts.plusJakartaSans(
+                              color: AdminColors.navy,
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
                             ),
@@ -176,21 +194,18 @@ class _AdminCeoManagementViewState extends State<AdminCeoManagementView>
             Row(
               children: [
                 const Icon(Icons.calendar_today_outlined,
-                    size: 14, color: AppColors.textSecondary),
+                    size: 14, color: AdminColors.textGrey),
                 const SizedBox(width: 4),
                 Text(
                   DateFormat('MMM d, yyyy').format(ceo.createdAt),
-                  style: const TextStyle(
-                      fontSize: 12, color: AppColors.textSecondary),
+                  style: AdminTheme.mutedStyle(size: 12),
                 ),
                 if (ceo.phone.isNotEmpty) ...[
                   const SizedBox(width: 16),
                   const Icon(Icons.phone_outlined,
-                      size: 14, color: AppColors.textSecondary),
+                      size: 14, color: AdminColors.textGrey),
                   const SizedBox(width: 4),
-                  Text(ceo.phone,
-                      style: const TextStyle(
-                          fontSize: 12, color: AppColors.textSecondary)),
+                  Text(ceo.phone, style: AdminTheme.mutedStyle(size: 12)),
                 ],
               ],
             ),
@@ -274,23 +289,30 @@ class _AdminCeoManagementViewState extends State<AdminCeoManagementView>
                 width: double.infinity,
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: AppColors.danger.withValues(alpha: 0.06),
+                  color: AdminColors.red.withValues(alpha: 0.06),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppColors.danger.withValues(alpha: 0.2)),
+                  border: Border.all(
+                      color: AdminColors.red.withValues(alpha: 0.2)),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       'Rejection reason',
-                      style: TextStyle(
+                      style: GoogleFonts.plusJakartaSans(
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
-                        color: AppColors.danger,
+                        color: AdminColors.red,
                       ),
                     ),
                     const SizedBox(height: 4),
-                    Text(rejectionReason, style: const TextStyle(fontSize: 13)),
+                    Text(
+                      rejectionReason,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 13,
+                        color: AdminColors.navy,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -299,7 +321,6 @@ class _AdminCeoManagementViewState extends State<AdminCeoManagementView>
             _buildActionButtons(company, ceo, adminVM),
           ],
         ),
-      ),
     );
   }
 
@@ -326,19 +347,12 @@ class _AdminCeoManagementViewState extends State<AdminCeoManagementView>
               'Activate account and generate company invite code?',
               () => adminVM.acceptCEO(company?.id, ceo.uid),
             ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
-              foregroundColor: Colors.white,
-              elevation: 0,
-            ),
+            style: AdminTheme.primaryButtonStyle(height: 46),
             child: const Text('Approve'),
           ),
           OutlinedButton(
             onPressed: () => _showRejectDialog(company?.id, ceo.uid, adminVM),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: Colors.red,
-              side: const BorderSide(color: Colors.red),
-            ),
+            style: AdminTheme.destructiveButtonStyle(),
             child: const Text('Reject'),
           ),
         ],
@@ -349,24 +363,18 @@ class _AdminCeoManagementViewState extends State<AdminCeoManagementView>
               'User will lose access immediately.',
               () => adminVM.suspendCEO(company?.id, ceo.uid),
             ),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: Colors.amber,
-              side: const BorderSide(color: Colors.amber),
-            ),
+            style: AdminTheme.destructiveButtonStyle(),
             child: const Text('Suspend'),
           ),
         ],
         if (status == 'suspended' || status == 'rejected') ...[
-          OutlinedButton(
+          ElevatedButton(
             onPressed: () => _showConfirmDialog(
               'Activate Account',
               'Restore dashboard access?',
               () => adminVM.activateCEO(company?.id, ceo.uid),
             ),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: Colors.green,
-              side: const BorderSide(color: Colors.green),
-            ),
+            style: AdminTheme.primaryButtonStyle(height: 46),
             child: const Text('Activate'),
           ),
         ],
@@ -422,9 +430,8 @@ class _AdminCeoManagementViewState extends State<AdminCeoManagementView>
         content: TextField(
           controller: reasonController,
           maxLines: 3,
-          decoration: const InputDecoration(
+          decoration: AdminTheme.inputDecoration(
             labelText: 'Reason for rejection',
-            border: OutlineInputBorder(),
             hintText: 'Shown to the applicant',
           ),
         ),
@@ -439,7 +446,10 @@ class _AdminCeoManagementViewState extends State<AdminCeoManagementView>
               adminVM.rejectCEO(companyId, ceoUid, reason);
               Navigator.pop(context);
             },
-            child: const Text('Reject', style: TextStyle(color: Colors.red)),
+            child: Text(
+              'Reject',
+              style: GoogleFonts.plusJakartaSans(color: AdminColors.red),
+            ),
           ),
         ],
       ),
