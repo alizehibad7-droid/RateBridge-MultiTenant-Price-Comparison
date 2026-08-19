@@ -1,9 +1,7 @@
-// MVVM: View — no business logic
-
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
 
+import '../../constants/app_colors.dart';
 import '../../constants/route_names.dart';
 
 class _RoleOption {
@@ -24,35 +22,30 @@ class _RoleOption {
   });
 }
 
-const _navy = Color(0xFF1E326E);
-const _amber = Color(0xFFFBB03C);
-const _green = Color(0xFF1D9E75);
-const _screenBg = Color(0xFFF5F6FA);
-
 const _roles = <_RoleOption>[
   _RoleOption(
     icon: Icons.store_outlined,
     title: 'Material Supplier',
     subtitle:
         'List and sell construction materials to verified companies',
-    iconBackground: Color(0x26FBB03C),
-    iconColor: _amber,
+    iconBackground: AppColors.amberBg,
+    iconColor: AppColors.amber,
     route: RouteNames.registerSupplier,
   ),
   _RoleOption(
     icon: Icons.business_outlined,
     title: 'Company / CEO',
     subtitle: 'Register your company and manage procurement',
-    iconBackground: Color(0x1A1E326E),
-    iconColor: _navy,
+    iconBackground: AppColors.infoBg,
+    iconColor: AppColors.navy,
     route: RouteNames.registerCEO,
   ),
   _RoleOption(
     icon: Icons.engineering_outlined,
     title: 'Field Employee',
     subtitle: 'Join your company using an invite code from your CEO',
-    iconBackground: Color(0x1A1D9E75),
-    iconColor: _green,
+    iconBackground: AppColors.successBg,
+    iconColor: AppColors.success,
     route: RouteNames.registerFieldUser,
   ),
 ];
@@ -102,8 +95,11 @@ class _RoleSelectionViewState extends State<RoleSelectionView>
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final textTheme = theme.textTheme;
+
     return Scaffold(
-      backgroundColor: _screenBg,
+      backgroundColor: AppColors.screenBg,
       body: Stack(
         children: [
           Column(
@@ -116,7 +112,7 @@ class _RoleSelectionViewState extends State<RoleSelectionView>
                     gradient: LinearGradient(
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
-                      colors: [Color(0xFF1E326E), Color(0xFF0F1D42)],
+                      colors: [AppColors.navy, AppColors.navyDark],
                     ),
                   ),
                   child: SafeArea(
@@ -151,15 +147,14 @@ class _RoleSelectionViewState extends State<RoleSelectionView>
                                   ),
                                   child: const Icon(
                                     Icons.construction,
-                                    color: _navy,
+                                    color: AppColors.navy,
                                     size: 32,
                                   ),
                                 ),
                                 const SizedBox(height: 12),
                                 Text(
                                   'Welcome to RateBridge',
-                                  style: GoogleFonts.plusJakartaSans(
-                                    fontSize: 22,
+                                  style: textTheme.headlineSmall?.copyWith(
                                     fontWeight: FontWeight.w700,
                                     color: Colors.white,
                                   ),
@@ -167,9 +162,7 @@ class _RoleSelectionViewState extends State<RoleSelectionView>
                                 const SizedBox(height: 6),
                                 Text(
                                   'Select how you want to continue',
-                                  style: GoogleFonts.plusJakartaSans(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w400,
+                                  style: textTheme.bodySmall?.copyWith(
                                     color: Colors.white.withValues(alpha: 0.7),
                                   ),
                                 ),
@@ -193,7 +186,7 @@ class _RoleSelectionViewState extends State<RoleSelectionView>
             child: SingleChildScrollView(
               child: Container(
                 decoration: const BoxDecoration(
-                  color: _screenBg,
+                  color: AppColors.screenBg,
                   borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
                 ),
                 padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
@@ -204,10 +197,9 @@ class _RoleSelectionViewState extends State<RoleSelectionView>
                       opacity: _fade(0),
                       child: Text(
                         'I am a...',
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 18,
+                        style: textTheme.titleLarge?.copyWith(
                           fontWeight: FontWeight.w700,
-                          color: _navy,
+                          color: AppColors.navy,
                         ),
                       ),
                     ),
@@ -236,50 +228,26 @@ class _RoleSelectionViewState extends State<RoleSelectionView>
                           Text(
                             'Already have an account?',
                             textAlign: TextAlign.center,
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 13,
-                              color: Colors.grey.shade600,
-                            ),
+                            style: textTheme.bodySmall,
                           ),
                           const SizedBox(height: 8),
-                          SizedBox(
-                            width: double.infinity,
-                            height: 48,
-                            child: OutlinedButton(
-                              onPressed: () => context.push(RouteNames.login),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: _navy,
-                                side: const BorderSide(color: _navy, width: 1.5),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                              ),
-                              child: Text(
-                                'Sign In',
-                                style: GoogleFonts.plusJakartaSans(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
+                          OutlinedButton(
+                            onPressed: () => context.push(RouteNames.login),
+                            child: const Text('Sign In'),
                           ),
                           const SizedBox(height: 20),
                           Text(
                             'By continuing you agree to RateBridge\'s',
                             textAlign: TextAlign.center,
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 11,
-                              color: Colors.grey.shade600,
-                            ),
+                            style: textTheme.labelSmall,
                           ),
                           Text(
                             'Terms of Service & Privacy Policy',
                             textAlign: TextAlign.center,
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 11,
-                              color: _amber,
+                            style: textTheme.labelSmall?.copyWith(
+                              color: AppColors.amber,
                               decoration: TextDecoration.underline,
-                              decorationColor: _amber,
+                              decorationColor: AppColors.amber,
                             ),
                           ),
                         ],
@@ -312,6 +280,9 @@ class _RoleCardState extends State<_RoleCard> {
   @override
   Widget build(BuildContext context) {
     final option = widget.option;
+    final theme = Theme.of(context);
+    final textTheme = theme.textTheme;
+
     return GestureDetector(
       onTap: widget.onTap,
       onTapDown: (_) => setState(() => _scale = 0.98),
@@ -361,10 +332,9 @@ class _RoleCardState extends State<_RoleCard> {
                         children: [
                           Text(
                             option.title,
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 16,
+                            style: textTheme.titleMedium?.copyWith(
                               fontWeight: FontWeight.w700,
-                              color: _navy,
+                              color: AppColors.navy,
                             ),
                           ),
                           const SizedBox(height: 4),
@@ -372,11 +342,7 @@ class _RoleCardState extends State<_RoleCard> {
                             option.subtitle,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 12,
-                              color: Colors.grey.shade600,
-                              height: 1.35,
-                            ),
+                            style: textTheme.bodySmall,
                           ),
                         ],
                       ),
@@ -384,7 +350,7 @@ class _RoleCardState extends State<_RoleCard> {
                     Icon(
                       Icons.arrow_forward_ios,
                       size: 16,
-                      color: Colors.grey.shade400,
+                      color: theme.dividerColor,
                     ),
                   ],
                 ),

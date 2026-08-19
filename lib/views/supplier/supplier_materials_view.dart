@@ -53,7 +53,7 @@ class _SupplierMaterialsViewState extends State<SupplierMaterialsView> {
       return (FieldColors.statusDanger.withValues(alpha: 0.12), FieldColors.statusDanger, 'Out of Stock');
     }
     if (value.contains('limited')) {
-      return (const Color(0xFFFFF7ED), FieldColors.statusWarning, 'Limited');
+      return (FieldColors.accentAmberSoft, FieldColors.statusWarning, 'Limited');
     }
     return (FieldColors.statusSuccess.withValues(alpha: 0.12), FieldColors.statusSuccess, 'Available');
   }

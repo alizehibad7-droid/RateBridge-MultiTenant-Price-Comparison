@@ -9,6 +9,7 @@ import '../../viewmodels/admin_viewmodel.dart';
 import '../../theme/admin_theme.dart';
 import '../../utils/pakistan_validators.dart';
 import '../../widgets/admin/admin_widgets.dart';
+import '../../widgets/supplier_performance_scorecard.dart';
 
 class AdminSupplierManagementView extends StatefulWidget {
   final bool embedded;
@@ -23,17 +24,57 @@ class AdminSupplierManagementView extends StatefulWidget {
 class _AdminSupplierManagementViewState extends State<AdminSupplierManagementView>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  final Set<String> _selectedSupplierUids = {};
+  bool _isBulkProcessing = false;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
+    _tabController.addListener(() {
+      if (_tabController.indexIsChanging) {
+        setState(() => _selectedSupplierUids.clear());
+      }
+    });
   }
 
   @override
   void dispose() {
     _tabController.dispose();
     super.dispose();
+  }
+
+  Future<void> _bulkApprove(AdminViewModel adminVM) async {
+    if (_selectedSupplierUids.isEmpty) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Bulk Approve Suppliers'),
+        content: Text('Approve all ${_selectedSupplierUids.length} selected suppliers and grant dashboard access?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('CANCEL')),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('APPROVE ALL', style: TextStyle(fontWeight: FontWeight.bold))),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _isBulkProcessing = true);
+    try {
+      for (final uid in _selectedSupplierUids) {
+        await adminVM.approveSupplier(uid);
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Successfully approved ${_selectedSupplierUids.length} suppliers')),
+        );
+        setState(() => _selectedSupplierUids.clear());
+      }
+    } finally {
+      if (mounted) setState(() => _isBulkProcessing = false);
+    }
   }
 
   @override
@@ -50,41 +91,51 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
       ],
     );
 
-    if (widget.embedded) {
-      return Column(
-        children: [
-          Material(
-            color: AdminColors.navy,
-            child: TabBar(
-              controller: _tabController,
-              tabs: const [
-                Tab(text: 'Pending'),
-                Tab(text: 'Active'),
-                Tab(text: 'Suspended'),
-                Tab(text: 'Rejected'),
-              ],
-            ),
-          ),
-          Expanded(child: content),
-        ],
-      );
-    }
-
     return Scaffold(
       backgroundColor: AdminColors.screenBg,
-      appBar: AdminAppBar(
-        title: 'Supplier Management',
-        bottom: TabBar(
-          controller: _tabController,
-          tabs: const [
-            Tab(text: 'Pending'),
-            Tab(text: 'Active'),
-            Tab(text: 'Suspended'),
-            Tab(text: 'Rejected'),
-          ],
-        ),
-      ),
-      body: content,
+      appBar: widget.embedded 
+          ? null 
+          : AdminAppBar(
+              title: 'Supplier Management',
+              bottom: TabBar(
+                controller: _tabController,
+                tabs: const [
+                  Tab(text: 'Pending'),
+                  Tab(text: 'Active'),
+                  Tab(text: 'Suspended'),
+                  Tab(text: 'Rejected'),
+                ],
+              ),
+            ),
+      body: widget.embedded 
+          ? Column(
+              children: [
+                Material(
+                  color: AdminColors.navy,
+                  child: TabBar(
+                    controller: _tabController,
+                    tabs: const [
+                      Tab(text: 'Pending'),
+                      Tab(text: 'Active'),
+                      Tab(text: 'Suspended'),
+                      Tab(text: 'Rejected'),
+                    ],
+                  ),
+                ),
+                Expanded(child: content),
+              ],
+            )
+          : content,
+      floatingActionButton: (_tabController.index == 0 && _selectedSupplierUids.isNotEmpty)
+          ? FloatingActionButton.extended(
+              onPressed: _isBulkProcessing ? null : () => _bulkApprove(adminVM),
+              backgroundColor: AdminColors.amber,
+              label: _isBulkProcessing 
+                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : Text('Approve Selected (${_selectedSupplierUids.length})', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              icon: const Icon(Icons.done_all, color: Colors.white),
+            )
+          : null,
     );
   }
 
@@ -142,15 +193,8 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
     AdminViewModel adminVM,
   ) {
     final status = (supplier.status ?? 'pending').toLowerCase();
-    final businessName = profile?.name ?? supplier.name;
-    final ownerName = profile?.ownerFullName ?? supplier.name;
-    final businessType = profile?.businessType ?? supplier.businessType ?? '';
-    final cnic = _formatCnic(profile?.cnicNumber ?? supplier.cnic);
-    final address =
-        profile?.businessAddress ?? supplier.address ?? '';
-    final city = profile?.city ?? supplier.city;
-    final rejectionReason =
-        supplier.rejectionReason ?? profile?.rejectionReason ?? '';
+    final isPending = status == 'pending';
+    final isSelected = _selectedSupplierUids.contains(supplier.uid);
 
     return AdminCard(
       margin: const EdgeInsets.only(bottom: 16),
@@ -160,35 +204,37 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (isPending)
+                  Checkbox(
+                    value: isSelected,
+                    onChanged: (val) {
+                      setState(() {
+                        if (val == true) {
+                          _selectedSupplierUids.add(supplier.uid);
+                        } else {
+                          _selectedSupplierUids.remove(supplier.uid);
+                        }
+                      });
+                    },
+                    activeColor: AdminColors.amber,
+                  ),
                 CircleAvatar(
-                  radius: 24,
+                  radius: 20,
                   backgroundColor: AdminColors.amber.withValues(alpha: 0.1),
                   child: const Icon(Icons.storefront_rounded,
-                      color: AdminColors.amber),
+                      color: AdminColors.amber, size: 20),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(businessName,
+                      Text(profile?.name ?? supplier.name,
                           style: const TextStyle(
                               fontWeight: FontWeight.bold, fontSize: 16)),
                       Text(supplier.email,
                           style: const TextStyle(
                               color: AdminColors.textGrey, fontSize: 12)),
-                      if (businessType.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 4),
-                          child: Text(
-                            businessType,
-                            style: const TextStyle(
-                              color: AdminColors.navy,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
                     ],
                   ),
                 ),
@@ -201,7 +247,7 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
                 const Icon(Icons.location_on_outlined,
                     size: 14, color: AdminColors.textGrey),
                 const SizedBox(width: 4),
-                Text(city,
+                Text(profile?.city ?? supplier.city,
                     style: const TextStyle(
                         fontSize: 12, color: AdminColors.textGrey)),
                 const SizedBox(width: 16),
@@ -215,26 +261,17 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
                 ),
               ],
             ),
-            if (supplier.phone.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Row(
-                  children: [
-                    const Icon(Icons.phone_outlined,
-                        size: 14, color: AdminColors.textGrey),
-                    const SizedBox(width: 4),
-                    Text(supplier.phone,
-                        style: const TextStyle(
-                            fontSize: 12, color: AdminColors.textGrey)),
-                  ],
-                ),
-              ),
             const Divider(height: 28),
+            SupplierPerformanceScorecard(
+              supplierId: supplier.uid,
+              averageRating: supplier.rating ?? 0.0,
+            ),
+            const SizedBox(height: 16),
             AdminApprovalSection(
               title: 'BUSINESS IDENTITY',
               children: [
-                AdminDetailRow(label: 'Business name', value: businessName),
-                AdminDetailRow(label: 'Business type', value: businessType),
+                AdminDetailRow(label: 'Business name', value: profile?.name ?? supplier.name),
+                AdminDetailRow(label: 'Business type', value: profile?.businessType ?? supplier.businessType ?? ''),
                 AdminDetailRow(
                   label: 'Years in business',
                   value: profile?.yearsInBusiness?.toString() ?? '',
@@ -242,52 +279,6 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
                 AdminDetailRow(
                   label: 'Registration / NTN',
                   value: profile?.businessRegistrationNumber ?? '',
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            AdminApprovalSection(
-              title: 'OWNER / CONTACT',
-              children: [
-                AdminDetailRow(label: 'Owner full name', value: ownerName),
-                AdminDetailRow(label: 'CNIC', value: cnic),
-                const SizedBox(height: 4),
-                AdminDocumentThumbnailRow(
-                  documents: [
-                    (label: 'CNIC Front', url: profile?.cnicFrontUrl),
-                    (label: 'CNIC Back', url: profile?.cnicBackUrl),
-                  ],
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            AdminApprovalSection(
-              title: 'LOCATION & DELIVERY',
-              children: [
-                AdminDetailRow(label: 'City', value: city),
-                AdminDetailRow(label: 'Address', value: address, maxLines: 5),
-                const SizedBox(height: 4),
-                const Text(
-                  'Delivery coverage',
-                  style: TextStyle(fontSize: 12, color: AdminColors.textGrey),
-                ),
-                const SizedBox(height: 8),
-                AdminChipList(
-                  items: profile?.deliveryCoverageAreas ?? const [],
-                  color: AdminColors.amber,
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            AdminApprovalSection(
-              title: 'BUSINESS PROOF',
-              children: [
-                AdminDocumentThumbnailRow(
-                  documents: [
-                    (label: 'Shop / warehouse', url: profile?.shopPhotoUrl),
-                    (label: 'Business license', url: profile?.businessLicenseUrl),
-                    (label: 'Certification', url: profile?.certificationUrl),
-                  ],
                 ),
               ],
             ),
@@ -301,33 +292,6 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
                 ),
               ],
             ),
-            if (status == 'rejected' && rejectionReason.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AdminColors.red.withValues(alpha: 0.06),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AdminColors.red.withValues(alpha: 0.2)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Rejection reason',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: AdminColors.red,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(rejectionReason, style: const TextStyle(fontSize: 13)),
-                  ],
-                ),
-              ),
-            ],
             const Divider(height: 28),
             _buildActionButtons(supplier, adminVM),
           ],
@@ -382,7 +346,7 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
               context,
               'Activate Supplier?',
               'The supplier will regain full access to the platform.',
-              () => adminVM.approveSupplier(supplier.uid),
+              () => adminVM.reactivateSupplier(supplier.uid),
             ),
             style: AdminTheme.primaryButtonStyle(height: 46),
             child: const Text('Activate'),

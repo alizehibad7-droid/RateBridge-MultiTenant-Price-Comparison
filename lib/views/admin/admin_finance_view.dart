@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../../theme/admin_theme.dart';
 import 'admin_commission_ledger_view.dart';
 import 'admin_payment_queue_view.dart';
-import 'admin_subscription_payments_view.dart';
 
 /// Finance hub: commission reconciliation + subscription payments.
 class AdminFinanceView extends StatelessWidget {
@@ -12,7 +11,7 @@ class AdminFinanceView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const DefaultTabController(
-      length: 3,
+      length: 2,
       child: Column(
         children: [
           Material(
@@ -20,7 +19,6 @@ class AdminFinanceView extends StatelessWidget {
             child: TabBar(
               isScrollable: true,
               tabs: [
-                Tab(text: 'Subscription Payments'),
                 Tab(text: 'Payment Queue'),
                 Tab(text: 'Commission Ledger'),
               ],
@@ -29,7 +27,6 @@ class AdminFinanceView extends StatelessWidget {
           Expanded(
             child: TabBarView(
               children: [
-                AdminSubscriptionPaymentsView(embedded: true),
                 AdminPaymentQueueView(embedded: true),
                 AdminCommissionLedgerView(),
               ],

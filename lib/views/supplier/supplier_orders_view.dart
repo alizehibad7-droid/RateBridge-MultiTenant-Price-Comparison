@@ -12,6 +12,7 @@ import '../../constants/app_constants.dart';
 import '../../constants/route_names.dart';
 import '../../utils/currency_formatter.dart';
 import '../../utils/app_theme.dart';
+import '../../widgets/dispute_report_sheet.dart';
 import '../../widgets/status_badge.dart';
 import '../../widgets/supplier_nav_bar.dart';
 import '../../widgets/supplier/supplier_async_states.dart';
@@ -25,9 +26,16 @@ class SupplierOrdersView extends StatefulWidget {
   State<SupplierOrdersView> createState() => _SupplierOrdersViewState();
 }
 
-class _SupplierOrdersViewState extends State<SupplierOrdersView> with SingleTickerProviderStateMixin {
+class _SupplierOrdersViewState extends State<SupplierOrdersView>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  final List<String> _tabs = ['Pending', 'Accepted', 'Delivered', 'Confirmed', 'Rejected'];
+  final List<String> _tabs = [
+    'Pending',
+    'Accepted',
+    'Delivered',
+    'Confirmed',
+    'Rejected',
+  ];
 
   @override
   void initState() {
@@ -70,25 +78,31 @@ class _SupplierOrdersViewState extends State<SupplierOrdersView> with SingleTick
       bottomNavigationBar: const SupplierNavBar(currentIndex: 2),
       body: TabBarView(
         controller: _tabController,
-        children: _tabs.map((status) => _buildOrderList(viewModel, status)).toList(),
+        children:
+            _tabs.map((status) => _buildOrderList(viewModel, status)).toList(),
       ),
     );
   }
 
   Widget _buildOrderList(SupplierViewModel viewModel, String tab) {
-    final filteredOrders = viewModel.orders.where((o) {
-      final status = o.status.toLowerCase();
-      switch (tab) {
-        case 'Pending':
-          return status == 'pending';
-        case 'Accepted':
-          return status == 'accepted' || status == 'inprogress';
-        case 'Delivered': return status == 'delivered';
-        case 'Confirmed': return status == 'confirmed';
-        case 'Rejected': return status == 'rejected' || status == 'cancelled';
-        default: return false;
-      }
-    }).toList();
+    final filteredOrders =
+        viewModel.orders.where((o) {
+          final status = o.status.toLowerCase();
+          switch (tab) {
+            case 'Pending':
+              return status == 'pending';
+            case 'Accepted':
+              return status == 'accepted' || status == 'inprogress';
+            case 'Delivered':
+              return status == 'delivered';
+            case 'Confirmed':
+              return status == 'confirmed';
+            case 'Rejected':
+              return status == 'rejected' || status == 'cancelled';
+            default:
+              return false;
+          }
+        }).toList();
 
     if (viewModel.isLoading && filteredOrders.isEmpty) {
       return const SupplierListSkeleton(itemCount: 4, itemHeight: 160);
@@ -114,25 +128,25 @@ class _SupplierOrdersViewState extends State<SupplierOrdersView> with SingleTick
   Widget _buildTabEmptyState(String tab) {
     final (title, subtitle) = switch (tab) {
       'Pending' => (
-          'No pending orders',
-          'New orders from field users will appear here for you to accept',
-        ),
+        'No pending orders',
+        'New orders from field users will appear here for you to accept',
+      ),
       'Accepted' => (
-          'No accepted orders',
-          'Orders you accept will show here until marked as delivered',
-        ),
+        'No accepted orders',
+        'Orders you accept will show here until marked as delivered',
+      ),
       'Delivered' => (
-          'No delivered orders',
-          'Mark accepted orders as delivered once they reach the site',
-        ),
+        'No delivered orders',
+        'Mark accepted orders as delivered once they reach the site',
+      ),
       'Confirmed' => (
-          'No confirmed orders',
-          'Completed and confirmed orders will appear here',
-        ),
+        'No confirmed orders',
+        'Completed and confirmed orders will appear here',
+      ),
       'Rejected' => (
-          'No rejected orders',
-          'Rejected or cancelled orders are listed in this tab',
-        ),
+        'No rejected orders',
+        'Rejected or cancelled orders are listed in this tab',
+      ),
       _ => ('No orders found', 'Orders matching this status will appear here'),
     };
 
@@ -143,7 +157,11 @@ class _SupplierOrdersViewState extends State<SupplierOrdersView> with SingleTick
     );
   }
 
-  Widget _buildOrderCard(SupplierViewModel viewModel, OrderModel order, String tab) {
+  Widget _buildOrderCard(
+    SupplierViewModel viewModel,
+    OrderModel order,
+    String tab,
+  ) {
     final netPayout = order.totalAmount * (1 - AppConstants.commissionRate);
 
     return Container(
@@ -175,9 +193,16 @@ class _SupplierOrdersViewState extends State<SupplierOrdersView> with SingleTick
                 const SizedBox(height: 4),
                 Row(
                   children: [
-                    const Icon(Icons.person_outline, size: 14, color: FieldColors.textSecondary),
+                    const Icon(
+                      Icons.person_outline,
+                      size: 14,
+                      color: FieldColors.textSecondary,
+                    ),
                     const SizedBox(width: 4),
-                    Text(order.fieldUserName, style: AppTextStyles.bodyMuted.copyWith(fontSize: 13)),
+                    Text(
+                      order.fieldUserName,
+                      style: AppTextStyles.bodyMuted.copyWith(fontSize: 13),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 16),
@@ -189,7 +214,12 @@ class _SupplierOrdersViewState extends State<SupplierOrdersView> with SingleTick
                       children: [
                         Text('QUANTITY', style: AppTextStyles.label),
                         const SizedBox(height: 4),
-                        Text('${order.quantity} ${order.unit}', style: AppTextStyles.body.copyWith(fontWeight: FontWeight.bold)),
+                        Text(
+                          '${order.quantity} ${order.unit}',
+                          style: AppTextStyles.body.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ],
                     ),
                     Column(
@@ -199,7 +229,9 @@ class _SupplierOrdersViewState extends State<SupplierOrdersView> with SingleTick
                         const SizedBox(height: 4),
                         Text(
                           CurrencyFormatter.formatPKR(netPayout),
-                          style: AppTextStyles.h3.copyWith(color: FieldColors.statusSuccess),
+                          style: AppTextStyles.h3.copyWith(
+                            color: FieldColors.statusSuccess,
+                          ),
                         ),
                       ],
                     ),
@@ -213,7 +245,10 @@ class _SupplierOrdersViewState extends State<SupplierOrdersView> with SingleTick
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: Row(
               children: [
-                StatusBadge(label: order.status.toUpperCase(), status: order.status),
+                StatusBadge(
+                  label: order.status.toUpperCase(),
+                  status: order.status,
+                ),
                 const Spacer(),
                 TextButton(
                   onPressed: () => _showOrderDetail(viewModel, order),
@@ -257,7 +292,9 @@ class _SupplierOrdersViewState extends State<SupplierOrdersView> with SingleTick
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: () => _confirmDelivered(viewModel, order),
-                  style: ElevatedButton.styleFrom(backgroundColor: FieldColors.statusSuccess),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: FieldColors.statusSuccess,
+                  ),
                   child: const Text('MARK AS DELIVERED'),
                 ),
               ),
@@ -271,118 +308,189 @@ class _SupplierOrdersViewState extends State<SupplierOrdersView> with SingleTick
   void _showOrderDetail(SupplierViewModel viewModel, OrderModel order) {
     final commission = order.totalAmount * AppConstants.commissionRate;
     final netPayout = order.totalAmount * (1 - AppConstants.commissionRate);
-    final commissionPercent =
-        (AppConstants.commissionRate * 100).toStringAsFixed(0);
+    final commissionPercent = (AppConstants.commissionRate * 100)
+        .toStringAsFixed(0);
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        height: MediaQuery.of(context).size.height * 0.85,
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
-        ),
-        child: Column(
-          children: [
-            const SizedBox(height: 12),
-            Container(width: 40, height: 4, decoration: BoxDecoration(color: FieldColors.borderSubtle, borderRadius: BorderRadius.circular(2))),
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.all(24),
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('Order Details', style: AppTextStyles.h2),
-                      StatusBadge(label: order.status.toUpperCase(), status: order.status),
-                    ],
-                  ),
-                  const SizedBox(height: 32),
-                  _detailItem('Material', order.materialName, Icons.inventory_2_outlined),
-                  _detailItem('Quantity', '${order.quantity} ${order.unit}', Icons.straighten_outlined),
-                  _detailItem('Unit Price', CurrencyFormatter.formatPKR(order.unitPrice), Icons.price_change_outlined),
-                  const Divider(height: 48),
-                  _detailItem('Customer', order.fieldUserName, Icons.person_outline),
-                  _detailItem(
-                    'Company',
-                    viewModel.companyNameFor(order.companyId) ?? 'Company',
-                    Icons.business_outlined,
-                  ),
-                  _detailItem('Delivery Address', order.deliveryAddress, Icons.location_on_outlined),
-                  const Divider(height: 48),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('Total Amount', style: AppTextStyles.body),
-                      Text(CurrencyFormatter.formatPKR(order.totalAmount), style: AppTextStyles.h3),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Commission ($commissionPercent%)',
-                        style: AppTextStyles.bodyMuted,
-                      ),
-                      Text(
-                        '- ${CurrencyFormatter.formatPKR(commission)}',
-                        style: const TextStyle(color: FieldColors.statusDanger),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(color: FieldColors.statusSuccess.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(AppRadius.md)),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('Net Payout', style: TextStyle(fontWeight: FontWeight.bold, color: FieldColors.statusSuccess)),
-                        Text(
-                          CurrencyFormatter.formatPKR(netPayout),
-                          style: AppTextStyles.h3.copyWith(color: FieldColors.statusSuccess),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 40),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: () => PhoneLauncherUtils.dial(
-                            context,
-                            order.fieldUserPhone,
-                          ),
-                          icon: const Icon(Icons.phone_outlined, size: 18),
-                          label: const Text('CALL'),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: () => _openOrderChat(context, order),
-                          icon: const Icon(Icons.chat_bubble_outline, size: 18),
-                          label: const Text('CHAT'),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-                ],
+      builder:
+          (context) => Container(
+            height: MediaQuery.of(context).size.height * 0.85,
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(
+                top: Radius.circular(AppRadius.xl),
               ),
             ),
-          ],
-        ),
-      ),
+            child: Column(
+              children: [
+                const SizedBox(height: 12),
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: FieldColors.borderSubtle,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.all(24),
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('Order Details', style: AppTextStyles.h2),
+                          StatusBadge(
+                            label: order.status.toUpperCase(),
+                            status: order.status,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 32),
+                      _detailItem(
+                        'Material',
+                        order.materialName,
+                        Icons.inventory_2_outlined,
+                      ),
+                      _detailItem(
+                        'Quantity',
+                        '${order.quantity} ${order.unit}',
+                        Icons.straighten_outlined,
+                      ),
+                      _detailItem(
+                        'Unit Price',
+                        CurrencyFormatter.formatPKR(order.unitPrice),
+                        Icons.price_change_outlined,
+                      ),
+                      const Divider(height: 48),
+                      _detailItem(
+                        'Customer',
+                        order.fieldUserName,
+                        Icons.person_outline,
+                      ),
+                      _detailItem(
+                        'Company',
+                        viewModel.companyNameFor(order.companyId) ?? 'Company',
+                        Icons.business_outlined,
+                      ),
+                      _detailItem(
+                        'Delivery Address',
+                        order.deliveryAddress,
+                        Icons.location_on_outlined,
+                      ),
+                      const Divider(height: 48),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('Total Amount', style: AppTextStyles.body),
+                          Text(
+                            CurrencyFormatter.formatPKR(order.totalAmount),
+                            style: AppTextStyles.h3,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Commission ($commissionPercent%)',
+                            style: AppTextStyles.bodyMuted,
+                          ),
+                          Text(
+                            '- ${CurrencyFormatter.formatPKR(commission)}',
+                            style: const TextStyle(
+                              color: FieldColors.statusDanger,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: FieldColors.statusSuccess.withValues(
+                            alpha: 0.12,
+                          ),
+                          borderRadius: BorderRadius.circular(AppRadius.md),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'Net Payout',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: FieldColors.statusSuccess,
+                              ),
+                            ),
+                            Text(
+                              CurrencyFormatter.formatPKR(netPayout),
+                              style: AppTextStyles.h3.copyWith(
+                                color: FieldColors.statusSuccess,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (DisputeReportSheet.canReportOrder(order)) ...[
+                        const SizedBox(height: 24),
+                        TextButton.icon(
+                          onPressed:
+                              () => DisputeReportSheet.show(context, order),
+                          icon: const Icon(
+                            Icons.report_problem_outlined,
+                            size: 16,
+                          ),
+                          label: const Text('Report an issue'),
+                          style: TextButton.styleFrom(
+                            foregroundColor: FieldColors.statusWarning,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 40),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed:
+                                  () => PhoneLauncherUtils.dial(
+                                    context,
+                                    order.fieldUserPhone,
+                                  ),
+                              icon: const Icon(Icons.phone_outlined, size: 18),
+                              label: const Text('CALL'),
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: () => _openOrderChat(context, order),
+                              icon: const Icon(
+                                Icons.chat_bubble_outline,
+                                size: 18,
+                              ),
+                              label: const Text('CHAT'),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 24),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
     );
   }
 
   void _openOrderChat(BuildContext context, OrderModel order) {
-    final supplierUid = context.read<AuthViewModel>().user?.uid ?? order.supplierId;
+    final supplierUid =
+        context.read<AuthViewModel>().user?.uid ?? order.supplierId;
     final thread = supplierChatThreadFromOrder(
       order: order,
       supplierUid: supplierUid,
@@ -401,7 +509,10 @@ class _SupplierOrdersViewState extends State<SupplierOrdersView> with SingleTick
         children: [
           Container(
             padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(color: FieldColors.screenBackground, borderRadius: BorderRadius.circular(8)),
+            decoration: BoxDecoration(
+              color: FieldColors.screenBackground,
+              borderRadius: BorderRadius.circular(8),
+            ),
             child: Icon(icon, size: 18, color: FieldColors.primaryNavy),
           ),
           const SizedBox(width: 16),
@@ -411,7 +522,12 @@ class _SupplierOrdersViewState extends State<SupplierOrdersView> with SingleTick
               children: [
                 Text(label, style: AppTextStyles.caption),
                 const SizedBox(height: 2),
-                Text(value, style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600)),
+                Text(
+                  value,
+                  style: AppTextStyles.body.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ],
             ),
           ),
@@ -423,20 +539,26 @@ class _SupplierOrdersViewState extends State<SupplierOrdersView> with SingleTick
   void _confirmAccept(SupplierViewModel viewModel, OrderModel order) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Accept Order'),
-        content: const Text('Confirm that you can fulfill this order. This will notify the field user.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('CANCEL')),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              await viewModel.acceptOrder(order.orderId, order.companyId);
-            },
-            child: const Text('CONFIRM'),
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Accept Order'),
+            content: const Text(
+              'Confirm that you can fulfill this order. This will notify the field user.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('CANCEL'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  Navigator.pop(context);
+                  await viewModel.acceptOrder(order.orderId, order.companyId);
+                },
+                child: const Text('CONFIRM'),
+              ),
+            ],
           ),
-        ],
-      ),
     );
   }
 
@@ -444,47 +566,65 @@ class _SupplierOrdersViewState extends State<SupplierOrdersView> with SingleTick
     final controller = TextEditingController();
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Reject Order'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(hintText: 'Enter reason for rejection'),
-          maxLines: 3,
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('CANCEL')),
-          ElevatedButton(
-            onPressed: () async {
-              if (controller.text.isEmpty) return;
-              Navigator.pop(context);
-              await viewModel.rejectOrder(order.orderId, order.companyId, controller.text);
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: FieldColors.statusDanger),
-            child: const Text('REJECT'),
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Reject Order'),
+            content: TextField(
+              controller: controller,
+              decoration: const InputDecoration(
+                hintText: 'Enter reason for rejection',
+              ),
+              maxLines: 3,
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('CANCEL'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  if (controller.text.isEmpty) return;
+                  Navigator.pop(context);
+                  await viewModel.rejectOrder(
+                    order.orderId,
+                    order.companyId,
+                    controller.text,
+                  );
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: FieldColors.statusDanger,
+                ),
+                child: const Text('REJECT'),
+              ),
+            ],
           ),
-        ],
-      ),
     );
   }
 
   void _confirmDelivered(SupplierViewModel viewModel, OrderModel order) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Mark as Delivered'),
-        content: const Text('Has the shipment reached the site location?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('CANCEL')),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              await viewModel.markDelivered(order.orderId, order.companyId);
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: FieldColors.statusSuccess),
-            child: const Text('CONFIRM'),
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Mark as Delivered'),
+            content: const Text('Has the shipment reached the site location?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('CANCEL'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  Navigator.pop(context);
+                  await viewModel.markDelivered(order.orderId, order.companyId);
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: FieldColors.statusSuccess,
+                ),
+                child: const Text('CONFIRM'),
+              ),
+            ],
           ),
-        ],
-      ),
     );
   }
 }

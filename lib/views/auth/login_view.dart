@@ -1,16 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../constants/app_colors.dart';
 import '../../constants/route_names.dart';
 import '../../viewmodels/auth_viewmodel.dart';
-
-const _navy = Color(0xFF1E326E);
-const _amber = Color(0xFFFBB03C);
-const _screenBg = Color(0xFFF5F6FA);
-const _fieldBg = Color(0xFFF5F6FA);
-const _borderGrey = Color(0xFFE2E5F0);
+import '../../widgets/auth/auth_widgets.dart';
 
 class LoginView extends StatefulWidget {
   const LoginView({super.key});
@@ -59,7 +54,6 @@ class _LoginViewState extends State<LoginView> {
   }
 
   void _routeAfterLogin(AuthViewModel authVm) {
-    // Normalize role string to handle variations like 'field_user' vs 'fielduser'
     final role =
         authVm.role?.toLowerCase().replaceAll(' ', '').replaceAll('_', '');
     final status = authVm.user?.status?.toLowerCase();
@@ -101,58 +95,24 @@ class _LoginViewState extends State<LoginView> {
     }
   }
 
-  InputDecoration _fieldDecoration({
-    required String hint,
-    required IconData prefixIcon,
-    Widget? suffixIcon,
-  }) {
-    final border = OutlineInputBorder(
-      borderRadius: BorderRadius.circular(10),
-      borderSide: const BorderSide(color: _borderGrey),
-    );
-    return InputDecoration(
-      hintText: hint,
-      hintStyle: GoogleFonts.plusJakartaSans(
-        fontSize: 14,
-        color: Colors.grey.shade500,
-      ),
-      prefixIcon: Icon(prefixIcon, color: Colors.grey.shade500, size: 20),
-      suffixIcon: suffixIcon,
-      filled: true,
-      fillColor: _fieldBg,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      border: border,
-      enabledBorder: border,
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: _amber, width: 2),
-      ),
-      errorBorder: border.copyWith(
-        borderSide: const BorderSide(color: Color(0xFFE53935)),
-      ),
-      focusedErrorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: Color(0xFFE53935), width: 2),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final authVm = context.watch<AuthViewModel>();
+    final theme = Theme.of(context);
+    final textTheme = theme.textTheme;
 
     return Scaffold(
-      backgroundColor: _screenBg,
+      backgroundColor: AppColors.screenBg,
       resizeToAvoidBottomInset: true,
       body: DecoratedBox(
         decoration: BoxDecoration(
-          color: _screenBg,
+          color: AppColors.screenBg,
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              _navy.withValues(alpha: 0.07),
-              _screenBg,
+              AppColors.navy.withValues(alpha: 0.07),
+              AppColors.screenBg,
             ],
             stops: const [0.0, 0.42],
           ),
@@ -172,7 +132,7 @@ class _LoginViewState extends State<LoginView> {
                       height: 80,
                       decoration: const BoxDecoration(
                         shape: BoxShape.circle,
-                        color: _navy,
+                        color: AppColors.navy,
                       ),
                       child: const Icon(
                         Icons.construction,
@@ -184,10 +144,9 @@ class _LoginViewState extends State<LoginView> {
                     Text(
                       'RateBridge',
                       textAlign: TextAlign.center,
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 22,
+                      style: textTheme.headlineSmall?.copyWith(
                         fontWeight: FontWeight.w700,
-                        color: _navy,
+                        color: AppColors.navy,
                         letterSpacing: -0.3,
                       ),
                     ),
@@ -200,7 +159,7 @@ class _LoginViewState extends State<LoginView> {
                         borderRadius: BorderRadius.circular(20),
                         boxShadow: [
                           BoxShadow(
-                            color: _navy.withValues(alpha: 0.08),
+                            color: AppColors.navy.withValues(alpha: 0.08),
                             blurRadius: 24,
                             offset: const Offset(0, 8),
                           ),
@@ -219,28 +178,22 @@ class _LoginViewState extends State<LoginView> {
                             Text(
                               'Welcome back',
                               textAlign: TextAlign.center,
-                              style: GoogleFonts.plusJakartaSans(
-                                fontSize: 24,
+                              style: textTheme.headlineMedium?.copyWith(
                                 fontWeight: FontWeight.w700,
-                                color: _navy,
+                                color: AppColors.navy,
                               ),
                             ),
                             const SizedBox(height: 6),
                             Text(
                               'Sign in to your account',
                               textAlign: TextAlign.center,
-                              style: GoogleFonts.plusJakartaSans(
-                                fontSize: 14,
-                                color: Colors.grey.shade600,
-                              ),
+                              style: textTheme.bodyMedium,
                             ),
                             const SizedBox(height: 28),
                             Text(
                               'Email Address',
-                              style: GoogleFonts.plusJakartaSans(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: _navy,
+                              style: textTheme.labelLarge?.copyWith(
+                                color: AppColors.navy,
                               ),
                             ),
                             const SizedBox(height: 8),
@@ -248,19 +201,17 @@ class _LoginViewState extends State<LoginView> {
                               controller: _emailController,
                               keyboardType: TextInputType.emailAddress,
                               validator: _validateEmail,
-                              style: GoogleFonts.plusJakartaSans(fontSize: 14),
-                              decoration: _fieldDecoration(
-                                hint: 'Enter your email',
-                                prefixIcon: Icons.email_outlined,
+                              style: textTheme.bodyLarge,
+                              decoration: const InputDecoration(
+                                hintText: 'Enter your email',
+                                prefixIcon: Icon(Icons.email_outlined, size: 20),
                               ),
                             ),
                             const SizedBox(height: 20),
                             Text(
                               'Password',
-                              style: GoogleFonts.plusJakartaSans(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: _navy,
+                              style: textTheme.labelLarge?.copyWith(
+                                color: AppColors.navy,
                               ),
                             ),
                             const SizedBox(height: 8),
@@ -268,16 +219,15 @@ class _LoginViewState extends State<LoginView> {
                               controller: _passwordController,
                               obscureText: _obscurePassword,
                               validator: _validatePassword,
-                              style: GoogleFonts.plusJakartaSans(fontSize: 14),
-                              decoration: _fieldDecoration(
-                                hint: 'Enter your password',
-                                prefixIcon: Icons.lock_outlined,
+                              style: textTheme.bodyLarge,
+                              decoration: InputDecoration(
+                                hintText: 'Enter your password',
+                                prefixIcon: const Icon(Icons.lock_outlined, size: 20),
                                 suffixIcon: IconButton(
                                   icon: Icon(
                                     _obscurePassword
                                         ? Icons.visibility_outlined
                                         : Icons.visibility_off_outlined,
-                                    color: Colors.grey.shade500,
                                     size: 20,
                                   ),
                                   onPressed: () => setState(
@@ -294,10 +244,9 @@ class _LoginViewState extends State<LoginView> {
                                     context.push(RouteNames.forgotPassword),
                                 child: Text(
                                   'Forgot Password?',
-                                  style: GoogleFonts.plusJakartaSans(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                    color: _amber,
+                                  style: textTheme.labelLarge?.copyWith(
+                                    color: AppColors.amber,
+                                    fontWeight: FontWeight.w700,
                                   ),
                                 ),
                               ),
@@ -308,23 +257,22 @@ class _LoginViewState extends State<LoginView> {
                                 padding: const EdgeInsets.all(12),
                                 margin: const EdgeInsets.only(bottom: 16),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFFFFEBEE),
+                                  color: AppColors.error.withValues(alpha: 0.1),
                                   borderRadius: BorderRadius.circular(10),
                                 ),
                                 child: Row(
                                   children: [
                                     const Icon(
                                       Icons.error_outline,
-                                      color: Color(0xFFE53935),
+                                      color: AppColors.error,
                                       size: 18,
                                     ),
                                     const SizedBox(width: 8),
                                     Expanded(
                                       child: Text(
                                         authVm.errorMessage!,
-                                        style: GoogleFonts.plusJakartaSans(
-                                          color: const Color(0xFFE53935),
-                                          fontSize: 13,
+                                        style: textTheme.bodySmall?.copyWith(
+                                          color: AppColors.error,
                                         ),
                                       ),
                                     ),
@@ -332,119 +280,38 @@ class _LoginViewState extends State<LoginView> {
                                 ),
                               ),
                             ],
-                            DecoratedBox(
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(12),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: _amber.withValues(alpha: 0.32),
-                                    blurRadius: 14,
-                                    offset: const Offset(0, 5),
-                                  ),
-                                ],
-                              ),
-                              child: SizedBox(
-                                width: double.infinity,
-                                height: 52,
-                                child: ElevatedButton(
-                                  onPressed: authVm.isLoading
-                                      ? null
-                                      : () => _submit(authVm),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: _amber,
-                                    foregroundColor: Colors.white,
-                                    disabledBackgroundColor:
-                                        _amber.withValues(alpha: 0.65),
-                                    elevation: 0,
-                                    shadowColor: Colors.transparent,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                  ),
-                                  child: authVm.isLoading
-                                      ? const SizedBox(
-                                          width: 20,
-                                          height: 20,
-                                          child: CircularProgressIndicator(
-                                            color: Colors.white,
-                                            strokeWidth: 2,
-                                          ),
-                                        )
-                                      : Text(
-                                          'Sign In',
-                                          style: GoogleFonts.plusJakartaSans(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.w700,
-                                            color: Colors.white,
-                                          ),
-                                        ),
-                                ),
-                              ),
+                            AuthPrimaryButton(
+                              label: 'Sign In',
+                              isLoading: authVm.isLoading,
+                              onPressed: () => _submit(authVm),
                             ),
                             const SizedBox(height: 16),
                             Row(
                               children: [
-                                Expanded(
-                                  child: Divider(
-                                    color: Colors.grey.shade300,
-                                    thickness: 1,
-                                  ),
-                                ),
+                                const Expanded(child: Divider()),
                                 Padding(
                                   padding: const EdgeInsets.symmetric(
                                     horizontal: 14,
                                   ),
                                   child: Text(
                                     'or',
-                                    style: GoogleFonts.plusJakartaSans(
-                                      fontSize: 12,
-                                      color: Colors.grey.shade500,
-                                    ),
+                                    style: textTheme.labelSmall,
                                   ),
                                 ),
-                                Expanded(
-                                  child: Divider(
-                                    color: Colors.grey.shade300,
-                                    thickness: 1,
-                                  ),
-                                ),
+                                const Expanded(child: Divider()),
                               ],
                             ),
                             const SizedBox(height: 14),
                             Text(
                               "Don't have an account?",
                               textAlign: TextAlign.center,
-                              style: GoogleFonts.plusJakartaSans(
-                                fontSize: 12,
-                                color: Colors.grey.shade600,
-                              ),
+                              style: textTheme.labelSmall,
                             ),
                             const SizedBox(height: 8),
-                            SizedBox(
-                              width: double.infinity,
-                              height: 50,
-                              child: OutlinedButton(
-                                onPressed: () =>
-                                    context.push(RouteNames.roleSelection),
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: _navy,
-                                  side: const BorderSide(
-                                    color: _navy,
-                                    width: 1.5,
-                                  ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                ),
-                                child: Text(
-                                  'Create Account',
-                                  style: GoogleFonts.plusJakartaSans(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w600,
-                                    color: _navy,
-                                  ),
-                                ),
-                              ),
+                            OutlinedButton(
+                              onPressed: () =>
+                                  context.push(RouteNames.roleSelection),
+                              child: const Text('Create Account'),
                             ),
                           ],
                         ),
@@ -490,17 +357,15 @@ class _TrustBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 12, color: Colors.grey.shade500),
+        Icon(icon, size: 12, color: AppColors.textSecondary),
         const SizedBox(width: 4),
         Text(
           label,
-          style: GoogleFonts.plusJakartaSans(
-            fontSize: 10,
-            color: Colors.grey.shade500,
-          ),
+          style: theme.textTheme.labelSmall?.copyWith(fontSize: 10),
         ),
       ],
     );

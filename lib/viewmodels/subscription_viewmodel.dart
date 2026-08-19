@@ -1,36 +1,30 @@
-import 'dart:io';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
-import '../models/payment_details_config.dart';
 import '../models/subscription_model.dart';
-import '../models/subscription_payment_model.dart';
-import '../repositories/subscription_payment_repository.dart';
-import '../services/cloudinary_service.dart';
+import '../services/cloud_function_service.dart';
 import '../services/firestore_service.dart';
 
 class SubscriptionViewModel extends ChangeNotifier {
   final FirestoreService _firestoreService;
-  final SubscriptionPaymentRepository _paymentRepo;
+  final CloudFunctionService _cloudFunctionService;
 
-  SubscriptionViewModel(this._firestoreService, this._paymentRepo);
+  SubscriptionViewModel(
+    this._firestoreService,
+    this._cloudFunctionService,
+  );
 
   bool _isLoading = false;
   String? error;
   String? successMessage;
   SubscriptionModel? _subscription;
-  PaymentDetailsConfig _paymentDetails = const PaymentDetailsConfig();
-  SubscriptionPaymentModel? _latestPayment;
 
   bool get isLoading => _isLoading;
   SubscriptionModel? get currentSubscription => _subscription;
   List<SubscriptionHistoryEntry> get history => _subscription?.history ?? [];
-  PaymentDetailsConfig get paymentDetails => _paymentDetails;
-  SubscriptionPaymentModel? get latestPayment => _latestPayment;
 
-  bool get hasPendingPayment => _latestPayment?.isPending ?? false;
-  bool get hasRejectedPayment => _latestPayment?.isRejected ?? false;
+  bool get hasPendingPayment => false;
+  bool get hasRejectedPayment => false;
 
   Future<void> loadSubscription(String companyId) async {
     if (companyId.isEmpty) return;
@@ -46,7 +40,6 @@ class SubscriptionViewModel extends ChangeNotifier {
           status: 'active',
         );
       }
-      await loadPaymentDetails();
     } catch (e) {
       error = 'Failed to load subscription: $e';
     } finally {
@@ -55,24 +48,8 @@ class SubscriptionViewModel extends ChangeNotifier {
     }
   }
 
-  Future<void> loadPaymentDetails() async {
-    try {
-      _paymentDetails = await _paymentRepo.getPaymentDetails();
-    } catch (_) {
-      _paymentDetails = const PaymentDetailsConfig();
-    }
-    notifyListeners();
-  }
-
   void watchLatestPayment(String companyId) {
-    if (companyId.isEmpty) return;
-    _paymentRepo.watchLatestCompanyPayment(companyId).listen(
-      (payment) {
-        _latestPayment = payment;
-        notifyListeners();
-      },
-      onError: (_) {},
-    );
+    // Manual flow removed
   }
 
   Stream<SubscriptionModel?> watchSubscription(String companyId) {
@@ -88,56 +65,6 @@ class SubscriptionViewModel extends ChangeNotifier {
       _subscription = sub;
       return sub;
     });
-  }
-
-  Future<void> submitManualPayment({
-    required String companyId,
-    required String companyName,
-    required String ceoUid,
-    required PlanDefinition plan,
-    required File proofFile,
-  }) async {
-    if (plan.id == PlanId.free) return;
-
-    _isLoading = true;
-    error = null;
-    successMessage = null;
-    notifyListeners();
-
-    try {
-      final proofUrl = await CloudinaryService.uploadImage(
-        filePath: proofFile.path,
-        folder: 'ratebridge/subscription_payments',
-      );
-      if (proofUrl == null) {
-        error = 'Image upload failed. Please try again.';
-        return;
-      }
-
-      final payment = SubscriptionPaymentModel(
-        id: '',
-        companyId: companyId,
-        companyName: companyName,
-        submittedByUid: ceoUid,
-        plan: plan.planKey,
-        amount: plan.priceRs,
-        paymentProofUrl: proofUrl,
-        status: 'pending',
-        submittedAt: DateTime.now(),
-      );
-
-      await _paymentRepo.submitPayment(payment);
-      await _paymentRepo.notifyAdminsNewPayment(companyName);
-      _latestPayment = payment;
-
-      successMessage =
-          'Payment submitted for review. We will notify you once approved.';
-    } catch (e) {
-      error = 'Could not submit payment: $e';
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
   }
 
   Future<void> adminGrantPlan({
@@ -158,23 +85,6 @@ class SubscriptionViewModel extends ChangeNotifier {
       successMessage = '${plan.name} plan granted to company.';
     } catch (e) {
       error = 'Failed to grant plan: $e';
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
-  }
-
-  Future<void> savePaymentDetails(PaymentDetailsConfig config) async {
-    _isLoading = true;
-    error = null;
-    successMessage = null;
-    notifyListeners();
-    try {
-      await _paymentRepo.savePaymentDetails(config);
-      _paymentDetails = config;
-      successMessage = 'Payment details saved.';
-    } catch (e) {
-      error = 'Failed to save payment details: $e';
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -218,9 +128,82 @@ class SubscriptionViewModel extends ChangeNotifier {
     await FirebaseFirestore.instance
         .collection('companies')
         .doc(companyId)
-        .set({'plan': plan.planKey}, SetOptions(merge: true));
+        .set({
+      'plan': plan.planKey,
+      'planExpiry': expiry != null ? Timestamp.fromDate(expiry) : null,
+      'aiEnabled': plan.aiUnlocked,
+    }, SetOptions(merge: true));
 
     await loadSubscription(companyId);
+  }
+
+  /// Finalizes the payment process and activates the plan in the backend.
+  Future<bool> finalizePayment(String companyId, PlanDefinition plan) async {
+    _isLoading = true;
+    error = null;
+    notifyListeners();
+    try {
+      await _activateSubscription(
+        companyId: companyId,
+        plan: plan,
+        adminGranted: false,
+        amountPaid: plan.priceRs,
+      );
+      successMessage = 'Plan ${plan.name} activated successfully!';
+      return true;
+    } catch (e) {
+      error = 'Failed to activate plan: $e';
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> cancelSubscription(String companyId) async {
+    _isLoading = true;
+    error = null;
+    notifyListeners();
+    try {
+      final now = DateTime.now();
+      
+      // 1. Reset Subscription Doc to Free
+      final cancelledSub = SubscriptionModel(
+        companyId: companyId,
+        plan: 'free',
+        status: 'active',
+        startedAt: now,
+        expiresAt: null,
+      );
+      await _firestoreService.saveSubscription(cancelledSub);
+
+      // 2. Add to history
+      final historyEntry = SubscriptionHistoryEntry(
+        plan: _subscription?.plan ?? 'unknown',
+        action: 'cancelled',
+        date: now,
+        note: 'Subscription cancelled by user.',
+      );
+      await _firestoreService.updateSubscriptionHistory(companyId, historyEntry);
+
+      // 3. Update Company Doc
+      await FirebaseFirestore.instance
+          .collection('companies')
+          .doc(companyId)
+          .set({
+        'plan': 'free',
+        'planExpiry': null,
+        'aiEnabled': false,
+      }, SetOptions(merge: true));
+
+      await loadSubscription(companyId);
+      successMessage = 'Subscription cancelled. You are now on the Free plan.';
+    } catch (e) {
+      error = 'Failed to cancel subscription: $e';
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
   void clearMessages() {

@@ -91,6 +91,14 @@ void navigateForFieldNotification(
   final type = notification.type.toLowerCase();
   final orderId = data['orderId'] as String?;
 
+  if (type.contains('rfq')) {
+    final rfqId = data['rfqId'] as String?;
+    if (rfqId != null && rfqId.isNotEmpty) {
+      context.push(RouteNames.fieldRfqDetail.replaceFirst(':rfqId', rfqId));
+      return;
+    }
+  }
+
   if (type.contains('chat')) {
     final supplierUid =
         data['supplierUid'] as String? ?? data['supplierId'] as String?;
@@ -147,6 +155,14 @@ void navigateForSupplierNotification(
   final type = notification.type.toLowerCase();
   final orderId = data['orderId'] as String?;
 
+  if (type.contains('rfq')) {
+    final rfqId = data['rfqId'] as String?;
+    if (rfqId != null && rfqId.isNotEmpty) {
+      context.push(RouteNames.supplierSubmitBid.replaceFirst(':rfqId', rfqId));
+      return;
+    }
+  }
+
   if (type.contains('partnership')) {
     final event = (data['event'] as String? ?? '').toLowerCase();
     if (event == 'invitation_received') {
@@ -196,6 +212,10 @@ void navigateForAdminNotification(
   NotificationModel notification,
 ) {
   final type = notification.type.toLowerCase();
+  if (type.contains('dispute')) {
+    context.push(RouteNames.adminDisputes);
+    return;
+  }
   if (type.contains('payment') || type.contains('subscription')) {
     context.push(RouteNames.adminSubscription);
     return;

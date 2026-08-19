@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/user_model.dart';
+import '../models/subscription_model.dart';
 import '../models/order_model.dart';
 import '../models/partnership_request_model.dart';
 import '../models/company_model.dart';
@@ -625,6 +626,17 @@ class CeoViewModel extends ChangeNotifier {
   }) async {
     final company = _company;
     if (company == null || supplierId.isEmpty) return;
+
+    final plan = kPlans.firstWhere((p) => p.planKey == company.plan,
+        orElse: () => kPlans.first);
+    if (plan.maxSuppliers != -1 &&
+        _activePartnerSupplierIds.length >= plan.maxSuppliers) {
+      _errorMessage =
+          'Supplier limit reached for your ${plan.name} plan (${plan.maxSuppliers}). Please upgrade for more connections.';
+      notifyListeners();
+      return;
+    }
+
     try {
       final supplierDoc =
           await _db.collection('suppliers').doc(supplierId).get();
@@ -688,6 +700,19 @@ class CeoViewModel extends ChangeNotifier {
       watchPartnershipRequests(companyId, type);
 
   Future<void> acceptPartnershipRequest(String reqId) async {
+    final company = _company;
+    if (company != null) {
+      final plan = kPlans.firstWhere((p) => p.planKey == company.plan,
+          orElse: () => kPlans.first);
+      if (plan.maxSuppliers != -1 &&
+          _activePartnerSupplierIds.length >= plan.maxSuppliers) {
+        _errorMessage =
+            'Supplier limit reached for your ${plan.name} plan (${plan.maxSuppliers}). Please upgrade to accept more partnerships.';
+        notifyListeners();
+        return;
+      }
+    }
+
     try {
       final reqSnap = await _db
           .collection(FirestorePaths.partnershipRequestsCol)

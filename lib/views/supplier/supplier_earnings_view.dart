@@ -10,6 +10,8 @@ import '../../utils/currency_formatter.dart';
 import '../../viewmodels/supplier_viewmodel.dart';
 import '../../widgets/supplier/supplier_async_states.dart';
 import '../../widgets/supplier_nav_bar.dart';
+import '../payment/payment_method_view.dart';
+import '../../models/payment_proof_model.dart';
 
 class SupplierEarningsView extends StatefulWidget {
   const SupplierEarningsView({super.key});
@@ -65,11 +67,13 @@ class _SupplierEarningsViewState extends State<SupplierEarningsView> {
             return const SupplierListSkeleton(itemCount: 5, itemHeight: 72);
           }
 
-          final commissionOwed = viewModel.totalEarnings - viewModel.netEarnings;
+          final unsettledTransactions = viewModel.transactions.where((t) => t.isUnsettled).toList();
+          final unsettledCommission = unsettledTransactions.fold<double>(0, (sum, t) => sum + t.commissionAmount);
 
           return ListView(
             padding: const EdgeInsets.all(24),
             children: [
+              // Month selection and other cards...
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -90,6 +94,58 @@ class _SupplierEarningsViewState extends State<SupplierEarningsView> {
                 ],
               ),
               const SizedBox(height: 24),
+              
+              if (unsettledCommission > 0)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 24),
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: FieldColors.statusDanger.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(AppRadius.lg),
+                    border: Border.all(color: FieldColors.statusDanger.withValues(alpha: 0.3)),
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Unsettled Commission', style: TextStyle(color: FieldColors.statusDanger, fontWeight: FontWeight.bold)),
+                              Text(CurrencyFormatter.formatPKR(unsettledCommission), style: AppTextStyles.h2.copyWith(color: FieldColors.statusDanger)),
+                            ],
+                          ),
+                          ElevatedButton(
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => PaymentMethodView(
+                                    amount: unsettledCommission,
+                                    type: PaymentType.commission,
+                                    relatedTransactionIds: unsettledTransactions.map((t) => t.txId).toList(),
+                                  ),
+                                ),
+                              );
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: FieldColors.statusDanger,
+                              foregroundColor: Colors.white,
+                            ),
+                            child: const Text('PAY NOW'),
+                          )
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      const Text(
+                        'Please clear your outstanding balance to avoid account suspension.',
+                        style: TextStyle(fontSize: 11, color: FieldColors.statusDanger),
+                      ),
+                    ],
+                  ),
+                ),
+
               _buildStatsCard(
                 'Total Gross Earnings',
                 CurrencyFormatter.formatPKR(viewModel.totalEarnings),
@@ -106,7 +162,7 @@ class _SupplierEarningsViewState extends State<SupplierEarningsView> {
               const SizedBox(height: 12),
               _buildStatsCard(
                 'Commission Owed (2%)',
-                CurrencyFormatter.formatPKR(commissionOwed),
+                CurrencyFormatter.formatPKR(unsettledCommission),
                 Colors.white,
                 FieldColors.textPrimary,
               ),
@@ -292,7 +348,7 @@ class _SupplierEarningsViewState extends State<SupplierEarningsView> {
                   ),
                   Text(
                     '-${(tx.commissionRate * 100).toStringAsFixed(0)}% comm.',
-                    style: const TextStyle(color: Colors.red, fontSize: 10),
+                    style: const TextStyle(color: FieldColors.statusDanger, fontSize: 10),
                     textAlign: TextAlign.end,
                   ),
                 ],

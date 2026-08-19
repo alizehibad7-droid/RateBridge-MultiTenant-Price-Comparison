@@ -1,5 +1,6 @@
 // MVVM: Service — external API wrapper only
 import 'dart:convert';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:http/http.dart' as http;
 import '../models/voice_intent_model.dart';
 import '../models/price_history_model.dart';
@@ -11,8 +12,11 @@ class GeminiService {
     'https://api.groq.com/openai/v1/chat/completions';
   final String _apiKey = const String.fromEnvironment('GROQ_API_KEY');
   final http.Client _client;
+  final FirebaseFunctions _functions;
 
-  GeminiService({http.Client? client}) : _client = client ?? http.Client();
+  GeminiService({http.Client? client, FirebaseFunctions? functions})
+      : _client = client ?? http.Client(),
+        _functions = functions ?? FirebaseFunctions.instance;
 
   // Rate limit: rolling 1-minute window
   int _requestCount = 0;
@@ -31,10 +35,36 @@ class GeminiService {
   }
 
   Future<String> _callGemini(String prompt) async {
-    if (_apiKey.isEmpty) return '';
     if (!_checkRateLimit()) {
       return 'AI recommendations temporarily unavailable. Please try again in a minute.';
     }
+    if (_apiKey.isNotEmpty) {
+      return _callGroq(prompt);
+    }
+    return _callCloudFunction(prompt);
+  }
+
+  Future<String> _callCloudFunction(String prompt) async {
+    try {
+      final callable = _functions.httpsCallable(
+        'generateAiText',
+        options: HttpsCallableOptions(timeout: const Duration(seconds: 60)),
+      );
+      final result = await callable.call({'prompt': prompt});
+      final data = result.data;
+      if (data is Map && data['text'] is String) {
+        return data['text'] as String;
+      }
+      throw AppException('AI returned an empty response.');
+    } on FirebaseFunctionsException catch (e) {
+      if (e.code == 'resource-exhausted') {
+        return 'AI temporarily unavailable due to rate limiting. Please try again shortly.';
+      }
+      throw AppException('Gemini API error: ${e.message ?? e.code}');
+    }
+  }
+
+  Future<String> _callGroq(String prompt) async {
     final response = await _client.post(
       Uri.parse(_baseUrl),
       headers: {

@@ -1,8 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 
 import '../constants/firestore_paths.dart';
 import '../models/partnership_request_model.dart';
 import '../services/firestore_service.dart';
+import '../services/plan_limit_service.dart';
 import '../utils/app_exception.dart';
 import '../utils/partnership_stream_utils.dart';
 
@@ -40,6 +42,17 @@ class PartnershipRequestRepository {
     double supplierRating = 0,
   }) async {
     try {
+      // A CEO-initiated request is an invitation, so reject it before sending
+      // when the company has no supplier capacity. Supplier-initiated requests
+      // are checked authoritatively when they are accepted.
+      if (initiatedBy.toLowerCase() == 'ceo') {
+        await PlanLimitService.ensureSupplierCapacity(
+          _db,
+          companyId,
+          supplierId: supplierId,
+        );
+      }
+
       if (await _hasBlockingRequest(
         companyId: companyId,
         supplierId: supplierId,
@@ -136,17 +149,17 @@ class PartnershipRequestRepository {
       throw AppException('This request is no longer pending.');
     }
 
-    final batch = _db.batch();
-    batch.update(reqRef, {
-      'status': 'accepted',
-      'respondedAt': FieldValue.serverTimestamp(),
-    });
-    _writeBilateralLinkBatch(
-      batch: batch,
-      companyId: req.companyId,
-      supplierId: req.supplierId,
-    );
-    await batch.commit();
+    try {
+      await FirebaseFunctions.instance
+          .httpsCallable('acceptPartnershipRequest')
+          .call(<String, dynamic>{'requestId': requestId});
+    } on FirebaseFunctionsException catch (error) {
+      throw AppException(
+        error.message ?? 'Failed to accept partnership request.',
+        error.code,
+      );
+    }
+
     await enrichAcceptedLinkDocs(
       companyId: req.companyId,
       supplierId: req.supplierId,
@@ -240,35 +253,6 @@ class PartnershipRequestRepository {
     }
 
     await batch.commit();
-  }
-
-  void _writeBilateralLinkBatch({
-    required WriteBatch batch,
-    required String companyId,
-    required String supplierId,
-  }) {
-    final supplierRef =
-        _db.collection(FirestorePaths.suppliersCol).doc(supplierId);
-    final companyRef =
-        _db.collection(FirestorePaths.companiesCol).doc(companyId);
-
-    batch.set(companyRef.collection('suppliers').doc(supplierId), {
-      'id': supplierId,
-      'status': 'active',
-      'linkedAt': FieldValue.serverTimestamp(),
-      'joinedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
-
-    batch.set(supplierRef.collection('companies').doc(companyId), {
-      'id': companyId,
-      'status': 'active',
-      'joinedAt': FieldValue.serverTimestamp(),
-      'onboardingComplete': false,
-    }, SetOptions(merge: true));
-
-    batch.set(supplierRef, {
-      'totalCompanies': FieldValue.increment(1),
-    }, SetOptions(merge: true));
   }
 
   Future<void> enrichAcceptedLinkDocs({

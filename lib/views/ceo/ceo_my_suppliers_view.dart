@@ -9,6 +9,7 @@ import '../../viewmodels/ceo_viewmodel.dart';
 import '../../viewmodels/auth_viewmodel.dart';
 import '../../widgets/ceo_nav_bar.dart';
 import '../../widgets/ceo/ceo_widgets.dart';
+import '../../widgets/supplier_performance_scorecard.dart';
 
 const _citiesAll = [
   'All',
@@ -315,9 +316,13 @@ class _CeoMySuppliersViewState extends State<CeoMySuppliersView>
 
   void _showProfileSheet(
       BuildContext context, Map<String, dynamic> supplier) {
+    final companyId = context.read<AuthViewModel>().user?.companyId;
+    final rating = (supplier['rating'] as num? ?? 0.0).toDouble();
+
     showModalBottomSheet(
       context: context,
       backgroundColor: CeoColors.screenBg,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -340,12 +345,19 @@ class _CeoMySuppliersViewState extends State<CeoMySuppliersView>
             Text(supplier['name'] ?? 'Supplier',
                 style: CeoTheme.titleStyle(size: 18)),
             const SizedBox(height: 12),
+            SupplierPerformanceScorecard(
+              supplierId: supplier['id'] ?? '',
+              companyId: companyId,
+              averageRating: rating,
+            ),
+            const SizedBox(height: 20),
             _profileRow(Icons.location_city_outlined,
                 supplier['city'] ?? '—'),
             _profileRow(Icons.category_outlined,
                 supplier['materialType'] ?? '—'),
             _profileRow(Icons.info_outline,
                 'Status: ${supplier['status'] ?? '—'}'),
+            const SizedBox(height: 20),
           ],
         ),
       ),

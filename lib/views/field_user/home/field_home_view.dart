@@ -34,7 +34,7 @@ class _FieldHomeViewState extends State<FieldHomeView> {
   String? _homeAiGreeting;
 
   static const _navyGradient = LinearGradient(
-    colors: [Color(0xFF1E326E), Color(0xFF15204A)],
+    colors: [FieldColors.primaryNavy, FieldColors.primaryNavyDark],
   );
 
   @override
@@ -106,26 +106,26 @@ class _FieldHomeViewState extends State<FieldHomeView> {
     }
     if (byCategory.isEmpty) return;
 
-    final payload = byCategory.entries.map((entry) {
-      final prices = entry.value;
-      final minPrice = prices.reduce((a, b) => a < b ? a : b);
-      final maxPrice = prices.reduce((a, b) => a > b ? a : b);
-      final avgPrice =
-          prices.reduce((a, b) => a + b) / prices.length;
-      return {
-        'category': entry.key,
-        'minPrice': minPrice.round(),
-        'maxPrice': maxPrice.round(),
-        'avgPrice': avgPrice.round(),
-        'listingCount': prices.length,
-      };
-    }).toList();
+    final payload =
+        byCategory.entries.map((entry) {
+          final prices = entry.value;
+          final minPrice = prices.reduce((a, b) => a < b ? a : b);
+          final maxPrice = prices.reduce((a, b) => a > b ? a : b);
+          final avgPrice = prices.reduce((a, b) => a + b) / prices.length;
+          return {
+            'category': entry.key,
+            'minPrice': minPrice.round(),
+            'maxPrice': maxPrice.round(),
+            'avgPrice': avgPrice.round(),
+            'listingCount': prices.length,
+          };
+        }).toList();
 
     try {
       final line = await context
           .read<GeminiService>()
           .getHomeMarketGreeting(payload, locale: 'en')
-          .timeout(const Duration(seconds: 3));
+          .timeout(const Duration(seconds: 20));
       final trimmed = line.trim();
       if (!mounted || trimmed.isEmpty) return;
       final lower = trimmed.toLowerCase();
@@ -147,12 +147,15 @@ class _FieldHomeViewState extends State<FieldHomeView> {
   }
 
   void _openNotifications() {
-    FieldShellScope.maybeOf(context)
-        ?.switchTab(FieldShellScope.notificationsTabIndex);
+    FieldShellScope.maybeOf(
+      context,
+    )?.switchTab(FieldShellScope.notificationsTabIndex);
   }
 
   void _openProfile() {
-    FieldShellScope.maybeOf(context)?.switchTab(FieldShellScope.profileTabIndex);
+    FieldShellScope.maybeOf(
+      context,
+    )?.switchTab(FieldShellScope.profileTabIndex);
   }
 
   void _openSearch() {
@@ -176,6 +179,10 @@ class _FieldHomeViewState extends State<FieldHomeView> {
     context.push(RouteNames.fieldMarketplace);
   }
 
+  void _openRfqs() {
+    context.push(RouteNames.fieldRfqs);
+  }
+
   void _openOrdersTab() {
     FieldShellScope.maybeOf(context)?.switchTab(FieldShellScope.ordersTabIndex);
   }
@@ -193,9 +200,10 @@ class _FieldHomeViewState extends State<FieldHomeView> {
     if (companyId != null) {
       final ids = await RecentlyViewedService.getRecentIds();
       if (!mounted) return;
-      await context
-          .read<FieldCatalogViewModel>()
-          .loadRecentlyViewedMaterials(companyId, ids);
+      await context.read<FieldCatalogViewModel>().loadRecentlyViewedMaterials(
+        companyId,
+        ids,
+      );
     }
     if (!mounted) return;
     context.push(
@@ -211,9 +219,10 @@ class _FieldHomeViewState extends State<FieldHomeView> {
     if (!mounted) return;
     final companyId = context.read<FieldSessionViewModel>().companyId;
     if (companyId != null) {
-      await context
-          .read<FieldCatalogViewModel>()
-          .loadRecentlyViewedMaterials(companyId, []);
+      await context.read<FieldCatalogViewModel>().loadRecentlyViewedMaterials(
+        companyId,
+        [],
+      );
     }
   }
 
@@ -295,18 +304,40 @@ class _FieldHomeViewState extends State<FieldHomeView> {
                   SliverToBoxAdapter(
                     child: _CategoryQuickAccessRow(
                       categoryNames: categoryNames,
-                      isLoading:
-                          catalog.isLoading && categoryNames.isEmpty,
+                      isLoading: catalog.isLoading && categoryNames.isEmpty,
                       onCategoryTap: _openCategory,
                       onSeeAllTap: _openAllCategories,
-                      onRetry: catalog.errorMessage != null
-                          ? () {
-                              final companyId = session.companyId;
-                              if (companyId != null) {
-                                catalog.loadHomeData(companyId);
+                      onRetry:
+                          catalog.errorMessage != null
+                              ? () {
+                                final companyId = session.companyId;
+                                if (companyId != null) {
+                                  catalog.loadHomeData(companyId);
+                                }
                               }
-                            }
-                          : null,
+                              : null,
+                    ),
+                  ),
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                      child: Card(
+                        child: ListTile(
+                          leading: const CircleAvatar(
+                            backgroundColor: FieldColors.screenBackground,
+                            child: Icon(
+                              Icons.request_quote_outlined,
+                              color: FieldColors.primaryNavy,
+                            ),
+                          ),
+                          title: const Text('Request a Bulk Quote'),
+                          subtitle: const Text(
+                            'Compare live bids from matching suppliers · Premium',
+                          ),
+                          trailing: const Icon(Icons.chevron_right_rounded),
+                          onTap: _openRfqs,
+                        ),
+                      ),
                     ),
                   ),
                   if (inProgressCount > 0)
@@ -343,14 +374,15 @@ class _FieldHomeViewState extends State<FieldHomeView> {
                         child: _SectionEmptyMessage(
                           message:
                               'No materials available yet from your suppliers',
-                          onRetry: catalog.errorMessage != null
-                              ? () {
-                                  final companyId = session.companyId;
-                                  if (companyId != null) {
-                                    catalog.loadHomeData(companyId);
+                          onRetry:
+                              catalog.errorMessage != null
+                                  ? () {
+                                    final companyId = session.companyId;
+                                    if (companyId != null) {
+                                      catalog.loadHomeData(companyId);
+                                    }
                                   }
-                                }
-                              : null,
+                                  : null,
                         ),
                       ),
                     )
@@ -362,8 +394,8 @@ class _FieldHomeViewState extends State<FieldHomeView> {
                           scrollDirection: Axis.horizontal,
                           padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                           itemCount: catalog.recentMaterials.length,
-                          separatorBuilder: (_, __) =>
-                              const SizedBox(width: 12),
+                          separatorBuilder:
+                              (_, __) => const SizedBox(width: 12),
                           itemBuilder: (context, index) {
                             final material = catalog.recentMaterials[index];
                             return _NewMaterialCard(
@@ -388,19 +420,20 @@ class _FieldHomeViewState extends State<FieldHomeView> {
                       padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                       child: _BrowseCategoryGrid(
                         categories: browseCategories,
-                        isLoading: catalog.isLoading &&
-                            browseCategories.isEmpty,
+                        isLoading:
+                            catalog.isLoading && browseCategories.isEmpty,
                         materialCountFor: catalog.materialCountForCategory,
                         onCategoryTap: (name) => _openCategory(name),
                         onViewAll: _openAllCategories,
-                        onRetry: catalog.errorMessage != null
-                            ? () {
-                                final companyId = session.companyId;
-                                if (companyId != null) {
-                                  catalog.loadHomeData(companyId);
+                        onRetry:
+                            catalog.errorMessage != null
+                                ? () {
+                                  final companyId = session.companyId;
+                                  if (companyId != null) {
+                                    catalog.loadHomeData(companyId);
+                                  }
                                 }
-                              }
-                            : null,
+                                : null,
                       ),
                     ),
                   ),
@@ -422,8 +455,8 @@ class _FieldHomeViewState extends State<FieldHomeView> {
                           scrollDirection: Axis.horizontal,
                           padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                           itemCount: recentlyViewed.length,
-                          separatorBuilder: (_, __) =>
-                              const SizedBox(width: 12),
+                          separatorBuilder:
+                              (_, __) => const SizedBox(width: 12),
                           itemBuilder: (context, index) {
                             final material = recentlyViewed[index];
                             return _CompactMaterialCard(
@@ -458,19 +491,17 @@ class _FieldHomeViewState extends State<FieldHomeView> {
                       padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                       sliver: SliverList.separated(
                         itemCount: inProgressOrders.length,
-                        separatorBuilder: (_, __) =>
-                            const SizedBox(height: 8),
+                        separatorBuilder: (_, __) => const SizedBox(height: 8),
                         itemBuilder: (context, index) {
                           return _OrderQuickTile(
                             order: inProgressOrders[index],
-                            onTap: () => _openOrderDetail(inProgressOrders[index]),
+                            onTap:
+                                () => _openOrderDetail(inProgressOrders[index]),
                           );
                         },
                       ),
                     ),
-                  const SliverToBoxAdapter(
-                    child: SizedBox(height: 100),
-                  ),
+                  const SliverToBoxAdapter(child: SizedBox(height: 100)),
                 ],
               ),
             ),
@@ -576,8 +607,10 @@ class _DarazStickyHeader extends StatelessWidget {
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(10),
                 ),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 12,
+                ),
                 child: Row(
                   children: [
                     Icon(
@@ -805,18 +838,19 @@ class _CategoryChipSkeleton extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16),
         itemCount: 5,
         separatorBuilder: (_, __) => const SizedBox(width: 10),
-        itemBuilder: (_, __) => Shimmer.fromColors(
-          baseColor: FieldColors.borderSubtle,
-          highlightColor: FieldColors.surfaceWhite,
-          child: Container(
-            width: 72,
-            height: 80,
-            decoration: BoxDecoration(
-              color: FieldColors.borderSubtle,
-              borderRadius: BorderRadius.circular(12),
+        itemBuilder:
+            (_, __) => Shimmer.fromColors(
+              baseColor: FieldColors.borderSubtle,
+              highlightColor: FieldColors.surfaceWhite,
+              child: Container(
+                width: 72,
+                height: 80,
+                decoration: BoxDecoration(
+                  color: FieldColors.borderSubtle,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
             ),
-          ),
-        ),
       ),
     );
   }
@@ -844,8 +878,7 @@ class _ActiveOrdersBanner extends StatelessWidget {
             children: [
               Container(
                 width: double.infinity,
-                padding:
-                    const EdgeInsets.fromLTRB(18, 14, 14, 14),
+                padding: const EdgeInsets.fromLTRB(18, 14, 14, 14),
                 decoration: BoxDecoration(
                   color: FieldColors.accentAmber.withValues(alpha: 0.12),
                   border: Border.all(
@@ -888,10 +921,7 @@ class _ActiveOrdersBanner extends StatelessWidget {
                 left: 0,
                 top: 0,
                 bottom: 0,
-                child: Container(
-                  width: 4,
-                  color: FieldColors.accentAmber,
-                ),
+                child: Container(width: 4, color: FieldColors.accentAmber),
               ),
             ],
           ),
@@ -1025,16 +1055,13 @@ class _CompactMaterialCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFFE2E5F0)),
+          border: Border.all(color: FieldColors.borderSubtle),
         ),
         clipBehavior: Clip.antiAlias,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            SizedBox(
-              height: 76,
-              child: _MaterialImageTop(material: material),
-            ),
+            SizedBox(height: 76, child: _MaterialImageTop(material: material)),
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
@@ -1102,8 +1129,9 @@ class _CompactMaterialCard extends StatelessWidget {
                         style: OutlinedButton.styleFrom(
                           foregroundColor: FieldColors.primaryNavy,
                           side: BorderSide(
-                            color:
-                                FieldColors.primaryNavy.withValues(alpha: 0.5),
+                            color: FieldColors.primaryNavy.withValues(
+                              alpha: 0.5,
+                            ),
                           ),
                           padding: EdgeInsets.zero,
                           textStyle: const TextStyle(
@@ -1179,17 +1207,18 @@ class _HorizontalMaterialSkeleton extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
         itemCount: 4,
         separatorBuilder: (_, __) => const SizedBox(width: 12),
-        itemBuilder: (_, __) => Shimmer.fromColors(
-          baseColor: FieldColors.borderSubtle,
-          highlightColor: FieldColors.surfaceWhite,
-          child: Container(
-            width: cardWidth,
-            decoration: BoxDecoration(
-              color: FieldColors.borderSubtle,
-              borderRadius: BorderRadius.circular(12),
+        itemBuilder:
+            (_, __) => Shimmer.fromColors(
+              baseColor: FieldColors.borderSubtle,
+              highlightColor: FieldColors.surfaceWhite,
+              child: Container(
+                width: cardWidth,
+                decoration: BoxDecoration(
+                  color: FieldColors.borderSubtle,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
             ),
-          ),
-        ),
       ),
     );
   }
@@ -1266,7 +1295,7 @@ class _BrowseCategoryGrid extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xFFE2E5F0)),
+                    border: Border.all(color: FieldColors.borderSubtle),
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -1317,7 +1346,7 @@ class _BrowseCategoryCard extends StatelessWidget {
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0xFFE2E5F0)),
+            border: Border.all(color: FieldColors.borderSubtle),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1398,16 +1427,17 @@ class _BrowseCategorySkeleton extends StatelessWidget {
         childAspectRatio: 1.55,
       ),
       itemCount: 4,
-      itemBuilder: (_, __) => Shimmer.fromColors(
-        baseColor: FieldColors.borderSubtle,
-        highlightColor: FieldColors.surfaceWhite,
-        child: Container(
-          decoration: BoxDecoration(
-            color: FieldColors.borderSubtle,
-            borderRadius: BorderRadius.circular(12),
+      itemBuilder:
+          (_, __) => Shimmer.fromColors(
+            baseColor: FieldColors.borderSubtle,
+            highlightColor: FieldColors.surfaceWhite,
+            child: Container(
+              decoration: BoxDecoration(
+                color: FieldColors.borderSubtle,
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
           ),
-        ),
-      ),
     );
   }
 }
@@ -1443,7 +1473,7 @@ class _OrderQuickTile extends StatelessWidget {
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0xFFE2E5F0)),
+            border: Border.all(color: FieldColors.borderSubtle),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           child: Row(
@@ -1465,9 +1495,7 @@ class _OrderQuickTile extends StatelessWidget {
                       order.materialName,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: FieldTypography.titleMedium.copyWith(
-                        fontSize: 14,
-                      ),
+                      style: FieldTypography.titleMedium.copyWith(fontSize: 14),
                     ),
                     const SizedBox(height: 2),
                     Text(
@@ -1521,7 +1549,7 @@ class _CalmOrdersEmptyState extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE2E5F0)),
+        border: Border.all(color: FieldColors.borderSubtle),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,

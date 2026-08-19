@@ -56,8 +56,8 @@ class FieldPriceTrendsView extends StatefulWidget {
 }
 
 class _FieldPriceTrendsViewState extends State<FieldPriceTrendsView> {
-  static const _scaffoldBg = Color(0xFFF5F6FA);
-  static const _appBarNavy = Color(0xFF1E326E);
+  static const _scaffoldBg = FieldColors.screenBackground;
+  static const _appBarNavy = FieldColors.primaryNavy;
 
   _TrendRange _selectedRange = _TrendRange.sixMonths;
   late String _activeMaterialId;

@@ -1,5 +1,3 @@
-// MVVM: View — no business logic
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -23,17 +21,61 @@ class CeoFieldUsersView extends StatefulWidget {
 class _CeoFieldUsersViewState extends State<CeoFieldUsersView>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
+  final Set<String> _selectedUserUids = {};
+  bool _isBulkProcessing = false;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    _tabController.addListener(() {
+      if (_tabController.indexIsChanging) {
+        setState(() => _selectedUserUids.clear());
+      }
+    });
   }
 
   @override
   void dispose() {
     _tabController.dispose();
     super.dispose();
+  }
+
+  Future<void> _bulkDeactivate(CeoViewModel vm) async {
+    if (_selectedUserUids.isEmpty) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Deactivate Selected Users?'),
+        content: Text('They will lose access to the app immediately. Total: ${_selectedUserUids.length} users.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('CANCEL')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: CeoColors.red),
+            child: const Text('DEACTIVATE ALL'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _isBulkProcessing = true);
+    try {
+      for (final uid in _selectedUserUids) {
+        await vm.deactivateFieldUser(uid);
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Successfully deactivated ${_selectedUserUids.length} users')),
+        );
+        setState(() => _selectedUserUids.clear());
+      }
+    } finally {
+      if (mounted) setState(() => _isBulkProcessing = false);
+    }
   }
 
   @override
@@ -110,12 +152,28 @@ class _CeoFieldUsersViewState extends State<CeoFieldUsersView>
           );
         },
       ),
+      floatingActionButton: (_tabController.index == 1 && _selectedUserUids.isNotEmpty)
+          ? FloatingActionButton.extended(
+              onPressed: _isBulkProcessing ? null : () {
+                final vm = context.read<CeoViewModel>();
+                _bulkDeactivate(vm);
+              },
+              backgroundColor: CeoColors.red,
+              label: _isBulkProcessing 
+                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : Text('Deactivate Selected (${_selectedUserUids.length})', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              icon: const Icon(Icons.block, color: Colors.white),
+            )
+          : null,
       bottomNavigationBar: const CeoNavBar(currentIndex: 3),
     );
   }
 
   Widget _userCard(BuildContext context, CeoViewModel vm, UserModel user,
       String filter) {
+    final isSelected = _selectedUserUids.contains(user.uid);
+    final canSelect = filter == 'active';
+
     return AdminCard(
       padding: const EdgeInsets.all(14),
       child: Column(
@@ -123,6 +181,20 @@ class _CeoFieldUsersViewState extends State<CeoFieldUsersView>
         children: [
           Row(
             children: [
+              if (canSelect)
+                Checkbox(
+                  value: isSelected,
+                  onChanged: (val) {
+                    setState(() {
+                      if (val == true) {
+                        _selectedUserUids.add(user.uid);
+                      } else {
+                        _selectedUserUids.remove(user.uid);
+                      }
+                    });
+                  },
+                  activeColor: CeoColors.amber,
+                ),
               CircleAvatar(
                 radius: 20,
                 backgroundColor: _statusColor(filter).withValues(alpha: 0.12),
@@ -364,7 +436,7 @@ class _CeoFieldUsersViewState extends State<CeoFieldUsersView>
                   Expanded(
                     child: Text(
                       code,
-                      style: GoogleFonts.jetBrainsMono(
+                      style: GoogleFonts.plusJakartaSans(
                         fontSize: 24,
                         fontWeight: FontWeight.w700,
                         letterSpacing: 4,

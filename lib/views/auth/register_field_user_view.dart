@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../utils/app_theme.dart';
 import '../../constants/app_colors.dart';
 import '../../constants/field_user_registration_options.dart';
 import '../../constants/route_names.dart';
@@ -111,7 +110,7 @@ class _RegisterFieldUserViewState extends State<RegisterFieldUserView> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Please enter a valid invite code from your CEO.'),
-          backgroundColor: AppColors.danger,
+          backgroundColor: AppColors.error,
         ),
       );
       return;
@@ -138,13 +137,14 @@ class _RegisterFieldUserViewState extends State<RegisterFieldUserView> {
   @override
   Widget build(BuildContext context) {
     final authVm = context.watch<AuthViewModel>();
+    final textTheme = Theme.of(context).textTheme;
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (authVm.errorMessage != null) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(authVm.errorMessage!),
-            backgroundColor: AppColors.danger,
+            backgroundColor: AppColors.error,
           ),
         );
         authVm.clearError();
@@ -156,7 +156,7 @@ class _RegisterFieldUserViewState extends State<RegisterFieldUserView> {
         !authVm.isLoading;
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: AppColors.screenBg,
       appBar: AppBar(
         leading: BackButton(
           onPressed: () {
@@ -167,72 +167,71 @@ class _RegisterFieldUserViewState extends State<RegisterFieldUserView> {
             }
           },
         ),
+        title: const Text('Step 1 of 1'),
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: AppColors.amber.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Icon(Icons.group_outlined, color: AppColors.amber),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Join Your Team', style: AppTextStyles.h2),
-                          Text(
-                            'Enter your CEO\'s invite code to get started.',
-                            style: AppTextStyles.bodyMuted,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 20),
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              child: LinearProgressIndicator(
+                value: 1.0,
+                backgroundColor: AppColors.border,
+                color: AppColors.amber,
+                minHeight: 6,
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+            Expanded(
+              child: SingleChildScrollView(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _buildHeader(),
+                      const SizedBox(height: 16),
 
                 // ---- Invite code ----
                 Container(
                   padding: const EdgeInsets.all(24),
-                  decoration: appCardDecoration(
-                    shadow: AppShadows.card,
-                    borderColor: authVm.inviteError != null
-                        ? AppColors.danger
-                        : authVm.pendingInviteCompanyId != null
-                            ? AppColors.success
-                            : AppColors.border,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: authVm.inviteError != null
+                          ? AppColors.error
+                          : authVm.pendingInviteCompanyId != null
+                              ? AppColors.success
+                              : AppColors.border,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.04),
+                        blurRadius: 16,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Text('COMPANY INVITE CODE', style: AppTextStyles.label),
+                      Text('COMPANY INVITE CODE', style: textTheme.labelLarge?.copyWith(color: AppColors.navy)),
                       const SizedBox(height: 8),
                       TextFormField(
                         controller: _inviteCodeController,
                         textCapitalization: TextCapitalization.characters,
                         onChanged: _onInviteCodeChanged,
                         validator: (v) => _required(v, 'Invite code'),
-                        style: AppTextStyles.body.copyWith(
+                        style: textTheme.bodyLarge?.copyWith(
                           letterSpacing: 2,
                           fontWeight: FontWeight.w600,
                         ),
                         decoration: InputDecoration(
                           hintText: 'RB-X7K2PQ',
-                          prefixIcon: const Icon(Icons.key_outlined,
-                              color: AppColors.textSecondary, size: 20),
+                          prefixIcon: const Icon(Icons.key_outlined, size: 20),
                           suffixIcon: authVm.isValidatingInvite
                               ? const Padding(
                                   padding: EdgeInsets.all(14),
@@ -252,8 +251,8 @@ class _RegisterFieldUserViewState extends State<RegisterFieldUserView> {
                         Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: AppColors.successBg,
-                            borderRadius: BorderRadius.circular(AppRadius.sm),
+                            color: AppColors.success.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(8),
                           ),
                           child: Row(
                             children: [
@@ -262,9 +261,8 @@ class _RegisterFieldUserViewState extends State<RegisterFieldUserView> {
                               Expanded(
                                 child: Text(
                                   'You\'ll join ${authVm.pendingInviteCompanyName}',
-                                  style: const TextStyle(
+                                  style: textTheme.bodySmall?.copyWith(
                                     color: AppColors.success,
-                                    fontSize: 13,
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),
@@ -276,17 +274,17 @@ class _RegisterFieldUserViewState extends State<RegisterFieldUserView> {
                         Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: AppColors.dangerBg,
-                            borderRadius: BorderRadius.circular(AppRadius.sm),
+                            color: AppColors.error.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(8),
                           ),
                           child: Row(
                             children: [
-                              const Icon(Icons.error_outline, color: AppColors.danger, size: 18),
+                              const Icon(Icons.error_outline, color: AppColors.error, size: 18),
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
                                   authVm.inviteError!,
-                                  style: const TextStyle(color: AppColors.danger, fontSize: 13),
+                                  style: textTheme.bodySmall?.copyWith(color: AppColors.error),
                                 ),
                               ),
                             ],
@@ -295,7 +293,7 @@ class _RegisterFieldUserViewState extends State<RegisterFieldUserView> {
                       else
                         Text(
                           'Ask your CEO or site manager for your company\'s invite code.',
-                          style: AppTextStyles.bodyMuted,
+                          style: textTheme.bodySmall,
                         ),
                     ],
                   ),
@@ -303,147 +301,119 @@ class _RegisterFieldUserViewState extends State<RegisterFieldUserView> {
                 const SizedBox(height: 16),
 
                 // ---- Personal identity ----
-                Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: appCardDecoration(shadow: AppShadows.card),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text('Personal Identity', style: AppTextStyles.h3),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Details used for your company employee record.',
-                        style: AppTextStyles.bodyMuted,
-                      ),
-                      const SizedBox(height: 16),
-                      AuthTextField(
-                        label: 'FULL NAME',
-                        controller: _nameController,
-                        prefixIcon: Icons.person_outline,
-                        placeholder: 'Ali Raza',
-                        validator: (v) => _required(v, 'Full name'),
-                      ),
-                      const SizedBox(height: 16),
-                      AuthTextField(
-                        label: 'PHONE NUMBER',
-                        controller: _phoneController,
-                        prefixIcon: Icons.phone_outlined,
-                        placeholder: '0300 1234567',
-                        keyboardType: TextInputType.phone,
-                        validator: PakistanValidators.validatePhone,
-                      ),
-                      const SizedBox(height: 16),
-                      AuthTextField(
-                        label: 'EMAIL ADDRESS',
-                        controller: _emailController,
-                        prefixIcon: Icons.email_outlined,
-                        placeholder: 'you@example.com',
-                        keyboardType: TextInputType.emailAddress,
-                        validator: _validateEmail,
-                      ),
-                      const SizedBox(height: 16),
-                      AuthTextField(
-                        label: 'PASSWORD',
-                        controller: _passwordController,
-                        prefixIcon: Icons.lock_outline,
-                        placeholder: '••••••••',
-                        obscureText: true,
-                        validator: _validatePassword,
-                      ),
-                      const SizedBox(height: 16),
-                      AuthTextField(
-                        label: 'CONFIRM PASSWORD',
-                        controller: _confirmPasswordController,
-                        prefixIcon: Icons.lock_outline,
-                        placeholder: '••••••••',
-                        obscureText: true,
-                        validator: _validateConfirmPassword,
-                      ),
-                      const SizedBox(height: 16),
-                      AuthTextField(
-                        label: 'CNIC NUMBER',
-                        controller: _cnicController,
-                        prefixIcon: Icons.badge_outlined,
-                        placeholder: '35202-1234567-1',
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [CnicTextInputFormatter()],
-                        validator: PakistanValidators.validateCnic,
-                      ),
-                    ],
-                  ),
+                _sectionCard(
+                  title: 'Personal Identity',
+                  subtitle: 'Details used for your company employee record.',
+                  children: [
+                    AuthTextField(
+                      label: 'FULL NAME',
+                      controller: _nameController,
+                      prefixIcon: Icons.person_outline,
+                      placeholder: 'Ali Raza',
+                      validator: (v) => _required(v, 'Full name'),
+                    ),
+                    const SizedBox(height: 16),
+                    AuthTextField(
+                      label: 'PHONE NUMBER',
+                      controller: _phoneController,
+                      prefixIcon: Icons.phone_outlined,
+                      placeholder: '0300 1234567',
+                      keyboardType: TextInputType.phone,
+                      validator: PakistanValidators.validatePhone,
+                    ),
+                    const SizedBox(height: 16),
+                    AuthTextField(
+                      label: 'EMAIL ADDRESS',
+                      controller: _emailController,
+                      prefixIcon: Icons.email_outlined,
+                      placeholder: 'you@example.com',
+                      keyboardType: TextInputType.emailAddress,
+                      validator: _validateEmail,
+                    ),
+                    const SizedBox(height: 16),
+                    AuthTextField(
+                      label: 'PASSWORD',
+                      controller: _passwordController,
+                      prefixIcon: Icons.lock_outline,
+                      placeholder: '••••••••',
+                      obscureText: true,
+                      validator: _validatePassword,
+                    ),
+                    const SizedBox(height: 16),
+                    AuthTextField(
+                      label: 'CONFIRM PASSWORD',
+                      controller: _confirmPasswordController,
+                      prefixIcon: Icons.lock_outline,
+                      placeholder: '••••••••',
+                      obscureText: true,
+                      validator: _validateConfirmPassword,
+                    ),
+                    const SizedBox(height: 16),
+                    AuthTextField(
+                      label: 'CNIC NUMBER',
+                      controller: _cnicController,
+                      prefixIcon: Icons.badge_outlined,
+                      placeholder: '35202-1234567-1',
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [CnicTextInputFormatter()],
+                      validator: PakistanValidators.validateCnic,
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 16),
 
                 // ---- Role information ----
-                Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: appCardDecoration(shadow: AppShadows.card),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text('Role Information', style: AppTextStyles.h3),
-                      const SizedBox(height: 4),
-                      Text(
-                        'How you work on site for this company.',
-                        style: AppTextStyles.bodyMuted,
+                _sectionCard(
+                  title: 'Role Information',
+                  subtitle: 'How you work on site for this company.',
+                  children: [
+                    Text('JOB TITLE / DESIGNATION', style: textTheme.labelLarge?.copyWith(color: AppColors.navy)),
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<String>(
+                      value: _jobTitle,
+                      isExpanded: true,
+                      items: kFieldUserJobTitles
+                          .map(
+                            (title) => DropdownMenuItem(
+                              value: title,
+                              child: Text(title, style: textTheme.bodyLarge),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (v) => setState(
+                        () => _jobTitle = v ?? kFieldUserJobTitles.first,
                       ),
-                      const SizedBox(height: 16),
-                      Text('JOB TITLE / DESIGNATION', style: AppTextStyles.label),
-                      const SizedBox(height: 8),
-                      DropdownButtonFormField<String>(
-                        value: _jobTitle,
-                        isExpanded: true,
-                        items: kFieldUserJobTitles
-                            .map(
-                              (title) => DropdownMenuItem(
-                                value: title,
-                                child: Text(title, style: AppTextStyles.body),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (v) => setState(
-                          () => _jobTitle = v ?? kFieldUserJobTitles.first,
-                        ),
-                        decoration: const InputDecoration(
-                          prefixIcon: Icon(
-                            Icons.work_outline,
-                            color: AppColors.textSecondary,
-                            size: 20,
-                          ),
-                        ),
-                      ),
-                      if (_jobTitle == kFieldUserJobTitleOther) ...[
-                        const SizedBox(height: 16),
-                        AuthTextField(
-                          label: 'SPECIFY JOB TITLE',
-                          controller: _otherJobTitleController,
-                          prefixIcon: Icons.edit_outlined,
-                          placeholder: 'e.g. Quantity Surveyor',
-                          validator: _validateJobTitleOther,
-                        ),
-                      ],
+                    ),
+                    if (_jobTitle == kFieldUserJobTitleOther) ...[
                       const SizedBox(height: 16),
                       AuthTextField(
-                        label: 'ASSIGNED SITE / LOCATION',
-                        controller: _assignedSiteController,
-                        prefixIcon: Icons.place_outlined,
-                        placeholder: 'Site B - DHA Phase 6',
-                        validator: (v) => _required(v, 'Assigned site'),
+                        label: 'SPECIFY JOB TITLE',
+                        controller: _otherJobTitleController,
+                        prefixIcon: Icons.edit_outlined,
+                        placeholder: 'e.g. Quantity Surveyor',
+                        validator: _validateJobTitleOther,
                       ),
                     ],
-                  ),
+                    const SizedBox(height: 16),
+                    AuthTextField(
+                      label: 'ASSIGNED SITE / LOCATION',
+                      controller: _assignedSiteController,
+                      prefixIcon: Icons.place_outlined,
+                      placeholder: 'Site B - DHA Phase 6',
+                      validator: (v) => _required(v, 'Assigned site'),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 20),
                 AuthPrimaryButton(
                   label: 'Create Account',
                   isLoading: authVm.isLoading,
-                  color: AppColors.amber,
                   onPressed: canSubmit ? () => _submit(authVm) : null,
                 ),
                 const SizedBox(height: 10),
                 Text(
                   'Your account is active immediately — you can start ordering materials right away.',
-                  style: AppTextStyles.bodyMuted,
+                  style: textTheme.bodySmall,
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 20),
@@ -452,6 +422,73 @@ class _RegisterFieldUserViewState extends State<RegisterFieldUserView> {
             ),
           ),
         ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeader() {
+    final textTheme = Theme.of(context).textTheme;
+    return Row(
+      children: [
+        Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            color: AppColors.amber.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: const Icon(Icons.group_outlined, color: AppColors.amber),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Join Your Team', style: textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold, color: AppColors.navy)),
+              Text(
+                'Enter your CEO\'s invite code to get started.',
+                style: textTheme.bodySmall,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _sectionCard({
+    required String title,
+    String? subtitle,
+    required List<Widget> children,
+  }) {
+    final textTheme = Theme.of(context).textTheme;
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(title, style: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold, color: AppColors.navy)),
+          if (subtitle != null) ...[
+            const SizedBox(height: 4),
+            Text(subtitle, style: textTheme.bodySmall),
+          ],
+          const SizedBox(height: 16),
+          ...children,
+        ],
       ),
     );
   }

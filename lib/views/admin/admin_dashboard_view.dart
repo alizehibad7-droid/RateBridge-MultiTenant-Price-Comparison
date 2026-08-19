@@ -14,6 +14,7 @@ import 'admin_categories_view.dart';
 import 'admin_finance_view.dart';
 import 'admin_ceo_management_view.dart';
 import 'admin_supplier_management_view.dart';
+import 'admin_payment_proofs_view.dart';
 
 class AdminDashboardView extends StatefulWidget {
   const AdminDashboardView({super.key});
@@ -254,9 +255,32 @@ class _AdminHomeOverview extends StatelessWidget {
                       () => onAction(3),
                     ),
                     _buildActionCard(
+                      'Dispute\nCenter',
+                      Icons.gavel_outlined,
+                      () => context.push(RouteNames.adminDisputes),
+                    ),
+                    _buildActionCard(
+                      'Audit\nLogs',
+                      Icons.history_edu_outlined,
+                      () => context.push(RouteNames.adminAuditLogs),
+                    ),
+                    _buildActionCard(
                       'Admin\nProfile',
                       Icons.person_outline,
                       () => onAction(5),
+                    ),
+                    _buildActionCard(
+                      'Payment\nVerification',
+                      Icons.fact_check_outlined,
+                      () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) =>
+                                AdminTheme.wrap(const AdminPaymentProofsView()),
+                          ),
+                        );
+                      },
                     ),
                     _buildActionCard(
                       'Manage\nTaxonomy',

@@ -268,6 +268,26 @@ class FieldMaterialCard extends StatelessWidget {
 
               ),
 
+              if (material.bulkDiscountAvailable == true) ...[
+
+                const SizedBox(height: 4),
+
+                Text(
+
+                  'Bulk discount available',
+
+                  style: FieldTypography.labelSmall.copyWith(
+
+                    color: FieldColors.statusSuccess,
+
+                    fontSize: 10,
+
+                  ),
+
+                ),
+
+              ],
+
             ],
 
           ),
@@ -366,6 +386,28 @@ class FieldSearchResultTile extends StatelessWidget {
 
                     ),
 
+                    if (material.bulkDiscountAvailable == true)
+
+                      Padding(
+
+                        padding: const EdgeInsets.only(top: 2),
+
+                        child: Text(
+
+                          'Bulk discount available',
+
+                          style: FieldTypography.labelSmall.copyWith(
+
+                            color: FieldColors.statusSuccess,
+
+                            fontSize: 10,
+
+                          ),
+
+                        ),
+
+                      ),
+
                   ],
 
                 ),
@@ -387,6 +429,26 @@ class FieldSearchResultTile extends StatelessWidget {
                 ),
 
               ),
+
+              if (material.bulkDiscountAvailable == true) ...[
+
+                const SizedBox(height: 4),
+
+                Text(
+
+                  'Bulk discount available',
+
+                  style: FieldTypography.labelSmall.copyWith(
+
+                    color: FieldColors.statusSuccess,
+
+                    fontSize: 10,
+
+                  ),
+
+                ),
+
+              ],
 
             ],
 

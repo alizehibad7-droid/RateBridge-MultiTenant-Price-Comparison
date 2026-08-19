@@ -9,6 +9,8 @@ import '../services/firebase_auth_service.dart';
 import '../services/cloudinary_service.dart';
 import '../repositories/user_repository.dart';
 import '../services/category_seed_service.dart';
+import '../services/plan_limit_service.dart';
+import '../utils/app_exception.dart';
 import '../utils/invite_code_generator.dart';
 import '../utils/pakistan_validators.dart';
 
@@ -502,6 +504,11 @@ class AuthViewModel extends ChangeNotifier {
       }
 
       final companyId = pendingInviteCompanyId!;
+
+      // Count only active field users. Missing companies fail closed rather
+      // than allowing an unbounded registration.
+      await PlanLimitService.ensureFieldUserCapacity(_firestore, companyId);
+
       final normalizedPhone = PakistanValidators.normalizePhone(phone);
       final normalizedCnic = PakistanValidators.formatCnic(cnicNumber);
 
@@ -549,6 +556,9 @@ class AuthViewModel extends ChangeNotifier {
       isRegistered = true;
       _status = AuthStatus.authenticated;
       _startUserSubscription(uid);
+    } on AppException catch (e) {
+      _status = AuthStatus.error;
+      _errorMessage = e.message;
     } on FirebaseAuthException catch (e) {
       _status = AuthStatus.error;
       _errorMessage = _mapAuthError(e);

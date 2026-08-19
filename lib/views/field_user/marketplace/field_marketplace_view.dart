@@ -467,7 +467,7 @@ class _MarketplaceMaterialCard extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: const Color(0xFFE2E5F0),
+          color: FieldColors.borderSubtle,
           width: 0.5,
         ),
       ),
@@ -569,6 +569,24 @@ class _MarketplaceMaterialCard extends StatelessWidget {
                       ),
                     ],
                   ),
+                  if (material.bulkDiscountAvailable == true) ...[
+                    const SizedBox(height: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: FieldColors.statusSuccess.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        'Bulk Discount Available',
+                        style: FieldTypography.labelSmall.copyWith(
+                          color: FieldColors.statusSuccess,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 8),
                   Row(
                     children: [

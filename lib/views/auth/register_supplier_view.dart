@@ -1,5 +1,3 @@
-// MVVM: View — no business logic
-
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -20,7 +18,6 @@ import '../../viewmodels/auth_viewmodel.dart';
 import '../../widgets/auth/auth_text_field.dart';
 import '../../widgets/auth/auth_widgets.dart';
 
-const _supplierAccent = AppColors.amber;
 const _totalSteps = 3;
 
 class RegisterSupplierView extends StatefulWidget {
@@ -179,7 +176,7 @@ class _RegisterSupplierViewState extends State<RegisterSupplierView> {
 
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: AppColors.danger),
+      SnackBar(content: Text(message), backgroundColor: AppColors.error),
     );
   }
 
@@ -246,7 +243,7 @@ class _RegisterSupplierViewState extends State<RegisterSupplierView> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(authVm.errorMessage!),
-            backgroundColor: AppColors.danger,
+            backgroundColor: AppColors.error,
           ),
         );
         authVm.clearError();
@@ -254,7 +251,7 @@ class _RegisterSupplierViewState extends State<RegisterSupplierView> {
     });
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: AppColors.screenBg,
       appBar: AppBar(
         leading: BackButton(
           onPressed: () {
@@ -279,7 +276,7 @@ class _RegisterSupplierViewState extends State<RegisterSupplierView> {
               child: LinearProgressIndicator(
                 value: (_currentStep + 1) / _totalSteps,
                 backgroundColor: AppColors.border,
-                color: _supplierAccent,
+                color: AppColors.amber,
                 minHeight: 6,
                 borderRadius: BorderRadius.circular(4),
               ),
@@ -313,6 +310,7 @@ class _RegisterSupplierViewState extends State<RegisterSupplierView> {
   }
 
   Widget _buildHeader() {
+    final textTheme = Theme.of(context).textTheme;
     final subtitles = [
       'Business identity and owner verification',
       'Where you operate and deliver',
@@ -324,18 +322,18 @@ class _RegisterSupplierViewState extends State<RegisterSupplierView> {
           width: 44,
           height: 44,
           decoration: BoxDecoration(
-            color: _supplierAccent.withValues(alpha: 0.1),
+            color: AppColors.amber.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(12),
           ),
-          child: const Icon(Icons.storefront_outlined, color: _supplierAccent),
+          child: const Icon(Icons.storefront_outlined, color: AppColors.amber),
         ),
         const SizedBox(width: 12),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Supplier Registration', style: AppTextStyles.h2),
-              Text(subtitles[_currentStep], style: AppTextStyles.bodyMuted),
+              Text('Supplier Registration', style: textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold, color: AppColors.navy)),
+              Text(subtitles[_currentStep], style: textTheme.bodySmall),
             ],
           ),
         ),
@@ -344,6 +342,7 @@ class _RegisterSupplierViewState extends State<RegisterSupplierView> {
   }
 
   Widget _buildStepOne() {
+    final textTheme = Theme.of(context).textTheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -358,7 +357,7 @@ class _RegisterSupplierViewState extends State<RegisterSupplierView> {
               validator: (v) => _required(v, 'Business name'),
             ),
             const SizedBox(height: 16),
-            Text('BUSINESS TYPE', style: AppTextStyles.label),
+            Text('BUSINESS TYPE', style: textTheme.labelLarge?.copyWith(color: AppColors.navy)),
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(
               value: _businessType,
@@ -366,19 +365,12 @@ class _RegisterSupplierViewState extends State<RegisterSupplierView> {
                   .map(
                     (t) => DropdownMenuItem(
                       value: t,
-                      child: Text(t, style: AppTextStyles.body),
+                      child: Text(t, style: textTheme.bodyLarge),
                     ),
                   )
                   .toList(),
               onChanged: (v) =>
                   setState(() => _businessType = v ?? _businessType),
-              decoration: const InputDecoration(
-                prefixIcon: Icon(
-                  Icons.business_center_outlined,
-                  color: AppColors.textSecondary,
-                  size: 20,
-                ),
-              ),
             ),
             const SizedBox(height: 16),
             AuthTextField(
@@ -481,31 +473,25 @@ class _RegisterSupplierViewState extends State<RegisterSupplierView> {
   }
 
   Widget _buildStepTwo() {
+    final textTheme = Theme.of(context).textTheme;
     return _sectionCard(
       title: 'Business Location',
       children: [
-        Text('CITY', style: AppTextStyles.label),
+        Text('CITY', style: textTheme.labelLarge?.copyWith(color: AppColors.navy)),
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
           value: _selectedCity,
-          hint: Text('Select city', style: AppTextStyles.bodyMuted),
+          hint: Text('Select city', style: textTheme.bodyMedium),
           isExpanded: true,
           items: kPakistanMajorCities
               .map(
                 (city) => DropdownMenuItem(
                   value: city,
-                  child: Text(city, style: AppTextStyles.body),
+                  child: Text(city, style: textTheme.bodyLarge),
                 ),
               )
               .toList(),
           onChanged: (v) => setState(() => _selectedCity = v),
-          decoration: const InputDecoration(
-            prefixIcon: Icon(
-              Icons.location_city_outlined,
-              color: AppColors.textSecondary,
-              size: 20,
-            ),
-          ),
         ),
         const SizedBox(height: 16),
         AuthTextField(
@@ -517,11 +503,11 @@ class _RegisterSupplierViewState extends State<RegisterSupplierView> {
           maxLines: 3,
         ),
         const SizedBox(height: 16),
-        Text('DELIVERY COVERAGE AREAS', style: AppTextStyles.label),
+        Text('DELIVERY COVERAGE AREAS', style: textTheme.labelLarge?.copyWith(color: AppColors.navy)),
         const SizedBox(height: 4),
         Text(
           'Select all cities/areas you can deliver to.',
-          style: AppTextStyles.bodyMuted,
+          style: textTheme.bodySmall,
         ),
         const SizedBox(height: 12),
         Wrap(
@@ -532,8 +518,8 @@ class _RegisterSupplierViewState extends State<RegisterSupplierView> {
             return FilterChip(
               label: Text(city),
               selected: selected,
-              selectedColor: _supplierAccent.withValues(alpha: 0.15),
-              checkmarkColor: _supplierAccent,
+              selectedColor: AppColors.amber.withValues(alpha: 0.15),
+              checkmarkColor: AppColors.amber,
               onSelected: (value) {
                 setState(() {
                   if (value) {
@@ -551,6 +537,7 @@ class _RegisterSupplierViewState extends State<RegisterSupplierView> {
   }
 
   Widget _buildStepThree() {
+    final textTheme = Theme.of(context).textTheme;
     final categoryNames = _firestoreCategories.isNotEmpty
         ? _firestoreCategories.map((c) => c.name).toList()
         : const <String>[];
@@ -598,7 +585,7 @@ class _RegisterSupplierViewState extends State<RegisterSupplierView> {
             else if (categoryNames.isEmpty)
               Text(
                 'Categories are loading from the platform catalog. Pull back after signing in if empty.',
-                style: AppTextStyles.bodyMuted,
+                style: textTheme.bodySmall,
               )
             else
               Wrap(
@@ -622,11 +609,11 @@ class _RegisterSupplierViewState extends State<RegisterSupplierView> {
                       ),
                       decoration: BoxDecoration(
                         color: selected
-                            ? _supplierAccent.withValues(alpha: 0.12)
-                            : AppColors.surface,
-                        borderRadius: BorderRadius.circular(AppRadius.pill),
+                            ? AppColors.amber.withValues(alpha: 0.12)
+                            : Colors.white,
+                        borderRadius: BorderRadius.circular(99),
                         border: Border.all(
-                          color: selected ? _supplierAccent : AppColors.border,
+                          color: selected ? AppColors.amber : AppColors.border,
                           width: selected ? 1.2 : 0.8,
                         ),
                       ),
@@ -635,15 +622,14 @@ class _RegisterSupplierViewState extends State<RegisterSupplierView> {
                         children: [
                           if (selected) ...[
                             const Icon(Icons.check,
-                                size: 14, color: _supplierAccent),
+                                size: 14, color: AppColors.amber),
                             const SizedBox(width: 4),
                           ],
                           Text(
                             cat,
-                            style: TextStyle(
-                              fontSize: 13,
+                            style: textTheme.bodySmall?.copyWith(
                               color: selected
-                                  ? _supplierAccent
+                                  ? AppColors.amber
                                   : AppColors.textSecondary,
                               fontWeight:
                                   selected ? FontWeight.w600 : FontWeight.w400,
@@ -678,7 +664,6 @@ class _RegisterSupplierViewState extends State<RegisterSupplierView> {
           child: AuthPrimaryButton(
             label: isLast ? 'Submit Application' : 'Next',
             isLoading: authVm.isLoading,
-            color: _supplierAccent,
             onPressed: authVm.isLoading
                 ? null
                 : () {
@@ -699,16 +684,27 @@ class _RegisterSupplierViewState extends State<RegisterSupplierView> {
     String? subtitle,
     required List<Widget> children,
   }) {
+    final textTheme = Theme.of(context).textTheme;
     return Container(
       padding: const EdgeInsets.all(24),
-      decoration: appCardDecoration(shadow: AppShadows.card),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(title, style: AppTextStyles.h3),
+          Text(title, style: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold, color: AppColors.navy)),
           if (subtitle != null) ...[
             const SizedBox(height: 4),
-            Text(subtitle, style: AppTextStyles.bodyMuted),
+            Text(subtitle, style: textTheme.bodySmall),
           ],
           const SizedBox(height: 16),
           ...children,
@@ -723,10 +719,11 @@ class _RegisterSupplierViewState extends State<RegisterSupplierView> {
     required VoidCallback onPick,
     required VoidCallback onClear,
   }) {
+    final textTheme = Theme.of(context).textTheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(label, style: AppTextStyles.label),
+        Text(label, style: textTheme.labelLarge?.copyWith(color: AppColors.navy)),
         const SizedBox(height: 8),
         InkWell(
           onTap: onPick,
@@ -734,7 +731,7 @@ class _RegisterSupplierViewState extends State<RegisterSupplierView> {
           child: Container(
             height: 120,
             decoration: BoxDecoration(
-              color: AppColors.surface,
+              color: Colors.white,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: AppColors.border),
             ),
@@ -745,7 +742,7 @@ class _RegisterSupplierViewState extends State<RegisterSupplierView> {
                       Icon(Icons.add_a_photo_outlined,
                           color: AppColors.textSecondary.withValues(alpha: 0.7)),
                       const SizedBox(height: 6),
-                      Text('Tap to upload', style: AppTextStyles.bodyMuted),
+                      Text('Tap to upload', style: textTheme.bodySmall),
                     ],
                   )
                 : Stack(

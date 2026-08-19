@@ -22,17 +22,59 @@ class AdminCeoManagementView extends StatefulWidget {
 class _AdminCeoManagementViewState extends State<AdminCeoManagementView>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  final Set<String> _selectedCeoUids = {};
+  final Map<String, String?> _ceoToCompanyMap = {};
+  bool _isBulkProcessing = false;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
+    _tabController.addListener(() {
+      if (_tabController.indexIsChanging) {
+        setState(() => _selectedCeoUids.clear());
+      }
+    });
   }
 
   @override
   void dispose() {
     _tabController.dispose();
     super.dispose();
+  }
+
+  Future<void> _bulkApprove(AdminViewModel adminVM) async {
+    if (_selectedCeoUids.isEmpty) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Bulk Approve CEOs'),
+        content: Text('Approve all ${_selectedCeoUids.length} selected CEOs and generate company invite codes?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('CANCEL')),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('APPROVE ALL', style: TextStyle(fontWeight: FontWeight.bold))),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _isBulkProcessing = true);
+    try {
+      for (final uid in _selectedCeoUids) {
+        final companyId = _ceoToCompanyMap[uid];
+        await adminVM.acceptCEO(companyId, uid);
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Successfully approved ${_selectedCeoUids.length} CEOs')),
+        );
+        setState(() => _selectedCeoUids.clear());
+      }
+    } finally {
+      if (mounted) setState(() => _isBulkProcessing = false);
+    }
   }
 
   @override
@@ -49,41 +91,51 @@ class _AdminCeoManagementViewState extends State<AdminCeoManagementView>
       ],
     );
 
-    if (widget.embedded) {
-      return Column(
-        children: [
-          Material(
-            color: AdminColors.navy,
-            child: TabBar(
-              controller: _tabController,
-              tabs: const [
-                Tab(text: 'Pending'),
-                Tab(text: 'Active'),
-                Tab(text: 'Suspended'),
-                Tab(text: 'Rejected'),
-              ],
-            ),
-          ),
-          Expanded(child: content),
-        ],
-      );
-    }
-
     return Scaffold(
       backgroundColor: AdminColors.screenBg,
-      appBar: AdminAppBar(
-        title: 'CEO Management',
-        bottom: TabBar(
-          controller: _tabController,
-          tabs: const [
-            Tab(text: 'Pending'),
-            Tab(text: 'Active'),
-            Tab(text: 'Suspended'),
-            Tab(text: 'Rejected'),
-          ],
-        ),
-      ),
-      body: content,
+      appBar: widget.embedded 
+          ? null 
+          : AdminAppBar(
+              title: 'CEO Management',
+              bottom: TabBar(
+                controller: _tabController,
+                tabs: const [
+                  Tab(text: 'Pending'),
+                  Tab(text: 'Active'),
+                  Tab(text: 'Suspended'),
+                  Tab(text: 'Rejected'),
+                ],
+              ),
+            ),
+      body: widget.embedded 
+          ? Column(
+              children: [
+                Material(
+                  color: AdminColors.navy,
+                  child: TabBar(
+                    controller: _tabController,
+                    tabs: const [
+                      Tab(text: 'Pending'),
+                      Tab(text: 'Active'),
+                      Tab(text: 'Suspended'),
+                      Tab(text: 'Rejected'),
+                    ],
+                  ),
+                ),
+                Expanded(child: content),
+              ],
+            )
+          : content,
+      floatingActionButton: (_tabController.index == 0 && _selectedCeoUids.isNotEmpty)
+          ? FloatingActionButton.extended(
+              onPressed: _isBulkProcessing ? null : () => _bulkApprove(adminVM),
+              backgroundColor: AdminColors.amber,
+              label: _isBulkProcessing 
+                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : Text('Approve Selected (${_selectedCeoUids.length})', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              icon: const Icon(Icons.done_all, color: Colors.white),
+            )
+          : null,
     );
   }
 
@@ -111,8 +163,12 @@ class _AdminCeoManagementViewState extends State<AdminCeoManagementView>
           padding: const EdgeInsets.all(16),
           itemCount: docs.length,
           itemBuilder: (context, index) {
-            final ceo =
-                UserModel.fromMap(docs[index].data() as Map<String, dynamic>);
+            final data = docs[index].data() as Map<String, dynamic>;
+            final ceo = UserModel.fromMap(data);
+            
+            // Map for bulk approval lookup
+            _ceoToCompanyMap[ceo.uid] = ceo.companyId;
+
             return FutureBuilder<DocumentSnapshot>(
               future: FirebaseFirestore.instance
                   .collection('companies')
@@ -140,11 +196,8 @@ class _AdminCeoManagementViewState extends State<AdminCeoManagementView>
     AdminViewModel adminVM,
   ) {
     final status = (ceo.status ?? 'pending').toLowerCase();
-    final ceoName = company?.ceoFullName ?? ceo.name;
-    final designation = company?.designation ?? 'CEO';
-    final cnic = _formatCnic(company?.cnicNumber ?? ceo.cnic);
-    final rejectionReason =
-        ceo.rejectionReason ?? company?.rejectionReason ?? '';
+    final isPending = status == 'pending';
+    final isSelected = _selectedCeoUids.contains(ceo.uid);
 
     return AdminCard(
       margin: const EdgeInsets.only(bottom: 16),
@@ -154,18 +207,32 @@ class _AdminCeoManagementViewState extends State<AdminCeoManagementView>
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (isPending)
+                  Checkbox(
+                    value: isSelected,
+                    onChanged: (val) {
+                      setState(() {
+                        if (val == true) {
+                          _selectedCeoUids.add(ceo.uid);
+                        } else {
+                          _selectedCeoUids.remove(ceo.uid);
+                        }
+                      });
+                    },
+                    activeColor: AdminColors.amber,
+                  ),
                 CircleAvatar(
-                  radius: 24,
+                  radius: 20,
                   backgroundColor: AdminColors.navy.withValues(alpha: 0.1),
                   child: const Icon(Icons.business_center_outlined,
-                      color: AdminColors.navy),
+                      color: AdminColors.navy, size: 20),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(ceoName,
+                      Text(company?.ceoFullName ?? ceo.name,
                           style: GoogleFonts.plusJakartaSans(
                               fontWeight: FontWeight.w700,
                               fontSize: 16,
@@ -232,9 +299,9 @@ class _AdminCeoManagementViewState extends State<AdminCeoManagementView>
               AdminApprovalSection(
                 title: 'CEO / AUTHORIZED PERSON',
                 children: [
-                  AdminDetailRow(label: 'Full name', value: ceoName),
-                  AdminDetailRow(label: 'Designation', value: designation),
-                  AdminDetailRow(label: 'CNIC', value: cnic),
+                  AdminDetailRow(label: 'Full name', value: company.ceoFullName ?? ceo.name),
+                  AdminDetailRow(label: 'Designation', value: company.designation ?? 'CEO'),
+                  AdminDetailRow(label: 'CNIC', value: _formatCnic(company.cnicNumber ?? ceo.cnic)),
                   const SizedBox(height: 4),
                   AdminDocumentThumbnailRow(
                     documents: [
@@ -243,78 +310,6 @@ class _AdminCeoManagementViewState extends State<AdminCeoManagementView>
                     ],
                   ),
                 ],
-              ),
-              const SizedBox(height: 16),
-              AdminApprovalSection(
-                title: 'LOCATION & SCALE',
-                children: [
-                  AdminDetailRow(
-                      label: 'City', value: company.city.isNotEmpty ? company.city : ceo.city),
-                  AdminDetailRow(
-                    label: 'Address',
-                    value: company.address.isNotEmpty
-                        ? company.address
-                        : (ceo.address ?? ''),
-                    maxLines: 5,
-                  ),
-                  AdminDetailRow(
-                    label: 'Monthly procurement',
-                    value: company.estimatedMonthlyVolume ?? '',
-                  ),
-                  AdminDetailRow(
-                    label: 'Active sites',
-                    value: company.activeSitesCount?.toString() ?? '',
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              AdminApprovalSection(
-                title: 'COMPANY PROOF',
-                children: [
-                  AdminDocumentThumbnailRow(
-                    documents: [
-                      (
-                        label: 'Registration cert / letterhead',
-                        url: company.registrationCertUrl,
-                      ),
-                      (label: 'Office / site photo', url: company.officePhotoUrl),
-                    ],
-                  ),
-                ],
-              ),
-            ],
-            if (status == 'rejected' && rejectionReason.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AdminColors.red.withValues(alpha: 0.06),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                      color: AdminColors.red.withValues(alpha: 0.2)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Rejection reason',
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: AdminColors.red,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      rejectionReason,
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 13,
-                        color: AdminColors.navy,
-                      ),
-                    ),
-                  ],
-                ),
               ),
             ],
             const Divider(height: 28),

@@ -16,19 +16,26 @@ import '../widgets/field_material_card.dart';
 
 class FieldPlaceOrderView extends StatefulWidget {
   final MaterialListing material;
+  final String? initialAddress;
+  final double? initialQuantity;
 
-  const FieldPlaceOrderView({super.key, required this.material});
+  const FieldPlaceOrderView({
+    super.key,
+    required this.material,
+    this.initialAddress,
+    this.initialQuantity,
+  });
 
   @override
   State<FieldPlaceOrderView> createState() => _FieldPlaceOrderViewState();
 }
 
 class _FieldPlaceOrderViewState extends State<FieldPlaceOrderView> {
-  static const _appBarNavy = Color(0xFF1E326E);
+  static const _appBarNavy = FieldColors.primaryNavy;
 
   final _formKey = GlobalKey<FormState>();
-  final _quantityController = TextEditingController(text: '1');
-  final _addressController = TextEditingController();
+  late final TextEditingController _quantityController;
+  late final TextEditingController _addressController;
   final _notesController = TextEditingController();
 
   DateTime? _requiredDate;
@@ -38,6 +45,10 @@ class _FieldPlaceOrderViewState extends State<FieldPlaceOrderView> {
   @override
   void initState() {
     super.initState();
+    _quantityController = TextEditingController(
+      text: _formatQuantity(widget.initialQuantity ?? 1),
+    );
+    _addressController = TextEditingController(text: widget.initialAddress);
     _quantityController.addListener(_onFormChanged);
     _addressController.addListener(_onFormChanged);
   }
@@ -462,7 +473,7 @@ class _OrderSummaryCard extends StatelessWidget {
           ],
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 12),
-            child: Divider(height: 1, color: Color(0xFFE2E5F0)),
+            child: Divider(height: 1, color: FieldColors.borderSubtle),
           ),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -547,7 +558,7 @@ class _OrderSummaryCard extends StatelessWidget {
           if (material.description?.trim().isNotEmpty == true) ...[
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 12),
-              child: Divider(height: 1, color: Color(0xFFE2E5F0)),
+              child: Divider(height: 1, color: FieldColors.borderSubtle),
             ),
             Text(
               material.description!.trim(),
@@ -561,7 +572,7 @@ class _OrderSummaryCard extends StatelessWidget {
           if (material.hasDeliveryInfo) ...[
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 12),
-              child: Divider(height: 1, color: Color(0xFFE2E5F0)),
+              child: Divider(height: 1, color: FieldColors.borderSubtle),
             ),
             Text(
               'Delivery Information',
@@ -598,7 +609,7 @@ class _OrderSummaryCard extends StatelessWidget {
           if (material.hasBulkDiscount) ...[
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 12),
-              child: Divider(height: 1, color: Color(0xFFE2E5F0)),
+              child: Divider(height: 1, color: FieldColors.borderSubtle),
             ),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -916,7 +927,7 @@ class _PaymentSummaryCard extends StatelessWidget {
           ),
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 12),
-            child: Divider(height: 1, color: Color(0xFFE2E5F0)),
+            child: Divider(height: 1, color: FieldColors.borderSubtle),
           ),
           Text(
             'Payment is made directly to supplier upon delivery',
@@ -980,7 +991,7 @@ class _CheckoutCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE2E5F0)),
+        border: Border.all(color: FieldColors.borderSubtle),
         boxShadow: [
           BoxShadow(
             color: FieldColors.primaryNavy.withValues(alpha: 0.04),

@@ -28,7 +28,7 @@ class _FieldCompareViewState extends State<FieldCompareView> {
   String? _sessionError;
   bool _loadScheduled = false;
 
-  static const _appBarNavy = Color(0xFF1E326E);
+  static const _appBarNavy = FieldColors.primaryNavy;
 
   @override
   void initState() {
@@ -415,7 +415,7 @@ class _SortSegment extends StatelessWidget {
             border: Border.all(
               color: isActive
                   ? FieldColors.accentAmber
-                  : const Color(0xFFE2E5F0),
+                  : FieldColors.borderSubtle,
             ),
           ),
           padding: const EdgeInsets.symmetric(vertical: 10),
@@ -506,7 +506,7 @@ class _CityChip extends StatelessWidget {
             border: Border.all(
               color: isSelected
                   ? FieldColors.primaryNavy.withValues(alpha: 0.35)
-                  : const Color(0xFFE2E5F0),
+                  : FieldColors.borderSubtle,
             ),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -577,7 +577,7 @@ class _SupplierCompareCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E5F0)),
+        border: Border.all(color: FieldColors.borderSubtle),
         boxShadow: [
           BoxShadow(
             color: FieldColors.primaryNavy.withValues(alpha: 0.04),
@@ -672,6 +672,24 @@ class _SupplierCompareCard extends StatelessWidget {
                               style: FieldTypography.bodyMedium.copyWith(
                                 fontSize: 11,
                                 color: FieldColors.textMuted,
+                              ),
+                            ),
+                          ],
+                          if (listing.hasBulkDiscount) ...[
+                            const SizedBox(height: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: FieldColors.statusSuccess.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                listing.bulkDiscountDetails!,
+                                style: FieldTypography.labelSmall.copyWith(
+                                  color: FieldColors.statusSuccess,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                ),
                               ),
                             ),
                           ],

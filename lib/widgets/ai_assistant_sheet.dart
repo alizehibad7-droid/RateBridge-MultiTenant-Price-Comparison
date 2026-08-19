@@ -70,7 +70,7 @@ class _AiAssistantSheetState extends State<AiAssistantSheet> {
             ctx.currentScreenName,
             ctx.currentScreenData,
           )
-          .timeout(const Duration(seconds: 10));
+          .timeout(const Duration(seconds: 45));
 
       if (!mounted) return;
       setState(() {

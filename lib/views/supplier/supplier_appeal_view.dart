@@ -50,9 +50,9 @@ class _SupplierAppealViewState extends State<SupplierAppealView> {
             child: ListView(
               padding: const EdgeInsets.all(24),
               children: [
-                const Card(
-                  color: Colors.white,
-                  child: Padding(
+                Container(
+                  decoration: SupplierTheme.cardDecoration(),
+                  child: const Padding(
                     padding: EdgeInsets.all(16.0),
                     child: Row(
                       children: [
@@ -89,7 +89,7 @@ class _SupplierAppealViewState extends State<SupplierAppealView> {
                   keyboardType: TextInputType.phone,
                 ),
                 const SizedBox(height: 32),
-                const Text('SUPPORTING DOCUMENT', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
+                Text('SUPPORTING DOCUMENT', style: FieldTypography.labelSmall),
                 const SizedBox(height: 12),
                 InkWell(
                   onTap: _pickDocument,
@@ -104,9 +104,9 @@ class _SupplierAppealViewState extends State<SupplierAppealView> {
                         ? const Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.cloud_upload_outlined, size: 40, color: Colors.grey),
+                              Icon(Icons.cloud_upload_outlined, size: 40, color: FieldColors.textMuted),
                               SizedBox(height: 8),
-                              Text('Tap to upload proof/license', style: TextStyle(color: Colors.grey)),
+                              Text('Tap to upload proof/license', style: TextStyle(color: FieldColors.textMuted)),
                             ],
                           )
                         : Stack(
@@ -120,7 +120,7 @@ class _SupplierAppealViewState extends State<SupplierAppealView> {
                                 right: 8,
                                 top: 8,
                                 child: CircleAvatar(
-                                  backgroundColor: Colors.red,
+                                  backgroundColor: FieldColors.statusDanger,
                                   radius: 14,
                                   child: IconButton(
                                     icon: const Icon(Icons.close, size: 14, color: Colors.white),
@@ -160,7 +160,7 @@ class _SupplierAppealViewState extends State<SupplierAppealView> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.check_circle_outline, size: 80, color: Colors.green),
+            const Icon(Icons.check_circle_outline, size: 80, color: FieldColors.statusSuccess),
             const SizedBox(height: 24),
             const Text(
               'Appeal Submitted',

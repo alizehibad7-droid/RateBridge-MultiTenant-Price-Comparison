@@ -1,5 +1,7 @@
 {
   "projects": {
     "default": "ratebridge-2cd72"
-  }
+  },
+  "targets": {},
+  "etags": {}
 }

@@ -43,7 +43,7 @@ class _SupplierCompanyDirectoryViewState
     final vm = context.watch<SupplierViewModel>();
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F6FA),
+      backgroundColor: FieldColors.screenBackground,
       appBar: const SupplierAppBar(title: 'Find Companies'),
       body: Column(
         children: [

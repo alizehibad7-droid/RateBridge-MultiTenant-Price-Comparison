@@ -7,6 +7,7 @@ import '../../theme/admin_theme.dart';
 import '../../models/transaction_model.dart';
 import '../../repositories/transaction_repository.dart';
 import '../../utils/app_exception.dart';
+import '../../viewmodels/admin_viewmodel.dart';
 import '../../widgets/admin/admin_widgets.dart';
 
 class AdminCommissionLedgerView extends StatefulWidget {
@@ -54,9 +55,12 @@ class _AdminCommissionLedgerViewState extends State<AdminCommissionLedgerView> {
     });
 
     try {
-      await context
-          .read<TransactionRepository>()
-          .settleSupplierCommissions(supplier.supplierUid);
+      await context.read<AdminViewModel>().settleSupplierCommissions(
+        supplierUid: supplier.supplierUid,
+        supplierName: supplier.supplierName,
+        unsettledAmount: supplier.unsettledAmount,
+        orderCount: supplier.orderCount,
+      );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

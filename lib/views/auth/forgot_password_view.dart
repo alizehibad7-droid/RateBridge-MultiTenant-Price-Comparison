@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../services/firebase_auth_service.dart';
 import '../../constants/app_colors.dart';
+import '../../widgets/auth/auth_widgets.dart';
 
 class ForgotPasswordView extends StatefulWidget {
   const ForgotPasswordView({super.key});
@@ -106,18 +107,10 @@ class _ForgotPasswordViewState extends State<ForgotPasswordView> {
                   width: double.infinity,
                   child: _PressableScale(
                     onTap: _isLoading ? () {} : _triggerReset,
-                    child: ElevatedButton(
-                      onPressed: _isLoading ? null : _triggerReset,
-                      child: _isLoading
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Text('DISPATCH RECOVERY LINK'),
+                    child: AuthPrimaryButton(
+                      label: 'Dispatch recovery link',
+                      isLoading: _isLoading,
+                      onPressed: _triggerReset,
                     ),
                   ),
                 ),

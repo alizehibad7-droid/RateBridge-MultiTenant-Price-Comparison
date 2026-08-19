@@ -17,4 +17,8 @@ class CompanyRepository {
   Future<List<CompanyModel>> getAllCompanies() async {
     return await _firestoreService.getCompanies();
   }
+
+  Future<bool> isSupplierLinked(String companyId, String supplierId) async {
+    return await _firestoreService.isSupplierLinkedToCompany(companyId, supplierId);
+  }
 }

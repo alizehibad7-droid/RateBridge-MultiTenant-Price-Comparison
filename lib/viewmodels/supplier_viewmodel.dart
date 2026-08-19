@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../models/rfq_model.dart';
+import '../models/rfq_bid_model.dart';
 import '../models/material_model.dart';
 import '../models/order_model.dart';
 import '../models/rating_model.dart';
@@ -40,6 +42,7 @@ class SupplierViewModel extends ChangeNotifier {
   final CompanyRepository _companyRepo;
   final PartnershipRequestRepository _partnershipRepo;
   final NotificationService _notificationService;
+  final CloudFunctionService _cloudFunctions;
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
   SupplierViewModel(
@@ -48,7 +51,7 @@ class SupplierViewModel extends ChangeNotifier {
     this._transactionRepo,
     this._storageService,
     PriceHistoryRepository _,
-    CloudFunctionService __,
+    this._cloudFunctions,
     this._userRepo,
     this._companyRepo,
     this._partnershipRepo,
@@ -62,6 +65,7 @@ class SupplierViewModel extends ChangeNotifier {
   String? _selectedCompanyId;
   String? _rejectionReason;
   String? _error;
+  String? _successMessage;
   bool _isLoading = false;
   bool _appealSubmitted = false;
 
@@ -86,9 +90,8 @@ class SupplierViewModel extends ChangeNotifier {
 
   StreamSubscription? _statusSubscription;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>?
-      _partnershipRequestsSub;
-  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>?
-      _linkedCompaniesSub;
+  _partnershipRequestsSub;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _linkedCompaniesSub;
   List<PartnershipRequestModel> _allPartnershipRequests = [];
   final Map<String, PartnershipRequestModel> _latestPartnershipByCompanyId = {};
   final Set<String> _activePartnerCompanyIds = {};
@@ -121,6 +124,7 @@ class SupplierViewModel extends ChangeNotifier {
   String? get selectedCompanyId => _selectedCompanyId;
   String? get rejectionReason => _rejectionReason;
   String? get error => _error;
+  String? get successMessage => _successMessage;
   bool get isLoading => _isLoading;
   bool get partnershipListsReady => _partnershipListsReady;
   List<PartnershipRequestModel> get incomingPartnershipRequests =>
@@ -142,9 +146,8 @@ class SupplierViewModel extends ChangeNotifier {
           .where((r) => r.status == 'rejected' || r.status == 'removed')
           .take(10)
           .toList(growable: false);
-  int get pendingPartnershipRequestsCount => _allPartnershipRequests
-      .where((r) => r.status == 'pending')
-      .length;
+  int get pendingPartnershipRequestsCount =>
+      _allPartnershipRequests.where((r) => r.status == 'pending').length;
   bool get hasAnyPartnershipRequests => _allPartnershipRequests.isNotEmpty;
   List<CompanyModel> get activePartnerCompanies =>
       List<CompanyModel>.unmodifiable(_companies);
@@ -167,11 +170,13 @@ class SupplierViewModel extends ChangeNotifier {
 
   int get totalMaterialsCount => _materials.length;
 
-  int get pendingOrdersCount => _orders.where((o) {
+  int get pendingOrdersCount =>
+      _orders.where((o) {
         return o.status.toLowerCase() == 'pending';
       }).length;
 
-  int get activeOrdersCount => _orders.where((o) {
+  int get activeOrdersCount =>
+      _orders.where((o) {
         final status = o.status.toLowerCase();
         return status == 'accepted' || status == 'inprogress';
       }).length;
@@ -187,12 +192,11 @@ class SupplierViewModel extends ChangeNotifier {
   }
 
   List<MaterialModel> get recentMaterials {
-    final sorted = List<MaterialModel>.from(_materials)
-      ..sort((a, b) {
-        final aDate = a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
-        final bDate = b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
-        return bDate.compareTo(aDate);
-      });
+    final sorted = List<MaterialModel>.from(_materials)..sort((a, b) {
+      final aDate = a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final bDate = b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+      return bDate.compareTo(aDate);
+    });
     return sorted.take(3).toList();
   }
 
@@ -208,22 +212,32 @@ class SupplierViewModel extends ChangeNotifier {
     final txOrderIds =
         _transactions.where((t) => t.isSettled).map((t) => t.orderId).toSet();
     final now = DateTime.now();
-    final fromConfirmed = _orders.where((o) {
-      if (o.status.toLowerCase() != 'confirmed') return false;
-      if (_selectedCompanyId != null && o.companyId != _selectedCompanyId) {
-        return false;
-      }
-      if (txOrderIds.contains(o.orderId)) return false;
-      final d = o.confirmedAt ?? o.createdAt;
-      return d.year == now.year && d.month == now.month;
-    }).fold(0.0, (sum, o) {
-      if (o.supplierEarning > 0) return sum + o.supplierEarning;
-      return sum + (o.totalAmount * (1 - AppConstants.commissionRate));
-    });
+    final fromConfirmed = _orders
+        .where((o) {
+          if (o.status.toLowerCase() != 'confirmed') return false;
+          if (_selectedCompanyId != null && o.companyId != _selectedCompanyId) {
+            return false;
+          }
+          if (txOrderIds.contains(o.orderId)) return false;
+          final d = o.confirmedAt ?? o.createdAt;
+          return d.year == now.year && d.month == now.month;
+        })
+        .fold(0.0, (sum, o) {
+          if (o.supplierEarning > 0) return sum + o.supplierEarning;
+          return sum + (o.totalAmount * (1 - AppConstants.commissionRate));
+        });
 
     return settledFromTx + fromConfirmed;
   }
-  int get completedThisMonth => _orders.where((o) => o.status == 'confirmed' && o.createdAt.month == DateTime.now().month).length;
+
+  int get completedThisMonth =>
+      _orders
+          .where(
+            (o) =>
+                o.status == 'confirmed' &&
+                o.createdAt.month == DateTime.now().month,
+          )
+          .length;
 
   double get averageRating {
     if (_ratings.isEmpty) return 0.0;
@@ -286,8 +300,9 @@ class SupplierViewModel extends ChangeNotifier {
     'earnings': true,
   };
 
-  Map<String, bool> _notificationPrefs =
-      Map<String, bool>.from(defaultNotificationPrefs);
+  Map<String, bool> _notificationPrefs = Map<String, bool>.from(
+    defaultNotificationPrefs,
+  );
   bool _notificationPrefsLoaded = false;
   bool _notificationPrefsSaving = false;
 
@@ -360,37 +375,41 @@ class SupplierViewModel extends ChangeNotifier {
         .where('supplierId', isEqualTo: supplierId)
         .snapshots()
         .listen(
-      (snap) {
-        final all = snap.docs
-            .map((doc) => PartnershipRequestModel.fromMap(doc.id, doc.data()))
-            .toList();
+          (snap) {
+            final all =
+                snap.docs
+                    .map(
+                      (doc) =>
+                          PartnershipRequestModel.fromMap(doc.id, doc.data()),
+                    )
+                    .toList();
 
-        _latestPartnershipByCompanyId.clear();
-        final grouped = <String, List<PartnershipRequestModel>>{};
-        for (final req in all) {
-          grouped.putIfAbsent(req.companyId, () => []).add(req);
-        }
-        for (final entry in grouped.entries) {
-          entry.value.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-          _latestPartnershipByCompanyId[entry.key] = entry.value.first;
-        }
+            _latestPartnershipByCompanyId.clear();
+            final grouped = <String, List<PartnershipRequestModel>>{};
+            for (final req in all) {
+              grouped.putIfAbsent(req.companyId, () => []).add(req);
+            }
+            for (final entry in grouped.entries) {
+              entry.value.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+              _latestPartnershipByCompanyId[entry.key] = entry.value.first;
+            }
 
-        _allPartnershipRequests = _sortPartnershipRequestsNewest(all);
-        _incomingPartnershipRequests = _sortPartnershipRequestsNewest(
-          all.where((r) => r.initiatedBy == 'ceo'),
+            _allPartnershipRequests = _sortPartnershipRequestsNewest(all);
+            _incomingPartnershipRequests = _sortPartnershipRequestsNewest(
+              all.where((r) => r.initiatedBy == 'ceo'),
+            );
+            _outgoingPartnershipRequests = _sortPartnershipRequestsNewest(
+              all.where((r) => r.initiatedBy == 'supplier'),
+            );
+            _partnershipListsReady = true;
+            notifyListeners();
+          },
+          onError: (_) {
+            _partnershipListsReady = true;
+            _error = 'Failed to load partnership requests.';
+            notifyListeners();
+          },
         );
-        _outgoingPartnershipRequests = _sortPartnershipRequestsNewest(
-          all.where((r) => r.initiatedBy == 'supplier'),
-        );
-        _partnershipListsReady = true;
-        notifyListeners();
-      },
-      onError: (_) {
-        _partnershipListsReady = true;
-        _error = 'Failed to load partnership requests.';
-        notifyListeners();
-      },
-    );
 
     _linkedCompaniesSub = _db
         .collection(FirestorePaths.suppliersCol)
@@ -398,22 +417,25 @@ class SupplierViewModel extends ChangeNotifier {
         .collection('companies')
         .snapshots()
         .listen(
-      (snap) {
-        _activePartnerCompanyIds
-          ..clear()
-          ..addAll(
-            snap.docs.where((doc) {
-              final status =
-                  (doc.data()['status'] as String?)?.toLowerCase() ?? 'active';
-              return status == 'active' || status == 'approved';
-            }).map((doc) => doc.id),
-          );
-        notifyListeners();
-      },
-      onError: (_) {
-        notifyListeners();
-      },
-    );
+          (snap) {
+            _activePartnerCompanyIds
+              ..clear()
+              ..addAll(
+                snap.docs
+                    .where((doc) {
+                      final status =
+                          (doc.data()['status'] as String?)?.toLowerCase() ??
+                          'active';
+                      return status == 'active' || status == 'approved';
+                    })
+                    .map((doc) => doc.id),
+              );
+            notifyListeners();
+          },
+          onError: (_) {
+            notifyListeners();
+          },
+        );
   }
 
   void _stopPartnershipStatusWatch() {
@@ -505,19 +527,19 @@ class SupplierViewModel extends ChangeNotifier {
   PartnerCompanyStats partnerStatsFor(String companyId) {
     final orders =
         _allSupplierOrders.where((o) => o.companyId == companyId).toList();
-    final txs = _allSupplierTransactions
-        .where((t) => t.companyId == companyId)
-        .toList();
+    final txs =
+        _allSupplierTransactions
+            .where((t) => t.companyId == companyId)
+            .toList();
     final orderIds = orders.map((o) => o.orderId).toSet();
-    final companyRatings = _allSupplierRatings
-        .where((r) => orderIds.contains(r.orderId))
-        .toList();
-    final earnings =
-        txs.fold<double>(0, (sum, tx) => sum + tx.supplierEarning);
-    final avgRating = companyRatings.isEmpty
-        ? 0.0
-        : companyRatings.fold<double>(0, (sum, r) => sum + r.rating) /
-            companyRatings.length;
+    final companyRatings =
+        _allSupplierRatings.where((r) => orderIds.contains(r.orderId)).toList();
+    final earnings = txs.fold<double>(0, (sum, tx) => sum + tx.supplierEarning);
+    final avgRating =
+        companyRatings.isEmpty
+            ? 0.0
+            : companyRatings.fold<double>(0, (sum, r) => sum + r.rating) /
+                companyRatings.length;
     return PartnerCompanyStats(
       totalOrders: orders.length,
       avgRating: avgRating,
@@ -545,35 +567,39 @@ class SupplierViewModel extends ChangeNotifier {
 
   Future<void> _loadAllSupplierOrders() async {
     if (_supplierUid == null) return;
-    final snap = await _db
-        .collection('orders')
-        .where('supplierId', isEqualTo: _supplierUid)
-        .get();
-    _allSupplierOrders = snap.docs
-        .map((doc) => OrderModel.fromMap(doc.id, doc.data()))
-        .toList();
+    final snap =
+        await _db
+            .collection('orders')
+            .where('supplierId', isEqualTo: _supplierUid)
+            .get();
+    _allSupplierOrders =
+        snap.docs.map((doc) => OrderModel.fromMap(doc.id, doc.data())).toList();
   }
 
   Future<void> _loadAllSupplierTransactions() async {
     if (_supplierUid == null) return;
-    final snap = await _db
-        .collection('transactions')
-        .where('supplierId', isEqualTo: _supplierUid)
-        .get();
-    _allSupplierTransactions = snap.docs
-        .map((doc) => TransactionModel.fromMap(doc.id, doc.data()))
-        .toList();
+    final snap =
+        await _db
+            .collection('transactions')
+            .where('supplierId', isEqualTo: _supplierUid)
+            .get();
+    _allSupplierTransactions =
+        snap.docs
+            .map((doc) => TransactionModel.fromMap(doc.id, doc.data()))
+            .toList();
   }
 
   Future<void> _loadAllSupplierRatings() async {
     if (_supplierUid == null) return;
-    final snap = await _db
-        .collection('ratings')
-        .where('supplierUid', isEqualTo: _supplierUid)
-        .get();
-    _allSupplierRatings = snap.docs
-        .map((doc) => RatingModel.fromMap(doc.id, doc.data()))
-        .toList();
+    final snap =
+        await _db
+            .collection('ratings')
+            .where('supplierUid', isEqualTo: _supplierUid)
+            .get();
+    _allSupplierRatings =
+        snap.docs
+            .map((doc) => RatingModel.fromMap(doc.id, doc.data()))
+            .toList();
   }
 
   void filterCompanyDirectoryByCity(String? city) {
@@ -589,13 +615,14 @@ class SupplierViewModel extends ChangeNotifier {
     }
     final q = _directorySearchQuery;
     if (q.isNotEmpty) {
-      list = list
-          .where(
-            (c) =>
-                c.name.toLowerCase().contains(q) ||
-                c.city.toLowerCase().contains(q),
-          )
-          .toList();
+      list =
+          list
+              .where(
+                (c) =>
+                    c.name.toLowerCase().contains(q) ||
+                    c.city.toLowerCase().contains(q),
+              )
+              .toList();
     }
     _companyDirectory = list;
     notifyListeners();
@@ -678,16 +705,18 @@ class SupplierViewModel extends ChangeNotifier {
   void watchStatus() {
     if (_supplierUid == null) return;
     _statusSubscription?.cancel();
-    _statusSubscription = _userRepo.watchUserDoc(_supplierUid!).listen(
-      (user) {
-        _status = user.status ?? 'pending';
-        _rejectionReason = user.rejectionReason;
-        notifyListeners();
-      },
-      onError: (_) {
-        // Non-blocking — dashboard still renders.
-      },
-    );
+    _statusSubscription = _userRepo
+        .watchUserDoc(_supplierUid!)
+        .listen(
+          (user) {
+            _status = user.status ?? 'pending';
+            _rejectionReason = user.rejectionReason;
+            notifyListeners();
+          },
+          onError: (_) {
+            // Non-blocking — dashboard still renders.
+          },
+        );
   }
 
   Future<List<CompanyModel>> _resolveCompaniesFallback() async {
@@ -710,12 +739,13 @@ class SupplierViewModel extends ChangeNotifier {
 
     final companiesSnap = await _db.collection('companies').get();
     for (final companyDoc in companiesSnap.docs) {
-      final link = await _db
-          .collection('companies')
-          .doc(companyDoc.id)
-          .collection('suppliers')
-          .doc(uid)
-          .get();
+      final link =
+          await _db
+              .collection('companies')
+              .doc(companyDoc.id)
+              .collection('suppliers')
+              .doc(uid)
+              .get();
       if (!link.exists) continue;
 
       final status =
@@ -730,10 +760,11 @@ class SupplierViewModel extends ChangeNotifier {
           .collection('companies')
           .doc(companyDoc.id)
           .set({
-        'id': companyDoc.id,
-        'status': 'active',
-        'joinedAt': link.data()?['joinedAt'] ?? FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+            'id': companyDoc.id,
+            'status': 'active',
+            'joinedAt':
+                link.data()?['joinedAt'] ?? FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true));
     }
 
     return found;
@@ -754,47 +785,50 @@ class SupplierViewModel extends ChangeNotifier {
         .collection('companies')
         .where('status', isEqualTo: 'active')
         .snapshots()
-        .listen((snap) async {
-      var companyList = <CompanyModel>[];
-      for (var doc in snap.docs) {
-        try {
-          final c = await _companyRepo.getCompanyById(doc.id);
-          if (c != null) companyList.add(c);
-        } catch (_) {
-          // Skip companies we cannot read.
-        }
-      }
-      if (companyList.isEmpty) {
-        try {
-          companyList = await _resolveCompaniesFallback();
-        } catch (e) {
-          _error ??= e.toString();
-        }
-      }
-      _companies = companyList;
-      _companiesLoaded = true;
-      _companiesLoadFailed = false;
-      if (_selectedCompanyId == null && _companies.isNotEmpty) {
-        switchCompany(_companies.first.id);
-      }
-      notifyListeners();
-    }, onError: (e) async {
-      try {
-        final fallback = await _resolveCompaniesFallback();
-        _companies = fallback;
-        _companiesLoaded = true;
-        _companiesLoadFailed = fallback.isEmpty;
-        _error = fallback.isEmpty ? e.toString() : null;
-        if (_selectedCompanyId == null && _companies.isNotEmpty) {
-          switchCompany(_companies.first.id);
-        }
-      } catch (_) {
-        _companiesLoaded = true;
-        _companiesLoadFailed = true;
-        _error = e.toString();
-      }
-      notifyListeners();
-    });
+        .listen(
+          (snap) async {
+            var companyList = <CompanyModel>[];
+            for (var doc in snap.docs) {
+              try {
+                final c = await _companyRepo.getCompanyById(doc.id);
+                if (c != null) companyList.add(c);
+              } catch (_) {
+                // Skip companies we cannot read.
+              }
+            }
+            if (companyList.isEmpty) {
+              try {
+                companyList = await _resolveCompaniesFallback();
+              } catch (e) {
+                _error ??= e.toString();
+              }
+            }
+            _companies = companyList;
+            _companiesLoaded = true;
+            _companiesLoadFailed = false;
+            if (_selectedCompanyId == null && _companies.isNotEmpty) {
+              switchCompany(_companies.first.id);
+            }
+            notifyListeners();
+          },
+          onError: (e) async {
+            try {
+              final fallback = await _resolveCompaniesFallback();
+              _companies = fallback;
+              _companiesLoaded = true;
+              _companiesLoadFailed = fallback.isEmpty;
+              _error = fallback.isEmpty ? e.toString() : null;
+              if (_selectedCompanyId == null && _companies.isNotEmpty) {
+                switchCompany(_companies.first.id);
+              }
+            } catch (_) {
+              _companiesLoaded = true;
+              _companiesLoadFailed = true;
+              _error = e.toString();
+            }
+            notifyListeners();
+          },
+        );
   }
 
   void switchCompany(String companyId) {
@@ -817,50 +851,41 @@ class SupplierViewModel extends ChangeNotifier {
   void loadInvitations() {
     if (_supplierUid == null) return;
     _invitationsSubscription?.cancel();
-    _invitationsSubscription = _db.collection('invitations')
+    _invitationsSubscription = _db
+        .collection('invitations')
         .where('supplierUid', isEqualTo: _supplierUid)
         .snapshots()
-        .listen((snap) {
-      _invitations = snap.docs.map((d) => InvitationModel.fromMap(d.id, d.data())).toList();
-      notifyListeners();
-    }, onError: (e) {
-      _error ??= e.toString();
-      notifyListeners();
-    });
+        .listen(
+          (snap) {
+            _invitations =
+                snap.docs
+                    .map((d) => InvitationModel.fromMap(d.id, d.data()))
+                    .toList();
+            notifyListeners();
+          },
+          onError: (e) {
+            _error ??= e.toString();
+            notifyListeners();
+          },
+        );
   }
 
   Future<void> acceptInvitation(String inviteId, String companyId) async {
     _isLoading = true;
     _error = null;
+    _successMessage = null;
     notifyListeners();
     try {
-      final batch = _db.batch();
-      
-      batch.update(_db.collection('invitations').doc(inviteId), {'status': 'accepted'});
-      
-      final supplierRef = _db.collection('suppliers').doc(_supplierUid);
-      final companyRef = _db.collection('companies').doc(companyId);
-      
-      batch.set(supplierRef.collection('companies').doc(companyId), {
-        'id': companyId,
-        'status': 'active',
-        'joinedAt': FieldValue.serverTimestamp(),
-        'companyRating': 0,
-        'onboardingComplete': false,
+      await _cloudFunctions.callFunction('onInviteAccepted', {
+        'token': inviteId,
+        'companyId': companyId,
+        'supplierUid': _supplierUid,
       });
-
-      batch.set(companyRef.collection('suppliers').doc(_supplierUid), {
-        'id': _supplierUid,
-        'status': 'active',
-        'joinedAt': FieldValue.serverTimestamp(),
-      });
-
-      batch.update(supplierRef, {'totalCompanies': FieldValue.increment(1)});
-
-      await batch.commit();
       _selectedCompanyId = companyId;
-    } catch (e) {
-      _error = e.toString();
+    } on AppException catch (e) {
+      _error = e.message;
+    } catch (_) {
+      _error = 'Failed to accept invitation. Please try again.';
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -868,12 +893,18 @@ class SupplierViewModel extends ChangeNotifier {
   }
 
   Future<void> rejectInvitation(String inviteId) async {
-    await _db.collection('invitations').doc(inviteId).update({'status': 'rejected'});
+    await _db.collection('invitations').doc(inviteId).update({
+      'status': 'rejected',
+    });
   }
 
   // --- Materials ---
 
-  Future<void> addMaterial(MaterialModel material, File? imageFile, String companyId) async {
+  Future<void> addMaterial(
+    MaterialModel material,
+    File? imageFile,
+    String companyId,
+  ) async {
     _isLoading = true;
     notifyListeners();
     try {
@@ -888,12 +919,19 @@ class SupplierViewModel extends ChangeNotifier {
           return;
         }
       }
-      final newMat = material.copyWith(profileImageUrl: imageUrl, supplierId: _supplierUid);
-      
+      final newMat = material.copyWith(
+        profileImageUrl: imageUrl,
+        supplierId: _supplierUid,
+      );
+
       final batch = _db.batch();
-      final companyMatRef = _db.collection('companies').doc(companyId).collection('materials').doc(newMat.id);
+      final companyMatRef = _db
+          .collection('companies')
+          .doc(companyId)
+          .collection('materials')
+          .doc(newMat.id);
       batch.set(companyMatRef, newMat.toMap());
-      
+
       final globalMatRef = _db.collection('materials').doc(newMat.id);
       batch.set(globalMatRef, newMat.toMap());
 
@@ -911,7 +949,12 @@ class SupplierViewModel extends ChangeNotifier {
     }
   }
 
-  Future<void> updateMaterial(String matId, Map<String, dynamic> data, File? imageFile, String companyId) async {
+  Future<void> updateMaterial(
+    String matId,
+    Map<String, dynamic> data,
+    File? imageFile,
+    String companyId,
+  ) async {
     _isLoading = true;
     notifyListeners();
     try {
@@ -926,10 +969,11 @@ class SupplierViewModel extends ChangeNotifier {
         }
         data['profileImageUrl'] = imageUrl;
       }
-      
+
       if (data.containsKey('pricePerUnit')) {
         final doc = await _db.collection('materials').doc(matId).get();
-        final oldPrice = (doc.data()?['pricePerUnit'] as num?)?.toDouble() ?? 0.0;
+        final oldPrice =
+            (doc.data()?['pricePerUnit'] as num?)?.toDouble() ?? 0.0;
         final newPrice = (data['pricePerUnit'] as num).toDouble();
         if (oldPrice != newPrice) {
           await _materialRepo.archiveMaterialPriceChange(
@@ -940,9 +984,14 @@ class SupplierViewModel extends ChangeNotifier {
           );
         }
       }
-      
+
       await _db.collection('materials').doc(matId).update(data);
-      await _db.collection('companies').doc(companyId).collection('materials').doc(matId).update(data);
+      await _db
+          .collection('companies')
+          .doc(companyId)
+          .collection('materials')
+          .doc(matId)
+          .update(data);
     } catch (e) {
       _error = e.toString();
     } finally {
@@ -956,7 +1005,12 @@ class SupplierViewModel extends ChangeNotifier {
     notifyListeners();
     try {
       await _materialRepo.removeMaterial(matId);
-      await _db.collection('companies').doc(companyId).collection('materials').doc(matId).delete();
+      await _db
+          .collection('companies')
+          .doc(companyId)
+          .collection('materials')
+          .doc(matId)
+          .delete();
     } catch (e) {
       _error = e.toString();
     } finally {
@@ -980,16 +1034,17 @@ class SupplierViewModel extends ChangeNotifier {
         .where('supplierId', isEqualTo: _supplierUid)
         .snapshots()
         .listen((snap) {
-      _materials = snap.docs.map((d) {
-        final data = Map<String, dynamic>.from(d.data());
-        data.putIfAbsent('id', () => d.id);
-        return MaterialModel.fromMap(data);
-      }).toList();
-      _clearDashboardStreamError('materials');
-      _materialsInitialized = true;
-      _checkDashboardReady();
-      notifyListeners();
-    }, onError: (e) => _onDashboardStreamError('materials', e));
+          _materials =
+              snap.docs.map((d) {
+                final data = Map<String, dynamic>.from(d.data());
+                data.putIfAbsent('id', () => d.id);
+                return MaterialModel.fromMap(data);
+              }).toList();
+          _clearDashboardStreamError('materials');
+          _materialsInitialized = true;
+          _checkDashboardReady();
+          notifyListeners();
+        }, onError: (e) => _onDashboardStreamError('materials', e));
   }
 
   // --- Orders ---
@@ -1036,7 +1091,11 @@ class SupplierViewModel extends ChangeNotifier {
     }
   }
 
-  Future<void> rejectOrder(String orderId, String companyId, String reason) async {
+  Future<void> rejectOrder(
+    String orderId,
+    String companyId,
+    String reason,
+  ) async {
     _isLoading = true;
     notifyListeners();
     try {
@@ -1044,7 +1103,12 @@ class SupplierViewModel extends ChangeNotifier {
         (o) => o.orderId == orderId,
         orElse: () => throw StateError('Order not found'),
       );
-      await _orderRepo.updateStatus(orderId, companyId, 'rejected', reason: reason);
+      await _orderRepo.updateStatus(
+        orderId,
+        companyId,
+        'rejected',
+        reason: reason,
+      );
       await _notificationService.notifyOrderRejected(
         fieldUserUid: order.fieldUserUid,
         orderId: orderId,
@@ -1067,7 +1131,12 @@ class SupplierViewModel extends ChangeNotifier {
         (o) => o.orderId == orderId,
         orElse: () => throw StateError('Order not found'),
       );
-      await _orderRepo.updateStatus(orderId, companyId, 'delivered', deliveredAt: DateTime.now());
+      await _orderRepo.updateStatus(
+        orderId,
+        companyId,
+        'delivered',
+        deliveredAt: DateTime.now(),
+      );
       await _notificationService.notifyOrderDelivered(
         fieldUserUid: order.fieldUserUid,
         orderId: orderId,
@@ -1083,12 +1152,18 @@ class SupplierViewModel extends ChangeNotifier {
 
   // --- Onboarding ---
 
-  Future<void> completeCompanyOnboarding(String companyId, Map<String, dynamic> details) async {
+  Future<void> completeCompanyOnboarding(
+    String companyId,
+    Map<String, dynamic> details,
+  ) async {
     _isLoading = true;
     notifyListeners();
     try {
-      await _db.collection('suppliers').doc(_supplierUid)
-          .collection('companies').doc(companyId)
+      await _db
+          .collection('suppliers')
+          .doc(_supplierUid)
+          .collection('companies')
+          .doc(companyId)
           .update({...details, 'onboardingComplete': true});
     } catch (e) {
       _error = e.toString();
@@ -1109,21 +1184,22 @@ class SupplierViewModel extends ChangeNotifier {
     }
     _earningsSubscription?.cancel();
     try {
-      _earningsSubscription = _transactionRepo.watchSupplierEarnings(_supplierUid!, month).listen(
-        (txs) {
-          _transactions = txs;
-          totalEarnings = txs.fold(0.0, (sum, tx) => sum + tx.totalAmount);
-          netEarnings = txs.fold(0.0, (sum, tx) => sum + tx.supplierEarning);
-          _clearDashboardStreamError('earnings');
-          _earningsInitialized = true;
-          _checkDashboardReady();
-          notifyListeners();
-        },
-        onError: (e) => _onDashboardStreamError('earnings', e),
-      );
+      _earningsSubscription = _transactionRepo
+          .watchSupplierEarnings(_supplierUid!, month)
+          .listen((txs) {
+            _transactions = txs;
+            totalEarnings = txs.fold(0.0, (sum, tx) => sum + tx.totalAmount);
+            netEarnings = txs.fold(0.0, (sum, tx) => sum + tx.supplierEarning);
+            _clearDashboardStreamError('earnings');
+            _earningsInitialized = true;
+            _checkDashboardReady();
+            notifyListeners();
+          }, onError: (e) => _onDashboardStreamError('earnings', e));
       try {
-        final summary =
-            await _transactionRepo.getMonthlyEarningsSummary(_supplierUid!, 6);
+        final summary = await _transactionRepo.getMonthlyEarningsSummary(
+          _supplierUid!,
+          6,
+        );
         _monthlyEarnings = summary.reversed.toList();
         _monthlyChart =
             summary.map((e) => {'month': e.month, 'amount': e.net}).toList();
@@ -1173,7 +1249,10 @@ class SupplierViewModel extends ChangeNotifier {
     try {
       String? imageUrl;
       if (file != null) {
-        imageUrl = await _storageService.uploadFile(file: file, path: 'appeals/$_supplierUid');
+        imageUrl = await _storageService.uploadFile(
+          file: file,
+          path: 'appeals/$_supplierUid',
+        );
       }
       await _db.collection('appeals').add({
         'supplierUid': _supplierUid,
@@ -1215,7 +1294,10 @@ class SupplierViewModel extends ChangeNotifier {
     _applyCompanyDirectoryFilters();
   }
 
-  Future<bool> sendPartnershipRequest(String companyId, {String? message}) async {
+  Future<bool> sendPartnershipRequest(
+    String companyId, {
+    String? message,
+  }) async {
     if (_supplierUid == null) return false;
     _isLoading = true;
     _error = null;
@@ -1270,10 +1352,11 @@ class SupplierViewModel extends ChangeNotifier {
     _error = null;
     notifyListeners();
     try {
-      final reqDoc = await _db
-          .collection(FirestorePaths.partnershipRequestsCol)
-          .doc(requestId)
-          .get();
+      final reqDoc =
+          await _db
+              .collection(FirestorePaths.partnershipRequestsCol)
+              .doc(requestId)
+              .get();
       final companyName = reqDoc.data()?['companyName'] as String? ?? 'Company';
       await _partnershipRepo.acceptRequest(requestId);
       await loadLinkedCompanies();
@@ -1364,12 +1447,15 @@ class SupplierViewModel extends ChangeNotifier {
         .where('supplierUid', isEqualTo: supplierUid)
         .snapshots()
         .listen((snap) {
-      _ratings = snap.docs.map((d) => RatingModel.fromMap(d.id, d.data())).toList();
-      _clearDashboardStreamError('ratings');
-      _ratingsInitialized = true;
-      _checkDashboardReady();
-      notifyListeners();
-    }, onError: (e) => _onDashboardStreamError('ratings', e));
+          _ratings =
+              snap.docs
+                  .map((d) => RatingModel.fromMap(d.id, d.data()))
+                  .toList();
+          _clearDashboardStreamError('ratings');
+          _ratingsInitialized = true;
+          _checkDashboardReady();
+          notifyListeners();
+        }, onError: (e) => _onDashboardStreamError('ratings', e));
   }
 
   String? companyNameFor(String companyId) {
@@ -1405,5 +1491,100 @@ class SupplierViewModel extends ChangeNotifier {
   void dispose() {
     _cancelSubscriptions();
     super.dispose();
+  }
+
+  // --- RFQ / Bulk Quotes ---
+  Stream<List<RfqModel>> streamOpenRfqsForSupplier() async* {
+    if (_supplierUid == null) {
+      yield const [];
+      return;
+    }
+
+    final supplierDoc =
+        await _db.collection('suppliers').doc(_supplierUid).get();
+    final supplier = supplierDoc.data();
+    final status = supplier?['status']?.toString().toLowerCase() ?? '';
+    if (supplier == null || (status != 'active' && status != 'approved')) {
+      yield const [];
+      return;
+    }
+
+    List<String> strings(Object? value) =>
+        value is List
+            ? value.map((item) => item.toString().trim().toLowerCase()).toList()
+            : const [];
+
+    final declared = strings(supplier['declaredCategories']);
+    final categories =
+        declared.isNotEmpty ? declared : strings(supplier['categories']);
+    final coverage = strings(supplier['deliveryCoverageAreas']);
+    final supplierCity =
+        supplier['city']?.toString().trim().toLowerCase() ?? '';
+    if (categories.isEmpty || (coverage.isEmpty && supplierCity.isEmpty)) {
+      yield const [];
+      return;
+    }
+
+    yield* _db
+        .collection('rfqs')
+        .where('status', isEqualTo: 'open')
+        .snapshots()
+        .map((snap) {
+          final matches =
+              snap.docs
+                  .map((doc) => RfqModel.fromMap(doc.id, doc.data()))
+                  .where((rfq) {
+                    final category = rfq.category.trim().toLowerCase();
+                    final city = rfq.city.trim().toLowerCase();
+                    return categories.contains(category) &&
+                        (coverage.contains(city) || supplierCity == city);
+                  })
+                  .toList();
+          matches.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          return matches;
+        });
+  }
+
+  Future<void> submitRfqBid({
+    required String rfqId,
+    required double bidPrice,
+    required String deliveryTime,
+    String? note,
+  }) async {
+    if (_supplierUid == null) return;
+    _isLoading = true;
+    _error = null;
+    _successMessage = null;
+    notifyListeners();
+
+    try {
+      final result = await _cloudFunctions.callFunction('submitRfqBid', {
+        'rfqId': rfqId,
+        'bidPrice': bidPrice,
+        'estimatedDeliveryTime': deliveryTime,
+        'note': note,
+      });
+      final updated = result is Map && result['updated'] == true;
+      _successMessage =
+          updated ? 'Bid updated successfully.' : 'Bid submitted successfully.';
+    } catch (e) {
+      _error = e is AppException ? e.message : 'Failed to submit bid: $e';
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<RfqBidModel?> getMyBid(String rfqId) async {
+    if (_supplierUid == null) return null;
+    final doc =
+        await _db
+            .collection('rfqs')
+            .doc(rfqId)
+            .collection('bids')
+            .doc(_supplierUid)
+            .get();
+    if (!doc.exists) return null;
+    return RfqBidModel.fromMap(doc.id, doc.data()!);
   }
 }

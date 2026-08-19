@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 import '../../viewmodels/auth_viewmodel.dart';
@@ -18,6 +17,8 @@ class PendingApprovalView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+
     return Scaffold(
       backgroundColor: AppColors.screenBg,
       body: Padding(
@@ -33,8 +34,7 @@ class PendingApprovalView extends StatelessWidget {
             const SizedBox(height: 24),
             Text(
               title,
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 24,
+              style: textTheme.headlineMedium?.copyWith(
                 fontWeight: FontWeight.w700,
                 color: AppColors.navy,
               ),
@@ -44,18 +44,23 @@ class PendingApprovalView extends StatelessWidget {
             Text(
               message,
               textAlign: TextAlign.center,
-              style: GoogleFonts.plusJakartaSans(
-                color: AppColors.textSecondary,
-                fontSize: 16,
-                height: 1.5,
-              ),
+              style: textTheme.bodyLarge,
             ),
             const SizedBox(height: 40),
             SizedBox(
               width: double.infinity,
-              child: ElevatedButton(
+              child: OutlinedButton.icon(
                 onPressed: () => context.read<AuthViewModel>().signOut(),
-                child: const Text('Log Out'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.error,
+                  side: const BorderSide(color: AppColors.error, width: 1.5),
+                  minimumSize: const Size(double.infinity, 44),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                icon: const Icon(Icons.logout, size: 18),
+                label: const Text('Log Out'),
               ),
             ),
           ],
@@ -70,6 +75,8 @@ class SuspendedView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+
     return Scaffold(
       backgroundColor: AppColors.screenBg,
       body: Padding(
@@ -81,8 +88,7 @@ class SuspendedView extends StatelessWidget {
             const SizedBox(height: 24),
             Text(
               'Account Suspended',
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 24,
+              style: textTheme.headlineMedium?.copyWith(
                 fontWeight: FontWeight.w700,
                 color: AppColors.navy,
               ),
@@ -92,18 +98,23 @@ class SuspendedView extends StatelessWidget {
             Text(
               'Your account has been suspended by an administrator. Please contact support for more information.',
               textAlign: TextAlign.center,
-              style: GoogleFonts.plusJakartaSans(
-                color: AppColors.textSecondary,
-                fontSize: 16,
-                height: 1.5,
-              ),
+              style: textTheme.bodyLarge,
             ),
             const SizedBox(height: 40),
             SizedBox(
               width: double.infinity,
-              child: ElevatedButton(
+              child: OutlinedButton.icon(
                 onPressed: () => context.read<AuthViewModel>().signOut(),
-                child: const Text('Log Out'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.error,
+                  side: const BorderSide(color: AppColors.error, width: 1.5),
+                  minimumSize: const Size(double.infinity, 44),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                icon: const Icon(Icons.logout, size: 18),
+                label: const Text('Log Out'),
               ),
             ),
           ],
@@ -118,7 +129,10 @@ class RejectedView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final user = context.watch<AuthViewModel>().user;
+    final authVm = context.watch<AuthViewModel>();
+    final user = authVm.user;
+    final textTheme = Theme.of(context).textTheme;
+
     return Scaffold(
       backgroundColor: AppColors.screenBg,
       body: Padding(
@@ -130,8 +144,7 @@ class RejectedView extends StatelessWidget {
             const SizedBox(height: 24),
             Text(
               'Account Rejected',
-              style: GoogleFonts.plusJakartaSans(
-                fontSize: 24,
+              style: textTheme.headlineMedium?.copyWith(
                 fontWeight: FontWeight.w700,
                 color: AppColors.navy,
               ),
@@ -141,18 +154,23 @@ class RejectedView extends StatelessWidget {
             Text(
               'Your account application was rejected. ${user?.rejectionReason != null ? '\n\nReason: ${user?.rejectionReason}' : ''}',
               textAlign: TextAlign.center,
-              style: GoogleFonts.plusJakartaSans(
-                color: AppColors.textSecondary,
-                fontSize: 16,
-                height: 1.5,
-              ),
+              style: textTheme.bodyLarge,
             ),
             const SizedBox(height: 40),
             SizedBox(
               width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () => context.read<AuthViewModel>().signOut(),
-                child: const Text('Log Out'),
+              child: OutlinedButton.icon(
+                onPressed: () => authVm.signOut(),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.error,
+                  side: const BorderSide(color: AppColors.error, width: 1.5),
+                  minimumSize: const Size(double.infinity, 44),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                icon: const Icon(Icons.logout, size: 18),
+                label: const Text('Log Out'),
               ),
             ),
           ],

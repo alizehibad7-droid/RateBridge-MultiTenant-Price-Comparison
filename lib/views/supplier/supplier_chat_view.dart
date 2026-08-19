@@ -246,7 +246,7 @@ class _MessagesEmpty extends StatelessWidget {
             Icon(
               Icons.chat_bubble_outline,
               size: 56,
-              color: Colors.grey.shade400,
+              color: FieldColors.textMuted,
             ),
             const SizedBox(height: 16),
             const Text(
@@ -259,7 +259,7 @@ class _MessagesEmpty extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               'Field users can message you from orders, compare, or supplier profiles.',
-              style: TextStyle(color: Colors.grey.shade500),
+              style: const TextStyle(color: FieldColors.textMuted),
               textAlign: TextAlign.center,
             ),
           ],
@@ -293,7 +293,7 @@ class _MessagesError extends StatelessWidget {
             Text(
               message,
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey.shade600),
+              style: const TextStyle(color: FieldColors.textMuted),
             ),
             const SizedBox(height: 16),
             FilledButton(onPressed: onRetry, child: const Text('Retry')),

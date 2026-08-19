@@ -1,14 +1,19 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../../constants/app_constants.dart';
+import '../../constants/route_names.dart';
 import '../../models/material_listing.dart';
 import '../../models/material_model.dart';
 import '../../models/order_model.dart';
 import '../../models/supplier_model.dart';
+import '../../repositories/company_repository.dart';
 import '../../repositories/order_repository.dart';
 import '../../repositories/transaction_repository.dart';
+import '../../repositories/material_repository.dart';
 import '../../services/notification_service.dart';
+import '../../services/plan_limit_service.dart';
 import '../../utils/app_exception.dart';
 import '../../views/field_user/orders/field_order_status.dart';
 
@@ -16,6 +21,8 @@ import '../../views/field_user/orders/field_order_status.dart';
 class FieldOrdersViewModel extends ChangeNotifier {
   final OrderRepository _orderRepo;
   final TransactionRepository _transactionRepo;
+  final CompanyRepository _companyRepo;
+  final MaterialRepository _materialRepo;
   final NotificationService _notificationService;
 
   bool _isSubmitting = false;
@@ -27,6 +34,8 @@ class FieldOrdersViewModel extends ChangeNotifier {
   FieldOrdersViewModel(
     this._orderRepo,
     this._transactionRepo,
+    this._companyRepo,
+    this._materialRepo,
     this._notificationService,
   );
 
@@ -42,7 +51,8 @@ class FieldOrdersViewModel extends ChangeNotifier {
   int get activeCount =>
       _orders.where((o) => FieldOrderStatus.isActive(o.status)).length;
 
-  int get deliveredCount => _orders.where((o) {
+  int get deliveredCount =>
+      _orders.where((o) {
         final s = FieldOrderStatus.normalize(o.status);
         return s == 'delivered' || s == 'confirmed';
       }).length;
@@ -50,10 +60,11 @@ class FieldOrdersViewModel extends ChangeNotifier {
   int get historyCount =>
       _orders.where((o) => FieldOrderStatus.isHistory(o.status)).length;
 
-  List<OrderModel> get activeOrders => _orders
-      .where((o) => FieldOrderStatus.isActive(o.status))
-      .take(3)
-      .toList();
+  List<OrderModel> get activeOrders =>
+      _orders
+          .where((o) => FieldOrderStatus.isActive(o.status))
+          .take(3)
+          .toList();
 
   int? _requestedOrdersSubTab;
 
@@ -96,17 +107,17 @@ class FieldOrdersViewModel extends ChangeNotifier {
     _ordersSubscription = _orderRepo
         .watchFieldUserOrders(fieldUserUid, companyId, 'All')
         .listen(
-      (data) {
-        _orders = data;
-        _isLoadingOrders = false;
-        notifyListeners();
-      },
-      onError: (e) {
-        _errorMessage = e is AppException ? e.message : e.toString();
-        _isLoadingOrders = false;
-        notifyListeners();
-      },
-    );
+          (data) {
+            _orders = data;
+            _isLoadingOrders = false;
+            notifyListeners();
+          },
+          onError: (e) {
+            _errorMessage = e is AppException ? e.message : e.toString();
+            _isLoadingOrders = false;
+            notifyListeners();
+          },
+        );
   }
 
   OrderModel? findOrder(String orderId) {
@@ -120,6 +131,10 @@ class FieldOrdersViewModel extends ChangeNotifier {
   Future<OrderModel?> fetchOrder(String orderId) async {
     final cached = findOrder(orderId);
     if (cached != null) return cached;
+    return fetchOrderFromServer(orderId);
+  }
+
+  Future<OrderModel?> fetchOrderFromServer(String orderId) async {
     try {
       return await _orderRepo.getOrderById(orderId);
     } catch (e) {
@@ -202,6 +217,24 @@ class FieldOrdersViewModel extends ChangeNotifier {
       final commissionAmount = totalAmount * AppConstants.commissionRate;
       final supplierEarning = totalAmount - commissionAmount;
 
+      // 1. Check auto-approval threshold
+      final company = await _companyRepo.getCompanyById(companyId);
+      final threshold = company?.autoApprovalThreshold ?? 0.0;
+
+      // Count every non-terminal order across the whole company, not only
+      // accepted orders belonging to the current field user.
+      await PlanLimitService.ensureActiveOrderCapacity(
+        FirebaseFirestore.instance,
+        companyId,
+      );
+
+      final isAutoApproved = threshold > 0 && totalAmount <= threshold;
+
+      final initialStatus =
+          isAutoApproved
+              ? AppConstants.statusPending
+              : AppConstants.statusPendingApproval;
+
       final order = OrderModel(
         orderId: DateTime.now().millisecondsSinceEpoch.toString(),
         companyId: companyId,
@@ -220,7 +253,7 @@ class FieldOrdersViewModel extends ChangeNotifier {
         supplierEarning: supplierEarning,
         deliveryAddress: siteLocation,
         siteLocation: siteLocation,
-        status: AppConstants.statusPendingApproval,
+        status: initialStatus,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
         requiredDate: requiredDate,
@@ -229,20 +262,9 @@ class FieldOrdersViewModel extends ChangeNotifier {
       await _orderRepo.submitOrder(order);
 
       final ceoUid = await _orderRepo.resolveCeoUid(companyId);
-      if (ceoUid != null) {
-        await _notificationService.notifyOrderPendingApproval(
-          ceoUid: ceoUid,
-          orderId: order.orderId,
-          companyId: companyId,
-          materialName: order.materialName,
-          fieldUserName: order.fieldUserName,
-        );
-      } else {
-        await _orderRepo.updateStatus(
-          order.orderId,
-          companyId,
-          AppConstants.statusPending,
-        );
+
+      if (isAutoApproved) {
+        // Notify supplier
         await _notificationService.notifyNewOrder(
           supplierId: order.supplierId,
           orderId: order.orderId,
@@ -250,6 +272,40 @@ class FieldOrdersViewModel extends ChangeNotifier {
           materialName: order.materialName,
           fieldUserName: order.fieldUserName,
         );
+        // Notify CEO (Informational)
+        if (ceoUid != null) {
+          await _notificationService.notifyOrderAutoApproved(
+            ceoUid: ceoUid,
+            orderId: order.orderId,
+            companyId: companyId,
+            materialName: order.materialName,
+            totalAmount: totalAmount,
+          );
+        }
+      } else {
+        if (ceoUid != null) {
+          await _notificationService.notifyOrderPendingApproval(
+            ceoUid: ceoUid,
+            orderId: order.orderId,
+            companyId: companyId,
+            materialName: order.materialName,
+            fieldUserName: order.fieldUserName,
+          );
+        } else {
+          // Fallback if no CEO found (should not happen in proper team setup)
+          await _orderRepo.updateStatus(
+            order.orderId,
+            companyId,
+            AppConstants.statusPending,
+          );
+          await _notificationService.notifyNewOrder(
+            supplierId: order.supplierId,
+            orderId: order.orderId,
+            companyId: order.companyId,
+            materialName: order.materialName,
+            fieldUserName: order.fieldUserName,
+          );
+        }
       }
       return true;
     } catch (e) {
@@ -299,14 +355,8 @@ class FieldOrdersViewModel extends ChangeNotifier {
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
-      await _transactionRepo.createUnsettledCommissionTransaction(
-        orderId: orderId,
-        companyId: companyId,
-        supplierUid: order.supplierId,
-        totalAmount: totalAmount,
-        commissionAmount: commissionAmount,
-        supplierEarning: supplierEarning,
-      );
+      // REMOVED: Transaction creation is now handled by Cloud Function only
+      // to prevent duplicate unsettled/settled records.
 
       await _notificationService.notifyDeliveryConfirmed(
         supplierId: order.supplierId,
@@ -376,6 +426,89 @@ class FieldOrdersViewModel extends ChangeNotifier {
       _isSubmitting = false;
       notifyListeners();
     }
+  }
+
+  Future<void> reorder(BuildContext context, OrderModel pastOrder) async {
+    _isSubmitting = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      // 1. Fetch material to ensure it exists
+      final material = await _materialRepo.getMaterialById(
+        pastOrder.materialId,
+      );
+      if (material == null) {
+        throw AppException(
+          'This material is no longer available from the supplier.',
+        );
+      }
+
+      // 2. Fetch supplier to ensure they are still active and linked
+      final supplier = await _orderRepo.getSupplierById(pastOrder.supplierId);
+      if (supplier == null || supplier.status.toLowerCase() != 'active') {
+        throw AppException('The supplier is no longer active on the platform.');
+      }
+
+      // Check if still linked to company
+      final isLinked = await _companyRepo.isSupplierLinked(
+        pastOrder.companyId,
+        pastOrder.supplierId,
+      );
+      if (!isLinked) {
+        throw AppException(
+          'This supplier is no longer linked to your company.',
+        );
+      }
+
+      // 3. Convert to MaterialListing
+      final listing = _listingFromMaterial(material, supplier);
+
+      // 4. Navigate to place order screen
+      if (context.mounted) {
+        final uri = Uri(
+          path: RouteNames.fieldPlaceOrder,
+          queryParameters: {
+            'address': pastOrder.deliveryAddress,
+            'quantity': pastOrder.quantity.toString(),
+          },
+        );
+        GoRouter.of(context).push(uri.toString(), extra: listing);
+      }
+    } catch (e) {
+      _errorMessage = e is AppException ? e.message : e.toString();
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_errorMessage!), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      _isSubmitting = false;
+      notifyListeners();
+    }
+  }
+
+  MaterialListing _listingFromMaterial(MaterialModel m, SupplierModel s) {
+    return MaterialListing(
+      id: m.id,
+      materialName: m.name,
+      supplierName: m.supplierName,
+      supplierId: m.supplierId,
+      pricePerUnit: m.pricePerUnit,
+      unit: m.unit,
+      category: m.category,
+      city: m.originCity,
+      supplierRating: s.rating,
+      brand: m.brand,
+      qualityGrade: m.qualityGrade,
+      description: m.description,
+      minOrderQuantity: m.minOrderQuantity,
+      deliveryTime: m.deliveryTime,
+      deliveryCoverageArea: m.deliveryCoverageArea,
+      deliveryCharges: m.deliveryCharges,
+      bulkDiscountAvailable: m.bulkDiscountAvailable,
+      bulkDiscountDetails: m.bulkDiscountDetails,
+    );
   }
 
   MaterialModel _materialFromListing(MaterialListing listing) {

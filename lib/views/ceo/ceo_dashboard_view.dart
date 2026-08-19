@@ -241,6 +241,18 @@ class _CeoDashboardViewState extends State<CeoDashboardView> {
                             title: 'All Orders',
                             onTap: () => context.go(RouteNames.ceoOrders),
                           ),
+                          _actionCard(
+                            context,
+                            icon: Icons.request_page_outlined,
+                            title: 'Bulk Quotes',
+                            onTap: () => context.push(RouteNames.ceoRfqs),
+                          ),
+                          _actionCard(
+                            context,
+                            icon: Icons.report_gmailerrorred_outlined,
+                            title: 'Issues',
+                            onTap: () => context.push(RouteNames.ceoDisputes),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 24),

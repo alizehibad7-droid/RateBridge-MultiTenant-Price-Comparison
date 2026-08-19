@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/invitation_model.dart';
 import '../services/firestore_service.dart';
+import '../services/plan_limit_service.dart';
 import '../constants/firestore_paths.dart';
 import '../constants/app_constants.dart';
 import '../utils/app_exception.dart';
@@ -81,6 +82,11 @@ class InvitationRepository {
   /// Creates a standard invitation (e.g., for Suppliers)
   Future<String> createInvitation(String companyId, String ceoUid, String supplierUid, String companyName) async {
     try {
+      await PlanLimitService.ensureSupplierCapacity(
+        _db,
+        companyId,
+        supplierId: supplierUid,
+      );
       final docId = _db.collection(FirestorePaths.invitationsCol).doc().id;
       final expiresAt = DateTime.now().add(AppConstants.inviteTokenExpiry);
       await _db.collection(FirestorePaths.invitationsCol).doc(docId).set({

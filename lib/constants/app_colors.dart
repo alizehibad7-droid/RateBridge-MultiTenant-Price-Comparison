@@ -6,8 +6,11 @@ class AppColors {
 
   // Brand
   static const navy = Color(0xFF1E326E);
+  static const navyDark = Color(0xFF0F1D42);
   static const amber = Color(0xFFFBB03C);
+  static const amberBg = Color(0x26FBB03C);
   static const darkAmber = Color(0xFFB7791F);
+  static const statusInfo = Color(0xFF2563EB);
 
   // Surfaces
   static const screenBg = Color(0xFFF5F6FA);

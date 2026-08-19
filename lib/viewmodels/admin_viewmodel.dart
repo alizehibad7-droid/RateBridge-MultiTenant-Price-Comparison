@@ -3,6 +3,7 @@ import 'dart:async';
 import 'dart:developer' as developer;
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../models/company_model.dart';
 import '../models/user_model.dart';
 import '../models/category_model.dart';
@@ -34,6 +35,7 @@ class AdminViewModel extends ChangeNotifier {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
   String? _uid;
+  String? _adminName;
   bool _isLoading = false;
   bool get isLoading => _isLoading;
 
@@ -55,8 +57,101 @@ class AdminViewModel extends ChangeNotifier {
     if (auth.user != null && (auth.user!.role.toLowerCase() == 'admin' || auth.user!.role.toLowerCase() == 'administrator')) {
       if (_uid != auth.user!.uid) {
         _uid = auth.user!.uid;
+        _adminName = auth.user!.name;
         loadDashboardData();
       }
+    }
+  }
+
+  Future<void> _logAction({
+    required String actionType,
+    required String targetType,
+    required String targetId,
+    required String description,
+    String? reason,
+  }) async {
+    final actorId = _uid ?? FirebaseAuth.instance.currentUser?.uid;
+    if (actorId == null || actorId.isEmpty) {
+      developer.log('Skipping audit log for $actionType: no admin actor id');
+      return;
+    }
+    final actorName = (_adminName != null && _adminName!.trim().isNotEmpty)
+        ? _adminName!.trim()
+        : (FirebaseAuth.instance.currentUser?.displayName?.trim().isNotEmpty == true
+            ? FirebaseAuth.instance.currentUser!.displayName!.trim()
+            : 'Admin');
+    try {
+      await _db.collection('audit_logs').add({
+        'actorId': actorId,
+        'actorName': _clip(actorName, 200),
+        'actionType': _clip(actionType, 80),
+        'targetType': _clip(targetType, 40),
+        'targetId': _clip(targetId, 200),
+        'description': _clip(description, 1000),
+        if (reason != null && reason.trim().isNotEmpty)
+          'reason': _clip(reason.trim(), 4000),
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      developer.log("Error saving audit log: $e");
+    }
+  }
+
+  String _clip(String value, int max) {
+    final trimmed = value.trim();
+    if (trimmed.length <= max) return trimmed;
+    return '${trimmed.substring(0, max - 3)}...';
+  }
+
+  Future<String> _userName(String uid) async {
+    try {
+      final doc = await _db.collection('users').doc(uid).get();
+      final name = (doc.data()?['name'] ?? '').toString().trim();
+      if (name.isNotEmpty) return name;
+    } catch (e) {
+      developer.log('Failed to load user name for $uid: $e');
+    }
+    return uid;
+  }
+
+  Future<String> _companyName(String? companyId) async {
+    if (companyId == null || companyId.isEmpty) return 'unknown company';
+    try {
+      final doc = await _db.collection('companies').doc(companyId).get();
+      final name =
+          (doc.data()?['name'] ?? doc.data()?['companyName'] ?? '')
+              .toString()
+              .trim();
+      if (name.isNotEmpty) return name;
+    } catch (e) {
+      developer.log('Failed to load company name for $companyId: $e');
+    }
+    return companyId;
+  }
+
+  Future<String> _supplierName(String uid) async {
+    try {
+      final supplierDoc = await _db.collection('suppliers').doc(uid).get();
+      final business =
+          (supplierDoc.data()?['businessName'] ??
+                  supplierDoc.data()?['name'] ??
+                  '')
+              .toString()
+              .trim();
+      if (business.isNotEmpty) return business;
+    } catch (e) {
+      developer.log('Failed to load supplier profile for $uid: $e');
+    }
+    return _userName(uid);
+  }
+
+  Future<String> _resolvedCompanyId(String ceoUid, String? companyId) async {
+    if (companyId != null && companyId.isNotEmpty) return companyId;
+    try {
+      final user = await _db.collection('users').doc(ceoUid).get();
+      return (user.data()?['companyId'] ?? '').toString();
+    } catch (_) {
+      return '';
     }
   }
 
@@ -126,6 +221,17 @@ class AdminViewModel extends ChangeNotifier {
       }
       batch.update(_db.collection('users').doc(ceoUid), {'status': 'active', 'approved': true});
       await batch.commit();
+
+      final ceoName = await _userName(ceoUid);
+      final resolvedCompanyId = await _resolvedCompanyId(ceoUid, companyId);
+      final companyName = await _companyName(resolvedCompanyId);
+      await _logAction(
+        actionType: 'approve_ceo',
+        targetType: 'ceo',
+        targetId: ceoUid,
+        description: 'Approved CEO $ceoName for company $companyName',
+      );
+
       loadCEOs();
     } finally {
       _isLoading = false;
@@ -137,32 +243,69 @@ class AdminViewModel extends ChangeNotifier {
   Future<void> approveCEO(String? companyId, String ceoUid) => acceptCEO(companyId, ceoUid);
 
   Future<void> suspendCEO(String? companyId, String ceoUid) async {
+    final resolvedCompanyId = await _resolvedCompanyId(ceoUid, companyId);
+    final ceoName = await _userName(ceoUid);
+    final companyName = await _companyName(resolvedCompanyId);
+
     await _db.collection('users').doc(ceoUid).update({'status': 'suspended'});
-    if (companyId != null && companyId.isNotEmpty) {
-      await _db.collection('companies').doc(companyId).update({'status': 'suspended'});
+    if (resolvedCompanyId.isNotEmpty) {
+      await _db.collection('companies').doc(resolvedCompanyId).update({'status': 'suspended'});
     }
+
+    await _logAction(
+      actionType: 'ban_company',
+      targetType: 'company',
+      targetId: resolvedCompanyId.isNotEmpty ? resolvedCompanyId : ceoUid,
+      description: 'Banned company $companyName (CEO: $ceoName)',
+    );
+
     loadCEOs();
   }
 
   Future<void> activateCEO(String? companyId, String ceoUid) async {
+    final resolvedCompanyId = await _resolvedCompanyId(ceoUid, companyId);
+    final ceoName = await _userName(ceoUid);
+    final companyName = await _companyName(resolvedCompanyId);
+
     await _db.collection('users').doc(ceoUid).update({'status': 'active'});
-    if (companyId != null && companyId.isNotEmpty) {
-      await _db.collection('companies').doc(companyId).update({'status': 'active'});
+    if (resolvedCompanyId.isNotEmpty) {
+      await _db.collection('companies').doc(resolvedCompanyId).update({'status': 'active'});
     }
+
+    await _logAction(
+      actionType: 'reactivate_company',
+      targetType: 'company',
+      targetId: resolvedCompanyId.isNotEmpty ? resolvedCompanyId : ceoUid,
+      description: 'Reactivated company $companyName (CEO: $ceoName)',
+    );
+
     loadCEOs();
   }
 
   Future<void> rejectCEO(String? companyId, String ceoUid, String reason) async {
+    final resolvedCompanyId = await _resolvedCompanyId(ceoUid, companyId);
+    final ceoName = await _userName(ceoUid);
+    final companyName = await _companyName(resolvedCompanyId);
+
     await _db.collection('users').doc(ceoUid).update({
       'status': 'rejected',
       'rejectionReason': reason,
     });
-    if (companyId != null && companyId.isNotEmpty) {
-      await _db.collection('companies').doc(companyId).update({
+    if (resolvedCompanyId.isNotEmpty) {
+      await _db.collection('companies').doc(resolvedCompanyId).update({
         'status': 'rejected',
         'rejectionReason': reason,
       });
     }
+
+    await _logAction(
+      actionType: 'reject_ceo',
+      targetType: 'ceo',
+      targetId: ceoUid,
+      description: 'Rejected CEO application for $ceoName ($companyName)',
+      reason: reason,
+    );
+
     loadCEOs();
   }
 
@@ -172,6 +315,15 @@ class AdminViewModel extends ChangeNotifier {
     try {
       await _db.collection('users').doc(uid).update({'status': 'active', 'approved': true});
       await _db.collection('suppliers').doc(uid).update({'status': 'Active', 'isVerified': true});
+
+      final supplierName = await _supplierName(uid);
+      await _logAction(
+        actionType: 'approve_supplier',
+        targetType: 'supplier',
+        targetId: uid,
+        description: 'Approved supplier $supplierName',
+      );
+
       loadSuppliers();
     } finally {
       _isLoading = false;
@@ -180,17 +332,57 @@ class AdminViewModel extends ChangeNotifier {
   }
 
   Future<void> suspendSupplier(String uid) async {
+    final supplierName = await _supplierName(uid);
     await _db.collection('users').doc(uid).update({'status': 'suspended'});
     await _db.collection('suppliers').doc(uid).update({'status': 'Suspended'});
+
+    await _logAction(
+      actionType: 'ban_supplier',
+      targetType: 'supplier',
+      targetId: uid,
+      description: 'Banned supplier $supplierName',
+    );
+
+    loadSuppliers();
+  }
+
+  Future<void> reactivateSupplier(String uid) async {
+    final supplierName = await _supplierName(uid);
+    await _db.collection('users').doc(uid).update({
+      'status': 'active',
+      'approved': true,
+    });
+    await _db.collection('suppliers').doc(uid).update({
+      'status': 'Active',
+      'isVerified': true,
+    });
+
+    await _logAction(
+      actionType: 'reactivate_supplier',
+      targetType: 'supplier',
+      targetId: uid,
+      description: 'Reactivated supplier $supplierName',
+    );
+
     loadSuppliers();
   }
 
   Future<void> rejectSupplier(String uid, String reason) async {
+    final supplierName = await _supplierName(uid);
     await _db.collection('users').doc(uid).update({
       'status': 'rejected',
       'rejectionReason': reason,
     });
     await _db.collection('suppliers').doc(uid).update({'status': 'Rejected'});
+
+    await _logAction(
+      actionType: 'reject_supplier',
+      targetType: 'supplier',
+      targetId: uid,
+      description: 'Rejected supplier application for $supplierName',
+      reason: reason,
+    );
+
     loadSuppliers();
   }
 
@@ -198,6 +390,14 @@ class AdminViewModel extends ChangeNotifier {
     // In a real app, this might involve more cleanup
     await _db.collection('users').doc(uid).delete();
     await _db.collection('suppliers').doc(uid).delete();
+
+    await _logAction(
+      actionType: 'delete_supplier',
+      targetType: 'supplier',
+      targetId: uid,
+      description: 'Permanently deleted supplier account and data',
+    );
+
     loadSuppliers();
   }
 
@@ -210,7 +410,7 @@ class AdminViewModel extends ChangeNotifier {
     List<String> grades, {
     String iconKey = 'construction_outlined',
   }) async {
-    await _db.collection('categories').add({
+    final docRef = await _db.collection('categories').add({
       'name': name,
       'unit': unit,
       'brands': brands,
@@ -220,6 +420,13 @@ class AdminViewModel extends ChangeNotifier {
       'activeMaterialsCount': 0,
       'createdAt': FieldValue.serverTimestamp(),
     });
+
+    await _logAction(
+      actionType: 'add_category',
+      targetType: 'category',
+      targetId: docRef.id,
+      description: 'Added new material category: $name',
+    );
   }
 
   Future<void> editCategory(
@@ -240,14 +447,35 @@ class AdminViewModel extends ChangeNotifier {
       updates['active'] = isActive;
     }
     await _db.collection('categories').doc(id).update(updates);
+
+    await _logAction(
+      actionType: 'edit_category',
+      targetType: 'category',
+      targetId: id,
+      description: 'Updated category details for $name',
+    );
   }
 
   Future<void> setCategoryActive(String id, bool active) async {
     await _db.collection('categories').doc(id).update({'active': active});
+
+    await _logAction(
+      actionType: active ? 'activate_category' : 'deactivate_category',
+      targetType: 'category',
+      targetId: id,
+      description: '${active ? "Activated" : "Deactivated"} category',
+    );
   }
 
   Future<void> deleteCategory(String id) async {
     await _db.collection('categories').doc(id).delete();
+
+    await _logAction(
+      actionType: 'delete_category',
+      targetType: 'category',
+      targetId: id,
+      description: 'Deleted category',
+    );
   }
 
   Future<void> markTransaction(String transactionId, String status) async {
@@ -255,7 +483,50 @@ class AdminViewModel extends ChangeNotifier {
       'status': status,
       'reconciledAt': FieldValue.serverTimestamp(),
     });
+
+    await _logAction(
+      actionType: 'mark_transaction',
+      targetType: 'transaction',
+      targetId: transactionId,
+      description: 'Marked payment-queue transaction $transactionId as $status',
+    );
+
     loadDashboardData();
+  }
+
+  Future<void> settleSupplierCommissions({
+    required String supplierUid,
+    required String supplierName,
+    required double unsettledAmount,
+    required int orderCount,
+  }) async {
+    final snap = await _db
+        .collection('transactions')
+        .where('supplierUid', isEqualTo: supplierUid)
+        .where('status', isEqualTo: 'unsettled')
+        .get();
+
+    if (snap.docs.isEmpty) return;
+
+    final batch = _db.batch();
+    for (final doc in snap.docs) {
+      batch.update(doc.reference, {
+        'status': 'settled',
+        'settledAt': FieldValue.serverTimestamp(),
+      });
+    }
+    await batch.commit();
+
+    final ids = snap.docs.map((d) => d.id).join(', ');
+    final amountLabel = unsettledAmount.toStringAsFixed(0);
+    await _logAction(
+      actionType: 'settle_commission',
+      targetType: 'supplier',
+      targetId: supplierUid,
+      description:
+          'Marked $orderCount commission transaction(s) as settled for $supplierName (Rs $amountLabel)',
+      reason: 'Transaction IDs: $ids',
+    );
   }
 
   Future<void> loadSuppliers() async {

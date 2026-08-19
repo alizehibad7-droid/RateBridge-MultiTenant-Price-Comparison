@@ -11,7 +11,10 @@ class PlanDefinition {
   final int durationDays;
   final List<String> features;
   final bool aiUnlocked;
-  final bool prioritySupport;
+  final int maxActiveOrders;
+  final int maxSuppliers;
+  final int maxFieldUsers;
+  final int priceHistoryDays;
 
   const PlanDefinition({
     required this.id,
@@ -20,7 +23,10 @@ class PlanDefinition {
     required this.durationDays,
     required this.features,
     required this.aiUnlocked,
-    required this.prioritySupport,
+    this.maxActiveOrders = -1, // -1 means unlimited
+    this.maxSuppliers = -1,
+    this.maxFieldUsers = -1,
+    this.priceHistoryDays = -1,
   });
 
   String get planKey => id.name;
@@ -32,46 +38,57 @@ const kPlans = <PlanDefinition>[
     name: 'Free',
     priceRs: 0,
     durationDays: 0,
+    maxActiveOrders: 5,
+    maxSuppliers: 3,
+    maxFieldUsers: 3,
+    priceHistoryDays: 30,
     features: [
       'Browse supplier marketplace',
+      'Max 3 linked suppliers',
       'Up to 5 active orders',
-      'Basic material comparison',
+      'Max 3 field users',
+      '30-day price trends',
       'Email support',
     ],
     aiUnlocked: false,
-    prioritySupport: false,
   ),
   PlanDefinition(
     id: PlanId.basic,
     name: 'Basic',
     priceRs: 1000,
     durationDays: 30,
+    maxActiveOrders: -1,
+    maxSuppliers: 15,
+    maxFieldUsers: 15,
+    priceHistoryDays: -1,
     features: [
       'Everything in Free',
       'Unlimited active orders',
+      'Max 15 linked suppliers',
+      'Max 15 field users',
+      'Full price trend history',
       'AI price recommendations',
-      'Price trend analytics',
       'Chat with suppliers',
-      'Email + chat support',
     ],
     aiUnlocked: true,
-    prioritySupport: false,
   ),
   PlanDefinition(
     id: PlanId.premium,
     name: 'Premium',
     priceRs: 5000,
     durationDays: 30,
+    maxActiveOrders: -1,
+    maxSuppliers: -1,
+    maxFieldUsers: -1,
+    priceHistoryDays: -1,
     features: [
       'Everything in Basic',
+      'Unlimited linked suppliers',
+      'Unlimited field users',
       'Priority supplier matching',
       'Advanced AI analytics',
-      'Dedicated account manager',
-      '24/7 priority support',
-      'Custom reporting',
     ],
     aiUnlocked: true,
-    prioritySupport: true,
   ),
 ];
 
@@ -81,7 +98,6 @@ class SubscriptionModel {
   final String status; // active | expired | cancelled | admin_granted
   final DateTime? startedAt;
   final DateTime? expiresAt;
-  final String? stripePaymentIntentId;
   final bool adminGranted;
   final String? adminNote;
   final List<SubscriptionHistoryEntry> history;
@@ -92,7 +108,6 @@ class SubscriptionModel {
     required this.status,
     this.startedAt,
     this.expiresAt,
-    this.stripePaymentIntentId,
     this.adminGranted = false,
     this.adminNote,
     this.history = const [],
@@ -126,7 +141,6 @@ class SubscriptionModel {
       status: map['status'] ?? 'active',
       startedAt: (map['startedAt'] as Timestamp?)?.toDate(),
       expiresAt: (map['expiresAt'] as Timestamp?)?.toDate(),
-      stripePaymentIntentId: map['stripePaymentIntentId'],
       adminGranted: map['adminGranted'] ?? false,
       adminNote: map['adminNote'],
       history: rawHistory
@@ -143,7 +157,6 @@ class SubscriptionModel {
             startedAt != null ? Timestamp.fromDate(startedAt!) : null,
         'expiresAt':
             expiresAt != null ? Timestamp.fromDate(expiresAt!) : null,
-        'stripePaymentIntentId': stripePaymentIntentId,
         'adminGranted': adminGranted,
         'adminNote': adminNote,
       };

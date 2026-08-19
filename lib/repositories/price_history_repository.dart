@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../models/price_history_model.dart';
 import '../services/firestore_service.dart';
+import '../services/plan_limit_service.dart';
 import '../constants/firestore_paths.dart';
 import '../utils/app_exception.dart';
 
@@ -15,20 +16,38 @@ class PriceHistoryRepository {
     String matId,
     String companyId,
     DateTimeRange? dateRange,
-  ) {
+  ) async* {
     try {
+      final plan = await PlanLimitService.companyPlan(_db, companyId);
+      final planStart = plan.priceHistoryDays == -1
+          ? null
+          : DateTime.now().subtract(Duration(days: plan.priceHistoryDays));
+      final requestedStart = dateRange?.start;
+      final effectiveStart = planStart == null
+          ? requestedStart
+          : requestedStart == null || requestedStart.isBefore(planStart)
+              ? planStart
+              : requestedStart;
+
       Query query = _db
           .collection(FirestorePaths.materialPriceHistoryCol(companyId, matId))
           .orderBy('timestamp', descending: true)
           .limit(100);
 
+      if (effectiveStart != null) {
+        query = query.where(
+          'timestamp',
+          isGreaterThanOrEqualTo: Timestamp.fromDate(effectiveStart),
+        );
+      }
       if (dateRange != null) {
-        query = query
-            .where('timestamp', isGreaterThanOrEqualTo: Timestamp.fromDate(dateRange.start))
-            .where('timestamp', isLessThanOrEqualTo: Timestamp.fromDate(dateRange.end));
+        query = query.where(
+          'timestamp',
+          isLessThanOrEqualTo: Timestamp.fromDate(dateRange.end),
+        );
       }
 
-      return query.snapshots().map((s) =>
+      yield* query.snapshots().map((s) =>
         s.docs.map((d) =>
           PriceHistoryModel.fromMap(
             d.id,
@@ -45,12 +64,21 @@ class PriceHistoryRepository {
     String companyId,
   ) async {
     try {
-      final snapshot = await _db
+      final plan = await PlanLimitService.companyPlan(_db, companyId);
+      Query<Map<String, dynamic>> query = _db
           .collection(FirestorePaths.materialPriceHistoryCol(companyId, matId))
           .where('supplierUid', isEqualTo: supplierUid)
           .orderBy('timestamp', descending: false)
-          .limit(50)
-          .get();
+          .limit(50);
+      if (plan.priceHistoryDays != -1) {
+        query = query.where(
+          'timestamp',
+          isGreaterThanOrEqualTo: Timestamp.fromDate(
+            DateTime.now().subtract(Duration(days: plan.priceHistoryDays)),
+          ),
+        );
+      }
+      final snapshot = await query.get();
 
       return snapshot.docs.map((d) =>
         PriceHistoryModel.fromMap(d.id, d.data())).toList();

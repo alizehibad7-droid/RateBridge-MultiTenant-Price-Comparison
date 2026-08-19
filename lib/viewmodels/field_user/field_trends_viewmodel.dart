@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../constants/app_constants.dart';
 import '../../models/price_history_model.dart';
+import '../../models/subscription_model.dart';
+import '../../repositories/company_repository.dart';
 import '../../repositories/material_repository.dart';
 import '../../services/gemini_service.dart';
 
@@ -9,6 +11,7 @@ import '../../services/gemini_service.dart';
 class FieldTrendsViewModel extends ChangeNotifier {
   final MaterialRepository _materialRepo;
   final GeminiService _geminiService;
+  final CompanyRepository _companyRepo;
 
   bool _isLoading = false;
   bool _isAiLoading = false;
@@ -19,7 +22,11 @@ class FieldTrendsViewModel extends ChangeNotifier {
   String? _materialName;
   String? _supplierName;
 
-  FieldTrendsViewModel(this._materialRepo, this._geminiService);
+  FieldTrendsViewModel(
+    this._materialRepo,
+    this._geminiService,
+    this._companyRepo,
+  );
 
   bool get isLoading => _isLoading;
   bool get isAiLoading => _isAiLoading;
@@ -101,10 +108,26 @@ class FieldTrendsViewModel extends ChangeNotifier {
           supplierUid == 'all' ||
           supplierUid.isEmpty;
 
+      // Enforce Price Trend History Depth Limit
+      final company = await _companyRepo.getCompanyById(companyId);
+      final planKey = company?.plan ?? 'free';
+      final plan = kPlans.firstWhere((p) => p.planKey == planKey,
+          orElse: () => kPlans.first);
+
+      int months = AppConstants.priceHistoryMonths;
+      if (plan.priceHistoryDays != -1) {
+        // Free plan: last 30 days
+        months = (plan.priceHistoryDays / 30).ceil();
+      }
+
       if (isAggregate) {
         _materialName = materialId;
         _supplierName = 'All suppliers';
-        _history = await _materialRepo.getPriceTrendForMaterial(companyId, materialId);
+        _history = await _materialRepo.getPriceTrendForMaterial(
+          companyId,
+          materialId,
+          months: months,
+        );
       } else {
         final linked = await _materialRepo.isSupplierLinkedToCompany(
           companyId,
@@ -121,7 +144,8 @@ class FieldTrendsViewModel extends ChangeNotifier {
           throw Exception('Material not found');
         }
         if (material.supplierId != supplierUid) {
-          throw Exception('This material does not belong to the selected supplier');
+          throw Exception(
+              'This material does not belong to the selected supplier');
         }
         _materialName = material.name;
         _supplierName = material.supplierName;
@@ -129,6 +153,7 @@ class FieldTrendsViewModel extends ChangeNotifier {
           materialId: materialId,
           supplierUid: supplierUid,
           companyId: companyId,
+          months: months,
         );
       }
 

@@ -13,7 +13,7 @@ class FieldPriceTrendChart extends StatelessWidget {
     required this.points,
   });
 
-  static const _lineColor = Color(0xFFFBB03C);
+  static const _lineColor = FieldColors.accentAmber;
 
   @override
   Widget build(BuildContext context) {

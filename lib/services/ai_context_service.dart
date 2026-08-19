@@ -7,6 +7,7 @@ class AiContextService extends ChangeNotifier {
   void updateContext(String screenName, Map<String, dynamic> data) {
     currentScreenName = screenName;
     currentScreenData = data;
+    notifyListeners();
   }
 
   void clearContext() {

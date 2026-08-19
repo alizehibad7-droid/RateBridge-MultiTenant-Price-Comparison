@@ -11,7 +11,7 @@ class RouteNames {
   static const String registerFieldUser = '/register/field-user';
   static const String forgotPassword = '/forgot-password';
   static const String inviteLanding = '/invite/:token';
-  
+
   // Account Status
   static const String pendingApproval = '/account/pending';
   static const String suspended = '/account/suspended';
@@ -23,6 +23,8 @@ class RouteNames {
   static const String adminCategories = '/admin/categories';
   static const String adminPayments = '/admin/payments';
   static const String adminSubscription = '/admin/subscriptions';
+  static const String adminDisputes = '/admin/disputes';
+  static const String adminAuditLogs = '/admin/audit-logs';
   static const String adminNotifications = '/admin/notifications';
 
   // CEO
@@ -36,6 +38,10 @@ class RouteNames {
   static const String ceoOrders = '/ceo/orders';
   static const String ceoSubscription = '/ceo/subscription';
   static const String ceoProfile = '/ceo/profile';
+  static const String ceoRfqs = '/ceo/rfqs';
+  static const String ceoCreateRfq = '/ceo/rfqs/create';
+  static const String ceoRfqDetail = '/ceo/rfqs/:rfqId';
+  static const String ceoDisputes = '/ceo/disputes';
 
   // Supplier
   static const String supplierDashboard = '/supplier/dashboard';
@@ -45,6 +51,8 @@ class RouteNames {
   static const String supplierAddMaterial = '/supplier/add-material';
   static const String supplierEditMaterial = '/supplier/edit-material/:matId';
   static const String supplierOrders = '/supplier/orders';
+  static const String supplierRfqs = '/supplier/rfqs';
+  static const String supplierSubmitBid = '/supplier/rfqs/:rfqId/bid';
   static const String supplierChat = '/supplier/chat';
   static const String supplierChatThread = '/supplier/chat/:orderId';
   static const String supplierRatings = '/supplier/ratings';
@@ -77,4 +85,7 @@ class RouteNames {
   static const String fieldRateSupplier = '/field/rate/:orderId';
   static const String fieldNotifications = '/field/notifications';
   static const String fieldProfile = '/field/profile';
+  static const String fieldRfqs = '/field/rfqs';
+  static const String fieldCreateRfq = '/field/rfqs/create';
+  static const String fieldRfqDetail = '/field/rfqs/:rfqId';
 }

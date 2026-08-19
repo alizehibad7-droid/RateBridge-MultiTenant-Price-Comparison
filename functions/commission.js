@@ -5,7 +5,7 @@ const db = admin.firestore();
 const COMMISSION_RATE = 0.02;
 
 exports.onOrderConfirmed = functions.firestore
-  .document('companies/{companyId}/orders/{orderId}')
+  .document('orders/{orderId}')
   .onUpdate(async (change, context) => {
     const before = change.before.data();
     const after = change.after.data();
@@ -18,11 +18,12 @@ exports.onOrderConfirmed = functions.firestore
     // Prevent double-processing
     if (after.commissionDeducted === true) return null;
 
-    const { companyId, orderId } = context.params;
+    const { orderId } = context.params;
+    const companyId = after.companyId;
     const totalAmount = after.totalAmount;
     const commissionAmount = parseFloat((totalAmount * COMMISSION_RATE).toFixed(2));
     const supplierEarning = parseFloat((totalAmount - commissionAmount).toFixed(2));
-    const supplierUid = after.supplierUid;
+    const supplierUid = after.supplierId || after.supplierUid;
     const txId = db.collection('transactions').doc().id;
     const monthKey = new Date().toISOString().substring(0, 7); // YYYY-MM
 
@@ -45,7 +46,7 @@ exports.onOrderConfirmed = functions.firestore
         commissionRate: COMMISSION_RATE,
         commissionAmount,
         supplierEarning,
-        status: 'settled',
+        status: 'unsettled',
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
       });
 

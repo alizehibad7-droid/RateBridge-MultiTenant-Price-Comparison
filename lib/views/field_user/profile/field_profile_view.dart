@@ -31,7 +31,7 @@ class FieldProfileView extends StatefulWidget {
 
 class _FieldProfileViewState extends State<FieldProfileView> {
   static const _headerGradient = LinearGradient(
-    colors: [Color(0xFF1E326E), Color(0xFF15204A)],
+    colors: [FieldColors.primaryNavy, FieldColors.primaryNavyDark],
   );
 
   final _formKey = GlobalKey<FormState>();
@@ -598,7 +598,7 @@ class _ProfileHeaderSection extends StatelessWidget {
 
   Widget _initialsAvatar() {
     return Container(
-      color: const Color(0xFFFBB03C),
+      color: FieldColors.accentAmber,
       alignment: Alignment.center,
       child: Text(
         initials,
@@ -645,7 +645,7 @@ class _ActivityStatsCard extends StatelessWidget {
               onTap: onPendingTap,
             ),
           ),
-          Container(width: 1, height: 36, color: const Color(0xFFE2E5F0)),
+          Container(width: 1, height: 36, color: FieldColors.borderSubtle),
           Expanded(
             child: _StatSection(
               count: active,
@@ -653,7 +653,7 @@ class _ActivityStatsCard extends StatelessWidget {
               onTap: onActiveTap,
             ),
           ),
-          Container(width: 1, height: 36, color: const Color(0xFFE2E5F0)),
+          Container(width: 1, height: 36, color: FieldColors.borderSubtle),
           Expanded(
             child: _StatSection(
               count: delivered,
@@ -1107,7 +1107,7 @@ class _SignOutDangerCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE2E5F0)),
+        border: Border.all(color: FieldColors.borderSubtle),
       ),
       clipBehavior: Clip.antiAlias,
       child: Stack(
@@ -1190,7 +1190,7 @@ BoxDecoration _cardDecoration() {
   return BoxDecoration(
     color: Colors.white,
     borderRadius: BorderRadius.circular(14),
-    border: Border.all(color: const Color(0xFFE2E5F0)),
+    border: Border.all(color: FieldColors.borderSubtle),
     boxShadow: [
       BoxShadow(
         color: FieldColors.primaryNavy.withValues(alpha: 0.04),
@@ -1215,7 +1215,7 @@ class _FieldMyRatingsScreen extends StatelessWidget {
       child: Scaffold(
         backgroundColor: FieldColors.screenBackground,
         appBar: AppBar(
-          backgroundColor: const Color(0xFF1E326E),
+          backgroundColor: FieldColors.primaryNavy,
           foregroundColor: Colors.white,
           title: const Text('My Ratings'),
         ),

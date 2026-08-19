@@ -10,6 +10,7 @@ import '../../../constants/route_names.dart';
 import '../../../models/order_model.dart';
 import '../../../theme/field_theme.dart';
 import '../../../viewmodels/field_user/field_orders_viewmodel.dart';
+import '../../../widgets/dispute_report_sheet.dart';
 import '../../../widgets/order_status_stepper_widget.dart';
 import '../widgets/field_async_states.dart';
 import '../chat/field_chat_thread_args.dart';
@@ -19,12 +20,11 @@ class FieldOrderDetailView extends StatefulWidget {
   final OrderModel? order;
   final String? orderId;
 
-  const FieldOrderDetailView({
-    super.key,
-    this.order,
-    this.orderId,
-  }) : assert(order != null || orderId != null,
-            'Provide either order or orderId');
+  const FieldOrderDetailView({super.key, this.order, this.orderId})
+    : assert(
+        order != null || orderId != null,
+        'Provide either order or orderId',
+      );
 
   @override
   State<FieldOrderDetailView> createState() => _FieldOrderDetailViewState();
@@ -59,14 +59,11 @@ class _FieldOrderDetailViewState extends State<FieldOrderDetailView> {
     final vm = context.read<FieldOrdersViewModel>();
 
     try {
-      if (_order == null && widget.orderId != null) {
-        _order = await vm.fetchOrder(widget.orderId!);
-        if (_order == null) {
-          setState(() {
-            _loadError = 'Order not found';
-            _isLoading = false;
-          });
-          return;
+      final orderId = widget.orderId ?? _order?.orderId;
+      if (orderId != null && orderId.isNotEmpty) {
+        final fresh = await vm.fetchOrderFromServer(orderId);
+        if (fresh != null) {
+          _order = fresh;
         }
       }
 
@@ -100,30 +97,31 @@ class _FieldOrderDetailViewState extends State<FieldOrderDetailView> {
 
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Cancel order?'),
-        content: const Text(
-          'This order will be cancelled. You can place a new order anytime.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Keep order'),
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Cancel order?'),
+            content: const Text(
+              'This order will be cancelled. You can place a new order anytime.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Keep order'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Cancel order'),
+              ),
+            ],
           ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Cancel order'),
-          ),
-        ],
-      ),
     );
 
     if (confirmed != true || !mounted) return;
 
     final success = await context.read<FieldOrdersViewModel>().cancelOrder(
-          order.orderId,
-          order.companyId,
-        );
+      order.orderId,
+      order.companyId,
+    );
 
     if (!mounted) return;
 
@@ -175,10 +173,12 @@ class _FieldOrderDetailViewState extends State<FieldOrderDetailView> {
   void _openRateSupplier() {
     final order = _order;
     if (order == null) return;
-    context.push(
-      RouteNames.fieldRateSupplier.replaceFirst(':orderId', order.orderId),
-      extra: order,
-    ).then((_) => _load());
+    context
+        .push(
+          RouteNames.fieldRateSupplier.replaceFirst(':orderId', order.orderId),
+          extra: order,
+        )
+        .then((_) => _load());
   }
 
   void _openSupplierProfile() {
@@ -198,45 +198,46 @@ class _FieldOrderDetailViewState extends State<FieldOrderDetailView> {
 
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(FieldRadius.card),
-        ),
-        title: Text(
-          'Confirm delivery?',
-          style: FieldTypography.titleMedium,
-        ),
-        content: Text(
-          'Have you received the material and paid the supplier in cash?',
-          style: FieldTypography.bodyMedium,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: FilledButton.styleFrom(
-              backgroundColor: FieldColors.accentAmber,
-              foregroundColor: FieldColors.primaryNavy,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(FieldRadius.button),
-              ),
+      builder:
+          (ctx) => AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(FieldRadius.card),
             ),
-            child: const Text('Yes, Confirm'),
+            title: Text(
+              'Confirm delivery?',
+              style: FieldTypography.titleMedium,
+            ),
+            content: Text(
+              'Have you received the material and paid the supplier in cash?',
+              style: FieldTypography.bodyMedium,
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                style: FilledButton.styleFrom(
+                  backgroundColor: FieldColors.accentAmber,
+                  foregroundColor: FieldColors.primaryNavy,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(FieldRadius.button),
+                  ),
+                ),
+                child: const Text('Yes, Confirm'),
+              ),
+            ],
           ),
-        ],
-      ),
     );
 
     if (confirmed != true || !mounted) return;
 
     setState(() => _isConfirming = true);
     final success = await context.read<FieldOrdersViewModel>().confirmDelivery(
-          orderId: order.orderId,
-          companyId: order.companyId,
-        );
+      orderId: order.orderId,
+      companyId: order.companyId,
+    );
     if (!mounted) return;
     setState(() => _isConfirming = false);
 
@@ -271,15 +272,19 @@ class _FieldOrderDetailViewState extends State<FieldOrderDetailView> {
   }
 
   ({double total, double commission, double supplierReceives})
-      _commissionBreakdown(OrderModel order) {
+  _commissionBreakdown(OrderModel order) {
     final total = order.totalAmount;
-    final commission = order.commissionAmount > 0
-        ? order.commissionAmount
-        : total * AppConstants.commissionRate;
-    final supplierReceives = order.supplierEarning > 0
-        ? order.supplierEarning
-        : total - commission;
-    return (total: total, commission: commission, supplierReceives: supplierReceives);
+    final commission =
+        order.commissionAmount > 0
+            ? order.commissionAmount
+            : total * AppConstants.commissionRate;
+    final supplierReceives =
+        order.supplierEarning > 0 ? order.supplierEarning : total - commission;
+    return (
+      total: total,
+      commission: commission,
+      supplierReceives: supplierReceives,
+    );
   }
 
   @override
@@ -289,14 +294,15 @@ class _FieldOrderDetailViewState extends State<FieldOrderDetailView> {
       child: Scaffold(
         backgroundColor: FieldColors.screenBackground,
         appBar: const FieldAppBar(title: 'Order detail'),
-        body: _isLoading
-            ? const _OrderDetailSkeleton()
-            : _loadError != null
+        body:
+            _isLoading
+                ? const _OrderDetailSkeleton()
+                : _loadError != null
                 ? FieldErrorState(
-                    title: 'Could not load order',
-                    message: _loadError!,
-                    onRetry: _load,
-                  )
+                  title: 'Could not load order',
+                  message: _loadError!,
+                  onRetry: _load,
+                )
                 : _buildContent(_order!),
       ),
     );
@@ -306,8 +312,8 @@ class _FieldOrderDetailViewState extends State<FieldOrderDetailView> {
     final vm = context.watch<FieldOrdersViewModel>();
     final dateFmt = DateFormat('MMM d, yyyy');
     final breakdown = _commissionBreakdown(order);
-    final commissionPercent =
-        (AppConstants.commissionRate * 100).toStringAsFixed(0);
+    final commissionPercent = (AppConstants.commissionRate * 100)
+        .toStringAsFixed(0);
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(
@@ -331,14 +337,18 @@ class _FieldOrderDetailViewState extends State<FieldOrderDetailView> {
               _SummaryRow(label: 'Material', value: order.materialName),
               _SummaryRow(
                 label: 'Quantity',
-                value: '${order.quantity.toStringAsFixed(order.quantity.truncateToDouble() == order.quantity ? 0 : 1)} ${order.unit}',
+                value:
+                    '${order.quantity.toStringAsFixed(order.quantity.truncateToDouble() == order.quantity ? 0 : 1)} ${order.unit}',
               ),
               _SummaryRow(
                 label: 'Unit price',
                 value: 'Rs ${order.unitPrice.toStringAsFixed(0)}',
               ),
               const Divider(height: FieldSpacing.lg),
-              _SummaryRow(label: 'Delivery address', value: order.deliveryAddress),
+              _SummaryRow(
+                label: 'Delivery address',
+                value: order.deliveryAddress,
+              ),
               if (order.requiredDate != null)
                 _SummaryRow(
                   label: 'Required date',
@@ -389,23 +399,25 @@ class _FieldOrderDetailViewState extends State<FieldOrderDetailView> {
               style: FilledButton.styleFrom(
                 backgroundColor: FieldColors.accentAmber,
                 foregroundColor: FieldColors.textPrimary,
-                disabledBackgroundColor:
-                    FieldColors.accentAmber.withValues(alpha: 0.5),
+                disabledBackgroundColor: FieldColors.accentAmber.withValues(
+                  alpha: 0.5,
+                ),
                 elevation: 0,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(FieldRadius.button),
                 ),
               ),
-              icon: _isConfirming
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: FieldColors.textPrimary,
-                      ),
-                    )
-                  : const Icon(Icons.check_circle_rounded, size: 22),
+              icon:
+                  _isConfirming
+                      ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: FieldColors.textPrimary,
+                        ),
+                      )
+                      : const Icon(Icons.check_circle_rounded, size: 22),
               label: Text(
                 _isConfirming ? 'Confirming...' : 'Confirm Delivery',
                 style: FieldTypography.titleMedium.copyWith(
@@ -436,13 +448,25 @@ class _FieldOrderDetailViewState extends State<FieldOrderDetailView> {
                 color: FieldColors.statusDanger.withValues(alpha: 0.4),
               ),
             ),
-            child: vm.isSubmitting
-                ? const SizedBox(
-                    height: 20,
-                    width: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Text('Cancel order'),
+            child:
+                vm.isSubmitting
+                    ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                    : const Text('Cancel order'),
+          ),
+        ],
+        if (DisputeReportSheet.canReportOrder(order)) ...[
+          const SizedBox(height: FieldSpacing.lg),
+          TextButton.icon(
+            onPressed: () => DisputeReportSheet.show(context, order),
+            icon: const Icon(Icons.report_problem_outlined, size: 16),
+            label: const Text('Report an issue'),
+            style: TextButton.styleFrom(
+              foregroundColor: FieldColors.statusWarning,
+            ),
           ),
         ],
       ],
@@ -473,10 +497,7 @@ class _CommissionBreakdownCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: FieldColors.accentAmber.withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(FieldRadius.card),
-        border: Border.all(
-          color: FieldColors.accentAmber,
-          width: 2,
-        ),
+        border: Border.all(color: FieldColors.accentAmber, width: 2),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -560,22 +581,24 @@ class _BreakdownLine extends StatelessWidget {
         Expanded(
           child: Text(
             label,
-            style: emphasized
-                ? FieldTypography.bodyLarge.copyWith(
-                    fontWeight: FontWeight.w600,
-                  )
-                : FieldTypography.bodyMedium,
+            style:
+                emphasized
+                    ? FieldTypography.bodyLarge.copyWith(
+                      fontWeight: FontWeight.w600,
+                    )
+                    : FieldTypography.bodyMedium,
           ),
         ),
         Text(
           value,
-          style: emphasized
-              ? FieldTypography.titleMedium.copyWith(
-                  color: FieldColors.primaryNavy,
-                )
-              : FieldTypography.bodyLarge.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
+          style:
+              emphasized
+                  ? FieldTypography.titleMedium.copyWith(
+                    color: FieldColors.primaryNavy,
+                  )
+                  : FieldTypography.bodyLarge.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
         ),
       ],
     );
@@ -586,10 +609,7 @@ class _SummaryRow extends StatelessWidget {
   final String label;
   final String value;
 
-  const _SummaryRow({
-    required this.label,
-    required this.value,
-  });
+  const _SummaryRow({required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {
@@ -602,12 +622,7 @@ class _SummaryRow extends StatelessWidget {
             width: 120,
             child: Text(label, style: FieldTypography.bodyMedium),
           ),
-          Expanded(
-            child: Text(
-              value,
-              style: FieldTypography.bodyLarge,
-            ),
-          ),
+          Expanded(child: Text(value, style: FieldTypography.bodyLarge)),
         ],
       ),
     );

@@ -1,15 +1,15 @@
-// MVVM: View — no business logic
-
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../constants/app_colors.dart';
 import '../../constants/route_names.dart';
 import '../../viewmodels/auth_viewmodel.dart';
 
 class SplashView extends StatefulWidget {
-  const SplashView({super.key});
+  final bool autoNavigate;
+
+  const SplashView({super.key, this.autoNavigate = true});
 
   @override
   State<SplashView> createState() => _SplashViewState();
@@ -81,15 +81,15 @@ class _SplashViewState extends State<SplashView>
 
     _controller.forward();
 
-    WidgetsBinding.instance.addPostFrameCallback((_) => _init());
+    if (widget.autoNavigate) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _init());
+    }
   }
 
   Future<void> _init() async {
-    // Step 1: hold on the splash long enough for the animation + branding
     await Future.delayed(const Duration(seconds: 3));
     if (!mounted) return;
 
-    // Step 2: resolve auth state
     final authVm = context.read<AuthViewModel>();
     await authVm.checkAuthState();
 
@@ -104,7 +104,6 @@ class _SplashViewState extends State<SplashView>
       return;
     }
 
-    // Normalize role string to handle variations like 'field_user' vs 'fielduser'
     final role = authVm.user?.role.toLowerCase().replaceAll(' ', '').replaceAll('_', '');
     final status = (authVm.user?.status ?? 'pending').toLowerCase();
 
@@ -163,6 +162,8 @@ class _SplashViewState extends State<SplashView>
 
   @override
   Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+
     return Scaffold(
       body: Container(
         width: double.infinity,
@@ -171,7 +172,7 @@ class _SplashViewState extends State<SplashView>
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFF1E326E), Color(0xFF0F1D42)],
+            colors: [AppColors.navy, AppColors.navyDark],
           ),
         ),
         child: Stack(
@@ -204,7 +205,7 @@ class _SplashViewState extends State<SplashView>
                             ),
                             child: const Icon(
                               Icons.construction,
-                              color: Color(0xFF1E326E),
+                              color: AppColors.navy,
                               size: 52,
                             ),
                           ),
@@ -217,9 +218,7 @@ class _SplashViewState extends State<SplashView>
                           position: _titleSlide,
                           child: Text(
                             'RateBridge',
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 32,
-                              fontWeight: FontWeight.w700,
+                            style: textTheme.displayMedium?.copyWith(
                               color: Colors.white,
                               letterSpacing: 1.2,
                             ),
@@ -231,9 +230,7 @@ class _SplashViewState extends State<SplashView>
                         opacity: _taglineFade,
                         child: Text(
                           'Smart Material Procurement',
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w400,
+                          style: textTheme.bodyMedium?.copyWith(
                             color: Colors.white.withValues(alpha: 0.7),
                             letterSpacing: 0.5,
                           ),
@@ -258,9 +255,9 @@ class _SplashViewState extends State<SplashView>
                       height: 2,
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(1),
-                        child: const LinearProgressIndicator(
-                          color: Color(0xFFFBB03C),
-                          backgroundColor: Color(0x33FFFFFF),
+                        child: LinearProgressIndicator(
+                          color: AppColors.amber,
+                          backgroundColor: Colors.white.withValues(alpha: 0.2),
                           minHeight: 2,
                         ),
                       ),
@@ -273,8 +270,7 @@ class _SplashViewState extends State<SplashView>
                           Expanded(
                             child: Text(
                               'Pakistan\'s B2B Construction Platform',
-                              style: GoogleFonts.plusJakartaSans(
-                                fontSize: 11,
+                              style: textTheme.labelSmall?.copyWith(
                                 fontStyle: FontStyle.italic,
                                 color: Colors.white.withValues(alpha: 0.5),
                               ),
@@ -287,15 +283,14 @@ class _SplashViewState extends State<SplashView>
                                 width: 6,
                                 height: 6,
                                 decoration: const BoxDecoration(
-                                  color: Color(0xFFFBB03C),
+                                  color: AppColors.amber,
                                   shape: BoxShape.circle,
                                 ),
                               ),
                               const SizedBox(width: 6),
                               Text(
                                 'v1.0',
-                                style: GoogleFonts.plusJakartaSans(
-                                  fontSize: 11,
+                                style: textTheme.labelSmall?.copyWith(
                                   color: Colors.white.withValues(alpha: 0.5),
                                 ),
                               ),

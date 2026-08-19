@@ -464,7 +464,7 @@ class _ProfileHeader extends StatelessWidget {
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    colors: [Color(0xFF1E326E), Color(0xFF15204A)],
+                    colors: [FieldColors.primaryNavy, FieldColors.primaryNavyDark],
                   ),
                 ),
               ),
@@ -587,7 +587,7 @@ class _ProfileHeader extends StatelessWidget {
 
   Widget _initialsAvatar() {
     return Container(
-      color: const Color(0xFFFBB03C),
+      color: FieldColors.accentAmber,
       alignment: Alignment.center,
       child: Text(
         initials,

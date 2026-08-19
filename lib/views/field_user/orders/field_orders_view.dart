@@ -26,7 +26,7 @@ class FieldOrdersView extends StatefulWidget {
 }
 
 class _FieldOrdersViewState extends State<FieldOrdersView> {
-  static const _appBarNavy = Color(0xFF1E326E);
+  static const _appBarNavy = FieldColors.primaryNavy;
 
   _OrdersTab _selectedTab = _OrdersTab.pending;
   bool _ordersWatching = false;
@@ -465,7 +465,7 @@ class _OrderCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE2E5F0)),
+        border: Border.all(color: FieldColors.borderSubtle),
       ),
       padding: const EdgeInsets.all(14),
       child: Column(
@@ -685,6 +685,18 @@ class _OrderActionRow extends StatelessWidget {
               );
             },
           ),
+          const SizedBox(width: 8),
+          _OrderAgainButton(order: order),
+          const Spacer(),
+          _OutlinedDetailsButton(onPressed: onViewDetails),
+        ],
+      );
+    }
+
+    if (status == 'cancelled' || status == 'rejected') {
+      return Row(
+        children: [
+          _OrderAgainButton(order: order),
           const Spacer(),
           _OutlinedDetailsButton(onPressed: onViewDetails),
         ],
@@ -827,6 +839,28 @@ class _OutlinedDetailsButton extends StatelessWidget {
   }
 }
 
+class _OrderAgainButton extends StatelessWidget {
+  final OrderModel order;
+  const _OrderAgainButton({required this.order});
+
+  @override
+  Widget build(BuildContext context) {
+    final vm = context.read<FieldOrdersViewModel>();
+    return TextButton.icon(
+      onPressed: vm.isSubmitting ? null : () => vm.reorder(context, order),
+      icon: const Icon(Icons.refresh_rounded, size: 16),
+      label: const Text('Order Again'),
+      style: TextButton.styleFrom(
+        foregroundColor: FieldColors.primaryNavy,
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        minimumSize: Size.zero,
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+      ),
+    );
+  }
+}
+
 // ─── Status badge ────────────────────────────────────────────────────────────
 
 class _DarazStatusBadge extends StatelessWidget {
@@ -841,13 +875,13 @@ class _DarazStatusBadge extends StatelessWidget {
       case 'pendingapproval':
         return (
           bg: FieldColors.accentAmber.withValues(alpha: 0.2),
-          fg: const Color(0xFF9A6612),
+          fg: FieldColors.statusWarning,
         );
       case 'accepted':
       case 'inprogress':
         return (bg: FieldColors.primaryNavy, fg: Colors.white);
       case 'delivered':
-        return (bg: const Color(0xFF7C3AED), fg: Colors.white);
+        return (bg: FieldColors.statusPurple, fg: Colors.white);
       case 'confirmed':
         return (bg: FieldColors.statusSuccess, fg: Colors.white);
       case 'rejected':

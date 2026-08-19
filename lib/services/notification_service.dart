@@ -15,6 +15,8 @@ class NotificationService {
   static const typePayment = 'payment';
   static const typeCommission = 'commission';
   static const typePartnership = 'partnership';
+  static const typeRFQ = 'rfq';
+  static const typeDispute = 'dispute';
 
   Future<void> _create({
     required String userId,
@@ -54,6 +56,27 @@ class NotificationService {
         'orderId': orderId,
         'companyId': companyId,
         'status': AppConstants.statusPendingApproval,
+      },
+    );
+  }
+
+  Future<void> notifyOrderAutoApproved({
+    required String ceoUid,
+    required String orderId,
+    required String companyId,
+    required String materialName,
+    required double totalAmount,
+  }) async {
+    await _create(
+      userId: ceoUid,
+      type: typeOrderUpdate,
+      title: 'Order Auto-Approved',
+      body:
+          'Order for $materialName (Rs. ${totalAmount.toStringAsFixed(0)}) was auto-approved per your threshold.',
+      data: {
+        'orderId': orderId,
+        'companyId': companyId,
+        'status': AppConstants.statusPending,
       },
     );
   }
@@ -331,6 +354,81 @@ class NotificationService {
         'companyId': companyId,
         'companyName': companyName,
         'event': 'removed',
+      },
+    );
+  }
+
+  Future<void> notifyNewRfqAvailable({
+    required String supplierId,
+    required String rfqId,
+    required String category,
+    required String companyName,
+  }) async {
+    await _create(
+      userId: supplierId,
+      type: typeRFQ,
+      title: 'New RFQ Available',
+      body: '$companyName is looking for $category. Submit your bid now!',
+      data: {
+        'rfqId': rfqId,
+        'companyName': companyName,
+      },
+    );
+  }
+
+  Future<void> notifyNewBidReceived({
+    required String ceoUid,
+    required String rfqId,
+    required String supplierName,
+    required String category,
+  }) async {
+    await _create(
+      userId: ceoUid,
+      type: typeRFQ,
+      title: 'New Bid for $category',
+      body: '$supplierName has submitted a bid for your quote request.',
+      data: {
+        'rfqId': rfqId,
+        'supplierName': supplierName,
+      },
+    );
+  }
+
+  Future<void> notifyRfqClosed({
+    required String supplierId,
+    required String rfqId,
+    required String category,
+    required String companyName,
+    required bool awarded,
+  }) async {
+    await _create(
+      userId: supplierId,
+      type: typeRFQ,
+      title: awarded ? 'RFQ Awarded! ✅' : 'RFQ Closed',
+      body: awarded
+          ? 'Congratulations! $companyName has awarded you the contract for $category.'
+          : 'The RFQ for $category from $companyName has been closed.',
+      data: {
+        'rfqId': rfqId,
+        'awarded': awarded.toString(),
+      },
+    );
+  }
+
+  Future<void> notifyDisputeRaised({
+    required String adminUserId,
+    required String orderId,
+    required String companyId,
+    required String raisedByRole,
+  }) async {
+    await _create(
+      userId: adminUserId,
+      type: typeDispute,
+      title: 'New Dispute Raised',
+      body: 'A dispute was raised for order $orderId by a $raisedByRole.',
+      data: {
+        'orderId': orderId,
+        'companyId': companyId,
       },
     );
   }

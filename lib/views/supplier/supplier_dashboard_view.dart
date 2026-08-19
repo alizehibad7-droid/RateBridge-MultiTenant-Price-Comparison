@@ -369,6 +369,15 @@ class _SupplierDashboardViewState extends State<SupplierDashboardView> {
                                 ),
                               const SizedBox(height: 24),
                               _SectionHeader(
+                                title: 'Open Quotes (RFQ)',
+                                actionLabel: 'View all',
+                                onAction: () =>
+                                    context.push(RouteNames.supplierRfqs),
+                              ),
+                              const SizedBox(height: 12),
+                              _RfqBanner(onTap: () => context.push(RouteNames.supplierRfqs)),
+                              const SizedBox(height: 24),
+                              _SectionHeader(
                                 title: 'Recent Orders',
                                 actionLabel: 'View all',
                                 onAction: () =>
@@ -717,7 +726,7 @@ class _TopHeaderCard extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF1E326E), Color(0xFF15204A)],
+          colors: [FieldColors.primaryNavy, FieldColors.primaryNavyDark],
         ),
         borderRadius: BorderRadius.only(
           bottomLeft: Radius.circular(20),
@@ -1165,7 +1174,7 @@ class _SolidStatusBadge extends StatelessWidget {
       return (bg: FieldColors.primaryNavy, fg: Colors.white);
     }
     if (s == 'delivered') {
-      return (bg: const Color(0xFF6B4EFF), fg: Colors.white);
+      return (bg: FieldColors.statusPurple, fg: Colors.white);
     }
     if (s == 'confirmed') {
       return (bg: FieldColors.statusSuccess, fg: Colors.white);
@@ -1205,7 +1214,7 @@ Color _statusIconColor(String status) {
   final s = status.toLowerCase().replaceAll('_', '');
   if (s == 'pending' || s == 'pendingapproval') return FieldColors.accentAmber;
   if (s == 'accepted' || s == 'inprogress') return FieldColors.primaryNavy;
-  if (s == 'delivered') return const Color(0xFF6B4EFF);
+  if (s == 'delivered') return FieldColors.statusPurple;
   if (s == 'confirmed') return FieldColors.statusSuccess;
   if (s == 'rejected') return FieldColors.statusDanger;
   return FieldColors.statusMuted;
@@ -1698,6 +1707,29 @@ class _SectionShimmer extends StatelessWidget {
           color: FieldColors.borderSubtle,
           borderRadius: BorderRadius.circular(FieldRadius.card),
         ),
+      ),
+    );
+  }
+}
+
+class _RfqBanner extends StatelessWidget {
+  final VoidCallback onTap;
+  const _RfqBanner({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: SupplierTheme.cardDecoration(),
+      child: ListTile(
+        leading: Container(
+          width: 40, height: 40,
+          decoration: BoxDecoration(color: FieldColors.accentAmber.withValues(alpha: 0.1), shape: BoxShape.circle),
+          child: const Icon(Icons.request_quote_outlined, color: FieldColors.accentAmber, size: 20),
+        ),
+        title: Text('Quote Requests', style: FieldTypography.titleMedium),
+        subtitle: Text('Bids on bulk material requests in your area.', style: FieldTypography.bodyMedium),
+        trailing: const Icon(Icons.arrow_forward_ios, size: 14),
+        onTap: onTap,
       ),
     );
   }

@@ -14,7 +14,6 @@ import '../../viewmodels/auth_viewmodel.dart';
 import '../../widgets/auth/auth_text_field.dart';
 import '../../widgets/auth/auth_widgets.dart';
 
-const _ceoAccent = AppColors.amber;
 const _totalSteps = 3;
 
 class RegisterCeoView extends StatefulWidget {
@@ -143,7 +142,7 @@ class _RegisterCeoViewState extends State<RegisterCeoView> {
 
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: AppColors.danger),
+      SnackBar(content: Text(message), backgroundColor: AppColors.error),
     );
   }
 
@@ -210,7 +209,7 @@ class _RegisterCeoViewState extends State<RegisterCeoView> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(authVm.errorMessage!),
-            backgroundColor: AppColors.danger,
+            backgroundColor: AppColors.error,
           ),
         );
         authVm.clearError();
@@ -218,7 +217,7 @@ class _RegisterCeoViewState extends State<RegisterCeoView> {
     });
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: AppColors.screenBg,
       appBar: AppBar(
         leading: BackButton(
           onPressed: () {
@@ -243,7 +242,7 @@ class _RegisterCeoViewState extends State<RegisterCeoView> {
               child: LinearProgressIndicator(
                 value: (_currentStep + 1) / _totalSteps,
                 backgroundColor: AppColors.border,
-                color: _ceoAccent,
+                color: AppColors.amber,
                 minHeight: 6,
                 borderRadius: BorderRadius.circular(4),
               ),
@@ -278,6 +277,7 @@ class _RegisterCeoViewState extends State<RegisterCeoView> {
   }
 
   Widget _buildHeader() {
+    final textTheme = Theme.of(context).textTheme;
     final subtitles = [
       'Company identity and authorized person verification',
       'Office location and procurement scale',
@@ -289,18 +289,18 @@ class _RegisterCeoViewState extends State<RegisterCeoView> {
           width: 44,
           height: 44,
           decoration: BoxDecoration(
-            color: _ceoAccent.withValues(alpha: 0.1),
+            color: AppColors.amber.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(12),
           ),
-          child: const Icon(Icons.business_center_outlined, color: _ceoAccent),
+          child: const Icon(Icons.business_center_outlined, color: AppColors.amber),
         ),
         const SizedBox(width: 12),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Company Registration', style: AppTextStyles.h2),
-              Text(subtitles[_currentStep], style: AppTextStyles.bodyMuted),
+              Text('Company Registration', style: textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold, color: AppColors.navy)),
+              Text(subtitles[_currentStep], style: textTheme.bodySmall),
             ],
           ),
         ),
@@ -309,6 +309,7 @@ class _RegisterCeoViewState extends State<RegisterCeoView> {
   }
 
   Widget _buildStepOne() {
+    final textTheme = Theme.of(context).textTheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -323,7 +324,7 @@ class _RegisterCeoViewState extends State<RegisterCeoView> {
               validator: (v) => _required(v, 'Company name'),
             ),
             const SizedBox(height: 16),
-            Text('COMPANY TYPE', style: AppTextStyles.label),
+            Text('COMPANY TYPE', style: textTheme.labelLarge?.copyWith(color: AppColors.navy)),
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(
               value: _companyType,
@@ -331,19 +332,12 @@ class _RegisterCeoViewState extends State<RegisterCeoView> {
                   .map(
                     (t) => DropdownMenuItem(
                       value: t,
-                      child: Text(t, style: AppTextStyles.body),
+                      child: Text(t, style: textTheme.bodyLarge),
                     ),
                   )
                   .toList(),
               onChanged: (v) =>
                   setState(() => _companyType = v ?? _companyType),
-              decoration: const InputDecoration(
-                prefixIcon: Icon(
-                  Icons.apartment_outlined,
-                  color: AppColors.textSecondary,
-                  size: 20,
-                ),
-              ),
             ),
             const SizedBox(height: 16),
             AuthTextField(
@@ -376,7 +370,7 @@ class _RegisterCeoViewState extends State<RegisterCeoView> {
               validator: (v) => _required(v, 'Full name'),
             ),
             const SizedBox(height: 16),
-            Text('DESIGNATION', style: AppTextStyles.label),
+            Text('DESIGNATION', style: textTheme.labelLarge?.copyWith(color: AppColors.navy)),
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(
               value: _designation,
@@ -384,19 +378,12 @@ class _RegisterCeoViewState extends State<RegisterCeoView> {
                   .map(
                     (d) => DropdownMenuItem(
                       value: d,
-                      child: Text(d, style: AppTextStyles.body),
+                      child: Text(d, style: textTheme.bodyLarge),
                     ),
                   )
                   .toList(),
               onChanged: (v) =>
                   setState(() => _designation = v ?? _designation),
-              decoration: const InputDecoration(
-                prefixIcon: Icon(
-                  Icons.work_outline,
-                  color: AppColors.textSecondary,
-                  size: 20,
-                ),
-              ),
             ),
             const SizedBox(height: 16),
             AuthTextField(
@@ -469,31 +456,25 @@ class _RegisterCeoViewState extends State<RegisterCeoView> {
   }
 
   Widget _buildStepTwo() {
+    final textTheme = Theme.of(context).textTheme;
     return _sectionCard(
       title: 'Company Location & Scale',
       children: [
-        Text('CITY', style: AppTextStyles.label),
+        Text('CITY', style: textTheme.labelLarge?.copyWith(color: AppColors.navy)),
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
           value: _selectedCity,
-          hint: Text('Select city', style: AppTextStyles.bodyMuted),
+          hint: Text('Select city', style: textTheme.bodyMedium),
           isExpanded: true,
           items: kPakistanMajorCities
               .map(
                 (city) => DropdownMenuItem(
                   value: city,
-                  child: Text(city, style: AppTextStyles.body),
+                  child: Text(city, style: textTheme.bodyLarge),
                 ),
               )
               .toList(),
           onChanged: (v) => setState(() => _selectedCity = v),
-          decoration: const InputDecoration(
-            prefixIcon: Icon(
-              Icons.location_city_outlined,
-              color: AppColors.textSecondary,
-              size: 20,
-            ),
-          ),
         ),
         const SizedBox(height: 16),
         AuthTextField(
@@ -506,28 +487,21 @@ class _RegisterCeoViewState extends State<RegisterCeoView> {
         ),
         const SizedBox(height: 16),
         Text('ESTIMATED MONTHLY MATERIAL PROCUREMENT VOLUME',
-            style: AppTextStyles.label),
+            style: textTheme.labelLarge?.copyWith(color: AppColors.navy)),
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
           value: _estimatedVolume,
-          hint: Text('Select volume band', style: AppTextStyles.bodyMuted),
+          hint: Text('Select volume band', style: textTheme.bodyMedium),
           isExpanded: true,
           items: kProcurementVolumeBands
               .map(
                 (band) => DropdownMenuItem(
                   value: band,
-                  child: Text(band, style: AppTextStyles.body),
+                  child: Text(band, style: textTheme.bodyLarge),
                 ),
               )
               .toList(),
           onChanged: (v) => setState(() => _estimatedVolume = v),
-          decoration: const InputDecoration(
-            prefixIcon: Icon(
-              Icons.payments_outlined,
-              color: AppColors.textSecondary,
-              size: 20,
-            ),
-          ),
         ),
         const SizedBox(height: 16),
         AuthTextField(
@@ -582,7 +556,6 @@ class _RegisterCeoViewState extends State<RegisterCeoView> {
           child: AuthPrimaryButton(
             label: isLast ? 'Submit Application' : 'Next',
             isLoading: authVm.isLoading,
-            color: _ceoAccent,
             onPressed: authVm.isLoading
                 ? null
                 : () {
@@ -603,16 +576,27 @@ class _RegisterCeoViewState extends State<RegisterCeoView> {
     String? subtitle,
     required List<Widget> children,
   }) {
+    final textTheme = Theme.of(context).textTheme;
     return Container(
       padding: const EdgeInsets.all(24),
-      decoration: appCardDecoration(shadow: AppShadows.card),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(title, style: AppTextStyles.h3),
+          Text(title, style: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold, color: AppColors.navy)),
           if (subtitle != null) ...[
             const SizedBox(height: 4),
-            Text(subtitle, style: AppTextStyles.bodyMuted),
+            Text(subtitle, style: textTheme.bodySmall),
           ],
           const SizedBox(height: 16),
           ...children,
@@ -627,10 +611,11 @@ class _RegisterCeoViewState extends State<RegisterCeoView> {
     required VoidCallback onPick,
     required VoidCallback onClear,
   }) {
+    final textTheme = Theme.of(context).textTheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(label, style: AppTextStyles.label),
+        Text(label, style: textTheme.labelLarge?.copyWith(color: AppColors.navy)),
         const SizedBox(height: 8),
         InkWell(
           onTap: onPick,
@@ -638,7 +623,7 @@ class _RegisterCeoViewState extends State<RegisterCeoView> {
           child: Container(
             height: 120,
             decoration: BoxDecoration(
-              color: AppColors.surface,
+              color: Colors.white,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(color: AppColors.border),
             ),
@@ -652,7 +637,7 @@ class _RegisterCeoViewState extends State<RegisterCeoView> {
                             AppColors.textSecondary.withValues(alpha: 0.7),
                       ),
                       const SizedBox(height: 6),
-                      Text('Tap to upload', style: AppTextStyles.bodyMuted),
+                      Text('Tap to upload', style: textTheme.bodySmall),
                     ],
                   )
                 : Stack(

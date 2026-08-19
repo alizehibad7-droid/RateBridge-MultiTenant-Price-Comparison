@@ -1,16 +1,148 @@
 rules_version = '2';
-// FYP / development rules — signed-in users can read/write all documents.
+// FYP / development rules — most collections still use broad signed-in access.
 // Companies with active status are readable without auth for field-user invite validation.
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /companies/{companyId} {
-      allow read: if request.auth != null
-        || resource.data.status == 'active';
-      allow write: if request.auth != null;
+    function signedIn() {
+      return request.auth != null;
     }
 
-    match /{document=**} {
-      allow read, write: if request.auth != null;
+    function currentUser() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function currentRole() {
+      return currentUser().role.lower();
+    }
+
+    function isAdmin() {
+      return signedIn()
+        && currentRole() in ['admin', 'administrator'];
+    }
+
+    function isCeo() {
+      return signedIn() && currentRole() == 'ceo';
+    }
+
+    function isValidAuditLog() {
+      let d = request.resource.data;
+      return d.actorId == request.auth.uid
+        && d.actorId is string
+        && d.actorId.size() > 0
+        && d.actorId.size() <= 128
+        && d.actorName is string
+        && d.actorName.size() > 0
+        && d.actorName.size() <= 200
+        && d.actionType is string
+        && d.actionType.size() > 0
+        && d.actionType.size() <= 80
+        && d.targetType is string
+        && d.targetType.size() > 0
+        && d.targetType.size() <= 40
+        && d.targetId is string
+        && d.targetId.size() > 0
+        && d.targetId.size() <= 200
+        && d.description is string
+        && d.description.size() > 0
+        && d.description.size() <= 1000
+        && d.timestamp is timestamp
+        && (!('reason' in d) || d.reason == null || (d.reason is string && d.reason.size() <= 4000));
+    }
+
+    match /users/{userId} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && request.auth.uid == userId
+        && request.resource.data.uid == userId
+        && request.resource.data.role
+          in ['ceo', 'CEO', 'supplier', 'Supplier', 'field_user', 'fieldUser']
+        && request.resource.data.companyId is string
+        && request.resource.data.companyId.size() <= 200
+        && (
+          request.resource.data.role in ['supplier', 'Supplier']
+            ? request.resource.data.companyId == ''
+            : request.resource.data.role in ['ceo', 'CEO']
+              ? get(
+                  /databases/$(database)/documents/companies/$(request.resource.data.companyId)
+                ).data.ceoUid == userId
+              : exists(
+                  /databases/$(database)/documents/companies/$(request.resource.data.companyId)
+                )
+        );
+      allow update: if isAdmin()
+        || (
+          signedIn()
+          && request.auth.uid == userId
+          && request.resource.data.uid == resource.data.uid
+          && request.resource.data.role == resource.data.role
+          && request.resource.data.companyId == resource.data.companyId
+          && request.resource.data.status == resource.data.status
+          && request.resource.data.approved == resource.data.approved
+        );
+      allow delete: if isAdmin() || (signedIn() && request.auth.uid == userId);
+    }
+
+    match /users/{userId}/{document=**} {
+      allow read, write: if signedIn();
+    }
+
+    match /companies/{companyId} {
+      allow read: if signedIn()
+        || resource.data.status == 'active';
+      allow create: if signedIn()
+        && request.resource.data.ceoUid == request.auth.uid;
+      allow update: if isAdmin()
+        || (signedIn() && resource.data.ceoUid == request.auth.uid);
+      allow delete: if isAdmin();
+    }
+
+    match /companies/{companyId}/{document=**} {
+      allow read, write: if signedIn();
+    }
+
+    // RFQ writes are validated by authenticated callable functions. This
+    // prevents plan, matching, open-state, and single-award checks from being
+    // bypassed with a direct Firestore write.
+    match /rfqs/{rfqId} {
+      allow read: if signedIn();
+      allow create, update, delete: if false;
+
+      match /bids/{bidId} {
+        allow read: if signedIn();
+        allow create, update, delete: if false;
+      }
+    }
+
+    // Dispute creation and resolution are validated by callable functions.
+    // Reads are limited to admins, the owning company CEO, or the reporter.
+    match /disputes/{disputeId} {
+      allow read: if isAdmin()
+        || (
+          isCeo()
+          && resource.data.companyId == currentUser().companyId
+        )
+        || (
+          signedIn()
+          && resource.data.raisedByUid == request.auth.uid
+        );
+      allow create, update, delete: if false;
+    }
+
+    // Audit logs are append-only. Only admins may read or create them;
+    // Cloud Functions write with the Admin SDK and bypass these rules.
+    match /audit_logs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin() && isValidAuditLog();
+      allow update, delete: if false;
+    }
+
+    match /{collection}/{document=**} {
+      allow read, write: if signedIn()
+        && collection != 'users'
+        && collection != 'companies'
+        && collection != 'rfqs'
+        && collection != 'disputes'
+        && collection != 'audit_logs';
     }
   }
 }

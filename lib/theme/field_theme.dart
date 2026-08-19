@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 /// Field User Panel design system — isolated from app-wide AppColors.
@@ -9,6 +10,7 @@ class FieldColors {
   static const primaryNavy = Color(0xFF1E326E);
   static const primaryNavyDark = Color(0xFF15204A);
   static const accentAmber = Color(0xFFFBB03C);
+  static const accentAmberSoft = Color(0xFFFFF7ED);
   static const screenBackground = Color(0xFFF4F5F9);
   static const surfaceWhite = Color(0xFFFFFFFF);
   static const borderSubtle = Color(0xFFE2E5F0);

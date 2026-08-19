@@ -7,7 +7,6 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:http/http.dart' as http;
-import 'package:image_picker/image_picker.dart' show XFile;
 
 /// Direct multipart uploads to Cloudinary (unsigned preset).
 class CloudinaryService {

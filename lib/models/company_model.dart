@@ -27,6 +27,7 @@ class CompanyModel {
   final String? registrationCertUrl;
   final String? officePhotoUrl;
   final String? rejectionReason;
+  final double autoApprovalThreshold;
 
   CompanyModel({
     required this.id,
@@ -54,6 +55,7 @@ class CompanyModel {
     this.registrationCertUrl,
     this.officePhotoUrl,
     this.rejectionReason,
+    this.autoApprovalThreshold = 0.0,
   });
 
   CompanyModel copyWith({
@@ -82,6 +84,7 @@ class CompanyModel {
     String? registrationCertUrl,
     String? officePhotoUrl,
     String? rejectionReason,
+    double? autoApprovalThreshold,
   }) {
     return CompanyModel(
       id: id ?? this.id,
@@ -110,6 +113,8 @@ class CompanyModel {
       registrationCertUrl: registrationCertUrl ?? this.registrationCertUrl,
       officePhotoUrl: officePhotoUrl ?? this.officePhotoUrl,
       rejectionReason: rejectionReason ?? this.rejectionReason,
+      autoApprovalThreshold:
+          autoApprovalThreshold ?? this.autoApprovalThreshold,
     );
   }
 
@@ -128,6 +133,7 @@ class CompanyModel {
       'plan': plan,
       'aiEnabled': aiEnabled,
       'ceoUid': ceoUid,
+      'autoApprovalThreshold': autoApprovalThreshold,
       if (companyType != null) 'companyType': companyType,
       if (yearsInOperation != null) 'yearsInOperation': yearsInOperation,
       if (ceoFullName != null) 'ceoFullName': ceoFullName,
@@ -179,6 +185,8 @@ class CompanyModel {
       registrationCertUrl: map['registrationCertUrl'] as String?,
       officePhotoUrl: map['officePhotoUrl'] as String?,
       rejectionReason: map['rejectionReason'] as String?,
+      autoApprovalThreshold:
+          (map['autoApprovalThreshold'] as num?)?.toDouble() ?? 0.0,
     );
   }
 }

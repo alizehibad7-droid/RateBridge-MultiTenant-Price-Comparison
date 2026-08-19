@@ -22,6 +22,8 @@ class UserModel {
   final String? createdBy;
   final DateTime createdAt;
   final DateTime? approvedAt;
+  final List<String>? declaredCategories;
+  final double? rating;
 
   UserModel({
     required this.uid,
@@ -44,6 +46,8 @@ class UserModel {
     this.createdBy,
     required this.createdAt,
     this.approvedAt,
+    this.declaredCategories,
+    this.rating,
   });
 
   // Getters to fix compilation errors in views and viewmodels
@@ -75,6 +79,8 @@ class UserModel {
     String? createdBy,
     DateTime? createdAt,
     DateTime? approvedAt,
+    List<String>? declaredCategories,
+    double? rating,
   }) {
     return UserModel(
       uid: uid ?? this.uid,
@@ -97,6 +103,8 @@ class UserModel {
       createdBy: createdBy ?? this.createdBy,
       createdAt: createdAt ?? this.createdAt,
       approvedAt: approvedAt ?? this.approvedAt,
+      declaredCategories: declaredCategories ?? this.declaredCategories,
+      rating: rating ?? this.rating,
     );
   }
 
@@ -123,6 +131,8 @@ class UserModel {
       'createdBy': createdBy,
       'createdAt': createdAt.toIso8601String(),
       'approvedAt': approvedAt?.toIso8601String(),
+      'declaredCategories': declaredCategories,
+      'rating': rating,
     };
   }
 
@@ -155,6 +165,10 @@ class UserModel {
       createdBy: map['createdBy'] as String?,
       createdAt: parseDate(map['createdAt']),
       approvedAt: map['approvedAt'] != null ? parseDate(map['approvedAt']) : null,
+      declaredCategories: map['declaredCategories'] is List
+          ? List<String>.from(map['declaredCategories'])
+          : null,
+      rating: (map['rating'] as num?)?.toDouble(),
     );
   }
 }
