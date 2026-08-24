@@ -15,7 +15,6 @@ import '../../repositories/material_repository.dart';
 import '../../services/notification_service.dart';
 import '../../services/plan_limit_service.dart';
 import '../../utils/app_exception.dart';
-import '../../utils/seed_data_guard.dart';
 import '../../views/field_user/orders/field_order_status.dart';
 
 /// Order placement, listing, detail, and weight reporting for field users.
@@ -218,14 +217,6 @@ class FieldOrdersViewModel extends ChangeNotifier {
       final commissionAmount = totalAmount * AppConstants.commissionRate;
       final supplierEarning = totalAmount - commissionAmount;
 
-      if (SeedDataGuard.isSeedId(material.id) ||
-          SeedDataGuard.isSeedId(material.supplierId)) {
-        throw AppException(
-          'This material listing is demo data and cannot be ordered. '
-          'Please choose a listing from a real supplier.',
-        );
-      }
-
       // 1. Check auto-approval threshold
       final company = await _companyRepo.getCompanyById(companyId);
       final threshold = company?.autoApprovalThreshold ?? 0.0;
@@ -347,12 +338,25 @@ class FieldOrdersViewModel extends ChangeNotifier {
         );
       }
 
+      final totalAmount = order.totalAmount;
+      final commissionAmount = totalAmount * AppConstants.commissionRate;
+      final supplierEarning = totalAmount - commissionAmount;
+
       await _orderRepo.updateStatus(
         orderId,
         companyId,
         AppConstants.statusConfirmed,
-        confirmedAt: DateTime.now(),
       );
+      await _orderRepo.updateOrder(orderId, {
+        'commissionAmount': commissionAmount,
+        'supplierEarning': supplierEarning,
+        'commissionDeducted': true,
+        'confirmedAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      // REMOVED: Transaction creation is now handled by Cloud Function only
+      // to prevent duplicate unsettled/settled records.
 
       await _notificationService.notifyDeliveryConfirmed(
         supplierId: order.supplierId,

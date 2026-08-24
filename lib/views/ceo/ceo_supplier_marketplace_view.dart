@@ -391,14 +391,14 @@ class _SupplierMarketCard extends StatelessWidget {
 
       case 'Request Pending':
         return _statusBadge(
-          'Request Pending',
+          'Pending',
           CeoColors.amber,
           Icons.schedule,
         );
 
       case 'Already Partners':
         return _statusBadge(
-          'Already Partners',
+          'Partner',
           CeoColors.green,
           Icons.check_circle,
         );

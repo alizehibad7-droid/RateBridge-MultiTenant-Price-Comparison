@@ -61,6 +61,29 @@ class TransactionRepository {
     });
   }
 
+  /// Watches ALL transactions for a specific supplier using server-side filtering.
+  Stream<List<TransactionModel>> watchAllSupplierTransactions(String supplierUid) {
+    return _db
+        .collection(FirestorePaths.transactionsCol)
+        .where('supplierUid', isEqualTo: supplierUid)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((d) => TransactionModel.fromMap(d.id, d.data()))
+            .toList());
+  }
+
+  /// Watches only unsettled/pending transactions for a specific supplier.
+  Stream<List<TransactionModel>> watchAllUnsettledTransactions(String supplierUid) {
+    return _db
+        .collection(FirestorePaths.transactionsCol)
+        .where('supplierUid', isEqualTo: supplierUid)
+        .snapshots()
+        .map((snapshot) => snapshot.docs
+            .map((d) => TransactionModel.fromMap(d.id, d.data()))
+            .where((tx) => tx.isUnsettled)
+            .toList());
+  }
+
   Future<List<MonthlyEarning>> getMonthlyEarningsSummary(
     String supplierUid,
     int months,
@@ -121,6 +144,7 @@ class TransactionRepository {
   }
 
   /// Creates an unsettled commission transaction when delivery is confirmed.
+  /// Uses a deterministic ID based on orderId to prevent duplicates.
   Future<void> createUnsettledCommissionTransaction({
     required String orderId,
     required String companyId,
@@ -130,12 +154,11 @@ class TransactionRepository {
     required double supplierEarning,
   }) async {
     try {
-      if (await hasTransactionForOrder(orderId)) return;
-
       final now = DateTime.now();
       final month = '${now.year}-${now.month.toString().padLeft(2, '0')}';
+      final txId = 'comm_$orderId';
 
-      await _db.collection(FirestorePaths.transactionsCol).add({
+      await _db.collection(FirestorePaths.transactionsCol).doc(txId).set({
         'orderId': orderId,
         'companyId': companyId,
         'supplierUid': supplierUid,
@@ -144,10 +167,11 @@ class TransactionRepository {
         'commissionAmount': commissionAmount,
         'supplierEarning': supplierEarning,
         'status': 'unsettled',
+        'type': 'order_payment',
         'month': month,
         'year': now.year,
         'createdAt': FieldValue.serverTimestamp(),
-      });
+      }, SetOptions(merge: true));
     } on FirebaseException catch (e) {
       throw AppException('Failed to create commission transaction: ${e.message}');
     }

@@ -84,6 +84,12 @@ class CeoViewModel extends ChangeNotifier {
           .where((r) => r.status == 'pending')
           .toList(growable: false);
 
+  /// CEO Sent partnership requests that are currently waiting for supplier approval.
+  List<PartnershipRequestModel> get pendingSentPartnershipRequests =>
+      _sentPartnershipRequests
+          .where((r) => r.status == 'pending')
+          .toList(growable: false);
+
   Future<void> _loadCompanyData() async {
     final uid = _uid;
     if (uid == null) return;
@@ -374,7 +380,12 @@ class CeoViewModel extends ChangeNotifier {
       Query<Map<String, dynamic>> query =
           _db.collection('orders').where('companyId', isEqualTo: companyId);
       if (status != 'All') {
-        query = query.where('status', isEqualTo: _orderStatusForTab(status));
+        final statuses = _orderStatusesForTab(status);
+        if (statuses.length == 1) {
+          query = query.where('status', isEqualTo: statuses.first);
+        } else if (statuses.isNotEmpty) {
+          query = query.where('status', whereIn: statuses);
+        }
       }
       if (withOrderBy) {
         query = query.orderBy('createdAt', descending: true);
@@ -411,16 +422,26 @@ class CeoViewModel extends ChangeNotifier {
     );
   }
 
-  String _orderStatusForTab(String tabLabel) {
+  List<String> _orderStatusesForTab(String tabLabel) {
     switch (tabLabel) {
-      case 'Awaiting Approval':
-        return AppConstants.statusPendingApproval;
       case 'Pending':
-        return AppConstants.statusPending;
-      case 'In Progress':
-        return AppConstants.statusInProgress;
+        return [
+          AppConstants.statusPendingApproval,
+          AppConstants.statusPending,
+          AppConstants.statusAccepted,
+          AppConstants.statusInProgress,
+          AppConstants.statusDelivered,
+        ];
+      case 'Confirmed':
+        return [AppConstants.statusConfirmed];
+      case 'Cancelled':
+        return [
+          AppConstants.statusCancelled,
+          AppConstants.statusRejected,
+        ];
       default:
-        return tabLabel.toLowerCase().replaceAll(' ', '_');
+        // Attempt to match by name if not one of the custom grouped labels
+        return [tabLabel.toLowerCase().replaceAll(' ', '_')];
     }
   }
 

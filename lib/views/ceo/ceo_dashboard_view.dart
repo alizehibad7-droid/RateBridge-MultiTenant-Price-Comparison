@@ -58,12 +58,6 @@ class _CeoDashboardViewState extends State<CeoDashboardView> {
         title: context.select<CeoViewModel, String>(
           (vm) => vm.company?.name ?? 'Dashboard',
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.notifications_none_rounded),
-            onPressed: () {},
-          ),
-        ],
       ),
       body: Consumer<CeoViewModel>(
         builder: (context, vm, _) {

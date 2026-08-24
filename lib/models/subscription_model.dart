@@ -132,6 +132,28 @@ class SubscriptionModel {
         orElse: () => kPlans.first,
       );
 
+  /// The definition of the plan that is currently in effect (falls back to Free if inactive).
+  PlanDefinition get effectivePlanDef => isActive ? planDef : kPlans.first;
+
+  /// Centralized feature check.
+  /// Hierarchy: premium > basic > free
+  bool hasAccess(PlanId requiredPlan) {
+    final current = effectivePlanDef.id;
+    
+    switch (current) {
+      case PlanId.premium:
+        return true;
+      case PlanId.basic:
+        return requiredPlan == PlanId.basic || requiredPlan == PlanId.free;
+      case PlanId.free:
+        return requiredPlan == PlanId.free;
+    }
+  }
+
+  // Feature specific getters for convenience
+  bool get canCreateRfq => hasAccess(PlanId.premium);
+  bool get aiInsightsEnabled => effectivePlanDef.aiUnlocked;
+
   factory SubscriptionModel.fromMap(
       String companyId, Map<String, dynamic> map) {
     final rawHistory = map['history'] as List<dynamic>? ?? [];

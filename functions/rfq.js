@@ -29,15 +29,33 @@ function requireValue(value, label) {
   return text;
 }
 
+/**
+ * Returns the effective plan ID based on subscription status and expiry.
+ * Hierarchy: advanced > premium > basic > free
+ */
 function effectivePlan(companyData, subscriptionData) {
-  if (!subscriptionData) return normalize(companyData.plan) || 'free';
+  const rawPlan = subscriptionData ? (normalize(subscriptionData.plan) || 'free') : (normalize(companyData.plan) || 'free');
+  
+  if (!subscriptionData) return rawPlan;
 
   const status = normalize(subscriptionData.status);
   const expiresAt = subscriptionData.expiresAt?.toDate?.();
   const active =
     (status === 'active' || status === 'admin_granted') &&
     (!expiresAt || expiresAt.getTime() >= Date.now());
-  return active ? normalize(subscriptionData.plan) || 'free' : 'free';
+    
+  return active ? rawPlan : 'free';
+}
+
+/**
+ * Checks if the plan has access to a specific tier.
+ */
+function hasAccess(plan, requiredPlan) {
+  const hierarchy = ['free', 'basic', 'premium', 'advanced'];
+  const planIdx = hierarchy.indexOf(plan);
+  const reqIdx = hierarchy.indexOf(requiredPlan);
+  if (planIdx === -1 || reqIdx === -1) return false;
+  return planIdx >= reqIdx;
 }
 
 function isActiveSupplier(supplier) {
@@ -131,10 +149,12 @@ exports.createRfq = functions.https.onCall(async (data, context) => {
     company,
     subscriptionDoc.exists ? subscriptionDoc.data() : null,
   );
-  if (plan !== 'premium') {
+  
+  // RFQ requires Premium or Advanced
+  if (!hasAccess(plan, 'premium')) {
     throw new functions.https.HttpsError(
       'failed-precondition',
-      'Bulk Quote Requests are available on the Premium plan only. Please upgrade to continue.',
+      'Bulk Quote Requests are available on Premium and Advanced plans. Please upgrade to continue.',
     );
   }
 
@@ -395,13 +415,14 @@ exports.awardRfq = functions.https.onCall(async (data, context) => {
       company,
       subscriptionDoc.exists ? subscriptionDoc.data() : null,
     );
+    
+    // Free plan order limit
     const maxActiveOrders = plan === 'free' ? 5 : null;
     if (maxActiveOrders !== null) {
-      const activeOrders = await transaction.get(
-        db.collectionGroup('orders')
+      const activeOrders = await db.collectionGroup('orders')
           .where('companyId', '==', rfq.companyId)
-          .where('status', 'in', activeOrderStatuses),
-      );
+          .where('status', 'in', activeOrderStatuses)
+          .get();
       if (activeOrders.size >= maxActiveOrders) {
         throw new functions.https.HttpsError(
           'resource-exhausted',

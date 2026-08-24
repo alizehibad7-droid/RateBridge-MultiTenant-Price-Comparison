@@ -4,7 +4,7 @@ const db = admin.firestore();
 
 /**
  * Daily scheduled function to remind CEOs of orders pending approval.
- * Runs once a day.
+ * Also alerts Admins if an order is stuck for more than 48 hours.
  */
 exports.scheduledOrderApprovalReminders = functions.pubsub
   .schedule('every 24 hours')
@@ -14,11 +14,7 @@ exports.scheduledOrderApprovalReminders = functions.pubsub
     const twoDaysMs = 48 * 60 * 60 * 1000;
 
     try {
-      // Orders live at companies/{companyId}/orders (see FirestorePaths.companyOrdersCol),
-      // not a top-level `orders` collection. Collection group query is required.
-      // Requires a COLLECTION_GROUP index on orders.status (see firestore.indexes.json
-      // fieldOverrides). If deploy/runtime fails, Cloud Functions logs include a
-      // one-time Firestore URL to auto-create the missing index.
+      // Collection group query handles orders living in per-company sub-collections.
       const pendingOrdersSnap = await db.collectionGroup('orders')
         .where('status', '==', 'pending_approval')
         .get();
@@ -28,78 +24,75 @@ exports.scheduledOrderApprovalReminders = functions.pubsub
         return null;
       }
 
-      const reminders = [];
+      // Helper to get all Admin UIDs
+      const adminQuery = await db.collection('users')
+        .where('role', 'in', ['admin', 'Admin', 'administrator', 'Administrator'])
+        .get();
+      const adminUids = adminQuery.docs.map(doc => doc.id);
 
       for (const orderDoc of pendingOrdersSnap.docs) {
         const order = orderDoc.data();
+        if (!order.createdAt) continue;
+        
         const createdAt = order.createdAt.toMillis();
         const pendingDurationMs = now - createdAt;
-
-        // Prefer the companyId field on the order document (OrderModel stores it);
-        // fall back to companies/{companyId}/orders/{orderId} via the parent doc.
-        // Optional chain: a top-level orders/{id} doc has no parent.parent.
-        const companyId = (typeof order.companyId === 'string' && order.companyId)
-          ? order.companyId
-          : orderDoc.ref.parent.parent?.id;
+        const companyId = order.companyId || orderDoc.ref.parent.parent?.id;
 
         if (!companyId) continue;
 
-        // Check if lastReminderSentAt was today (to avoid spam)
+        // Check if lastReminderSentAt was today (to avoid spamming)
         const lastReminder = order.lastReminderSentAt ? order.lastReminderSentAt.toMillis() : 0;
         const sentToday = (now - lastReminder) < oneDayMs;
-
         if (sentToday) continue;
 
-        let reminderType = null;
-        let durationText = '';
-
-        if (pendingDurationMs >= twoDaysMs) {
-          reminderType = 'over_48h';
-          durationText = 'more than 48 hours';
-        } else if (pendingDurationMs >= oneDayMs) {
-          reminderType = 'over_24h';
-          durationText = 'more than 24 hours';
-        }
-
-        if (reminderType) {
-          reminders.push({
-            orderId: orderDoc.id,
-            companyId,
-            materialName: order.materialName,
-            durationText,
-            orderRef: orderDoc.ref,
-          });
-        }
-      }
-
-      for (const r of reminders) {
-        // Resolve CEO UID
-        const companyDoc = await db.collection('companies').doc(r.companyId).get();
+        const companyDoc = await db.collection('companies').doc(companyId).get();
+        const companyName = companyDoc.data()?.name || companyId;
         const ceoUid = companyDoc.data()?.ceoUid;
 
-        if (ceoUid) {
-          // Create notification document (this triggers FCM via onNotificationCreated)
-          await db.collection('notifications').add({
+        // 1. Notify CEO for 24h+ and 48h+
+        if (pendingDurationMs >= oneDayMs && ceoUid) {
+          const durationText = pendingDurationMs >= twoDaysMs ? '48 hours' : '24 hours';
+          
+          await db.collection(`companies/${companyId}/notifications`).add({
             userId: ceoUid,
-            type: 'order_reminder',
-            title: 'Approval Reminder',
-            body: `Order for ${r.materialName} has been pending for ${r.durationText}. Please review and approve.`,
-            data: {
-              orderId: r.orderId,
-              companyId: r.companyId,
+            type: 'orderUpdate',
+            title: 'Order Awaiting Approval',
+            body: `Order for ${order.materialName} has been pending for more than ${durationText}. Please review.`,
+            data: { 
+                orderId: orderDoc.id, 
+                companyId,
+                screen: 'order_details' 
             },
             isRead: false,
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
           });
-
-          // Update order with lastReminderSentAt (must use the sub-collection doc ref)
-          await r.orderRef.update({
-            lastReminderSentAt: admin.firestore.FieldValue.serverTimestamp(),
-          });
         }
+
+        // 2. Notify Admin for 48h+ (Critical Escalation)
+        if (pendingDurationMs >= twoDaysMs) {
+          for (const adminUid of adminUids) {
+            await db.collection('adminNotifications').add({
+              userId: adminUid,
+              type: 'orderUpdate',
+              title: 'Stuck Order — Action Required',
+              body: `Order ${orderDoc.id} (${companyName}) has been pending approval for 48+ hours.`,
+              data: { 
+                  orderId: orderDoc.id, 
+                  companyId,
+                  screen: 'order_details' 
+              },
+              isRead: false,
+              createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            });
+          }
+        }
+
+        // Update order with lastReminderSentAt
+        await orderDoc.ref.update({
+          lastReminderSentAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
       }
 
-      console.log(`Sent ${reminders.length} reminders.`);
     } catch (error) {
       console.error('scheduledOrderApprovalReminders error:', error);
     }

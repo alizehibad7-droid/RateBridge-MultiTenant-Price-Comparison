@@ -94,9 +94,25 @@ class UserRepository {
   }
 
   Future<void> updateFcmToken(String uid, String? token) async {
-    await _db.collection('users').doc(uid).update({'fcmToken': token});
-    if (_cachedUser != null && _cachedUser!.uid == uid) {
-      _cachedUser = _cachedUser!.copyWith(fcmToken: token);
+    if (token == null) {
+      // Clear all tokens on logout if desired, or just do nothing if we want to keep them.
+      // Usually we just stop sending if the token expires.
+      // But user specifically asked for "Each user document should store an FCM token array".
+      await _db.collection('users').doc(uid).update({'fcmTokens': []});
+      if (_cachedUser != null && _cachedUser!.uid == uid) {
+        _cachedUser = _cachedUser!.copyWith(fcmTokens: <String>[]);
+      }
+    } else {
+      await _db.collection('users').doc(uid).update({
+        'fcmTokens': FieldValue.arrayUnion([token])
+      });
+      if (_cachedUser != null && _cachedUser!.uid == uid) {
+        final currentTokens = List<String>.from(_cachedUser!.fcmTokens);
+        if (!currentTokens.contains(token)) {
+          currentTokens.add(token);
+        }
+        _cachedUser = _cachedUser!.copyWith(fcmTokens: currentTokens);
+      }
     }
   }
 

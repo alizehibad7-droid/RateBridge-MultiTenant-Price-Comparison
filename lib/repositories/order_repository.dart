@@ -57,7 +57,6 @@ class OrderRepository {
     }
   }
 
-  /// Updates an order with partial data
   Future<void> updateOrder(String orderId, Map<String, dynamic> updates) async {
     try {
       await _db.collection('orders').doc(orderId).update(updates);
@@ -88,6 +87,22 @@ class OrderRepository {
         .toList());
   }
 
+  /// Fetches all orders for a supplier using efficient Firestore indexing.
+  Stream<List<OrderModel>> getOrdersForSupplier(String supplierUid) {
+    return _db
+        .collection('orders')
+        .where('supplierId', isEqualTo: supplierUid)
+        .snapshots()
+        .map((snapshot) {
+      final orders = snapshot.docs
+          .map((doc) => OrderModel.fromMap(doc.id, doc.data()))
+          .toList();
+      orders.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return orders;
+    });
+  }
+
+  /// Watches supplier orders for a specific company with optional status filtering.
   Stream<List<OrderModel>> watchSupplierOrders(
     String supplierUid,
     String companyId,
@@ -108,23 +123,6 @@ class OrderRepository {
         .toList());
   }
 
-  Stream<List<OrderModel>> getOrdersForSupplier(String supplierUid) {
-    return _db
-        .collection('orders')
-        .where('supplierId', isEqualTo: supplierUid)
-        .snapshots()
-        .map((snapshot) {
-      final orders = snapshot.docs
-          .map((doc) => OrderModel.fromMap(doc.id, doc.data()))
-          .toList();
-      orders.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      return orders;
-    });
-  }
-
-  // REQUIRED FIRESTORE INDEX: orders collection
-  // Fields: fieldUserUid (Asc), companyId (Asc)
-  // Create at: Firebase Console → Firestore → Indexes → Add composite index
   Stream<List<OrderModel>> watchFieldUserOrders(
     String fieldUserUid,
     String companyId,
@@ -149,23 +147,8 @@ class OrderRepository {
             .toList();
         orders.sort((a, b) => b.createdAt.compareTo(a.createdAt));
         return orders;
-      }).handleError((Object error, StackTrace stackTrace) {
-        if (error is FirebaseException &&
-            error.code == 'failed-precondition') {
-          throw AppException(
-            'Orders index is building. Please wait 2 minutes and retry.',
-          );
-        }
-        throw error;
       });
     } on FirebaseException catch (e) {
-      if (e.code == 'failed-precondition') {
-        return Stream.error(
-          AppException(
-            'Orders index is building. Please wait 2 minutes and retry.',
-          ),
-        );
-      }
       return Stream.error(AppException('Failed to load orders: ${e.message}'));
     }
   }
@@ -285,7 +268,6 @@ class OrderRepository {
     }
   }
 
-  /// Recomputes average overall score from all ratings for [supplierUid].
   Future<void> updateSupplierAvgRating(String supplierUid) async {
     try {
       final snapshot = await _db

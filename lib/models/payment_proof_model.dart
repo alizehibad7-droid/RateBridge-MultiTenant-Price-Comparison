@@ -12,13 +12,14 @@ class PaymentProofModel {
   final String transactionIdDetected;
   final String method;
   final String screenshotUrl;
-  final String status; // pending_review | approved | rejected
+  final String status; // pending | confirmed | rejected
   final String type; // subscription | commission
   final String? planKey;
   final List<String>? relatedTransactions;
   final bool isAiVerified;
   final String? adminNotes;
   final DateTime createdAt;
+  final DateTime? approvedAt;
 
   PaymentProofModel({
     required this.id,
@@ -37,6 +38,7 @@ class PaymentProofModel {
     required this.isAiVerified,
     this.adminNotes,
     required this.createdAt,
+    this.approvedAt,
   });
 
   factory PaymentProofModel.fromMap(String id, Map<String, dynamic> map) {
@@ -50,7 +52,7 @@ class PaymentProofModel {
       transactionIdDetected: map['transactionIdDetected'] ?? '',
       method: map['method'] ?? '',
       screenshotUrl: map['screenshotUrl'] ?? '',
-      status: map['status'] ?? 'pending_review',
+      status: map['status'] ?? 'pending',
       type: map['type'] ?? '',
       planKey: map['planKey'],
       relatedTransactions: map['relatedTransactions'] != null 
@@ -59,6 +61,7 @@ class PaymentProofModel {
       isAiVerified: map['isAiVerified'] ?? false,
       adminNotes: map['adminNotes'],
       createdAt: (map['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      approvedAt: (map['approvedAt'] as Timestamp?)?.toDate(),
     );
   }
 }

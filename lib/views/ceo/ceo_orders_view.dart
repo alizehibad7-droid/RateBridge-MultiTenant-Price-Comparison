@@ -14,13 +14,8 @@ import '../../widgets/ceo/ceo_widgets.dart';
 
 const _statusTabs = [
   'All',
-  'Awaiting Approval',
   'Pending',
-  'Accepted',
-  'In Progress',
-  'Delivered',
   'Confirmed',
-  'Rejected',
   'Cancelled',
 ];
 
@@ -72,7 +67,7 @@ class _CeoOrdersViewState extends State<CeoOrdersView>
         title: 'Company Orders',
         bottom: TabBar(
           controller: _tabController,
-          isScrollable: true,
+          isScrollable: false,
           tabs: _statusTabs.map((s) => Tab(text: s)).toList(),
         ),
       ),

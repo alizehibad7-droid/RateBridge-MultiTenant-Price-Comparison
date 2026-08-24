@@ -9,23 +9,12 @@ class NotificationRepository {
 
   NotificationRepository(FirestoreService _);
 
-  // REQUIRED FIRESTORE COMPOSITE INDEX (create if queries fail with
-  // failed-precondition):
-  //   Firebase Console → Firestore → Indexes → Composite → Add Index
-  //   Collection: notifications
-  //   Field 1: userId (Ascending)
-  //   Field 2: isRead (Ascending)
-  //   Query scope: Collection
-  // Or open the auto-generated link from the Flutter debug console:
-  //   https://console.firebase.google.com/.../firestore/indexes?create_composite=...
-  // Click "Create Index" and wait 2–3 minutes for it to build.
-  //
-  // If you see permission-denied, deploy firestore.rules with explicit
-  // get/list/create/update rules on /notifications/{notifId}.
-  Stream<List<NotificationModel>> watchNotifications(String uid) {
+  /// Watches notifications for a specific user.
+  /// [path] allows scoping to company or supplier sub-collections.
+  Stream<List<NotificationModel>> watchNotifications(String uid, {String? path}) {
     try {
-      return _db
-          .collection('notifications')
+      final collection = _db.collection(path ?? 'notifications');
+      return collection
           .where('userId', isEqualTo: uid)
           .snapshots()
           .map((snapshot) {
@@ -59,11 +48,10 @@ class NotificationRepository {
     }
   }
 
-  // Same composite index as watchNotifications (userId + isRead) for unread count.
-  Stream<int> watchUnreadCount(String uid) {
+  Stream<int> watchUnreadCount(String uid, {String? path}) {
     try {
-      return _db
-          .collection('notifications')
+      final collection = _db.collection(path ?? 'notifications');
+      return collection
           .where('userId', isEqualTo: uid)
           .where('isRead', isEqualTo: false)
           .snapshots()
@@ -87,10 +75,10 @@ class NotificationRepository {
     }
   }
 
-  Future<void> createNotification(NotificationModel notification) async {
+  Future<void> createNotification(NotificationModel notification, {String? path}) async {
     try {
-      await _db
-          .collection('notifications')
+      final collection = _db.collection(path ?? 'notifications');
+      await collection
           .doc(notification.notifId)
           .set(notification.toMap());
     } on FirebaseException catch (e) {
@@ -98,19 +86,20 @@ class NotificationRepository {
     }
   }
 
-  Future<void> markAsRead(String uid, String notifId) async {
+  Future<void> markAsRead(String uid, String notifId, {String? path}) async {
     try {
-      await _db.collection('notifications').doc(notifId).update({'isRead': true});
+      final collection = _db.collection(path ?? 'notifications');
+      await collection.doc(notifId).update({'isRead': true});
     } on FirebaseException catch (e) {
       throw AppException('Failed to mark notification as read: ${e.message}');
     }
   }
 
-  Future<void> markAllRead(String uid) async {
+  Future<void> markAllRead(String uid, {String? path}) async {
     try {
+      final collection = _db.collection(path ?? 'notifications');
       final batch = _db.batch();
-      final unread = await _db
-          .collection('notifications')
+      final unread = await collection
           .where('userId', isEqualTo: uid)
           .where('isRead', isEqualTo: false)
           .get();

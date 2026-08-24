@@ -181,16 +181,17 @@ void main() async {
             update: (context, repo, previous) => NotificationService(repo),
           ),
 
-          ChangeNotifierProxyProvider<UserRepository, AuthViewModel>(
+          ChangeNotifierProxyProvider2<UserRepository, NotificationService, AuthViewModel>(
             create:
                 (context) => AuthViewModel(
                   context.read<UserRepository>(),
                   context.read<FirebaseAuthService>(),
+                  context.read<NotificationService>(),
                 ),
             update:
-                (context, repo, previous) =>
+                (context, repo, notif, previous) =>
                     previous ??
-                    AuthViewModel(repo, context.read<FirebaseAuthService>()),
+                    AuthViewModel(repo, context.read<FirebaseAuthService>(), notif),
           ),
 
           ChangeNotifierProxyProvider2<

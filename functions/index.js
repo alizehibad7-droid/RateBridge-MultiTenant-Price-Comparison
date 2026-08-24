@@ -9,7 +9,15 @@ const {
 } = require('./commission_restrictions');
 const { onInviteAccepted, acceptPartnershipRequest } = require('./invite_system');
 const { scheduledOrderApprovalReminders } = require('./reminders');
-const { onOrderStatusChange, onNotificationCreated, onMessageSent, onNewCEORegistration } = require('./notifications');
+const { 
+  onNotificationCreated,
+  onAdminNotificationCreated,
+  onMessageSent, 
+  onUserRegistration, 
+  onPaymentProofCreated, 
+  onDisputeCreated, 
+  onAppealCreated 
+} = require('./notifications');
 const { verifyPaymentScreenshot } = require('./payment_verification');
 const { createRfq, submitRfqBid, awardRfq } = require('./rfq');
 const { raiseDispute, updateDispute } = require('./disputes');
@@ -22,9 +30,15 @@ exports.onInviteAccepted = onInviteAccepted;
 exports.acceptPartnershipRequest = acceptPartnershipRequest;
 exports.scheduledOrderApprovalReminders = scheduledOrderApprovalReminders;
 exports.onMessageSent = onMessageSent;
-exports.onNewCEORegistration = onNewCEORegistration;
-exports.onOrderStatusChange = onOrderStatusChange;
 exports.onNotificationCreated = onNotificationCreated;
+exports.onAdminNotificationCreated = onAdminNotificationCreated;
+
+// Admin Triggers
+exports.onUserRegistration = onUserRegistration;
+exports.onPaymentProofCreated = onPaymentProofCreated;
+exports.onDisputeCreated = onDisputeCreated;
+exports.onAppealCreated = onAppealCreated;
+
 exports.verifyPaymentScreenshot = verifyPaymentScreenshot;
 exports.createRfq = createRfq;
 exports.submitRfqBid = submitRfqBid;

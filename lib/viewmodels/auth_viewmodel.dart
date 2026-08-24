@@ -10,6 +10,7 @@ import '../services/cloudinary_service.dart';
 import '../repositories/user_repository.dart';
 import '../services/category_seed_service.dart';
 import '../services/plan_limit_service.dart';
+import '../services/notification_service.dart';
 import '../utils/app_exception.dart';
 import '../utils/invite_code_generator.dart';
 import '../utils/pakistan_validators.dart';
@@ -19,6 +20,7 @@ enum AuthStatus { loading, authenticated, unauthenticated, error }
 class AuthViewModel extends ChangeNotifier {
   final UserRepository _userRepo;
   final FirebaseAuthService _authService;
+  final NotificationService? _notificationService;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   UserModel? _user;
@@ -32,7 +34,7 @@ class AuthViewModel extends ChangeNotifier {
   bool isValidatingInvite = false;
   String? inviteError;
 
-  AuthViewModel(this._userRepo, this._authService) {
+  AuthViewModel(this._userRepo, this._authService, [this._notificationService]) {
     _initSession();
     _authService.authStateChanges.listen((User? firebaseUser) {
       if (firebaseUser == null) {
@@ -240,6 +242,16 @@ class AuthViewModel extends ChangeNotifier {
       );
 
       await _userRepo.createUserDoc(uid, userData);
+      
+      // Notify Admins
+      if (_notificationService != null) {
+        await _notificationService!.notifyAllAdminsOfNewRegistration(
+          name: fullName.trim(),
+          role: 'CEO',
+          targetUid: uid,
+        );
+      }
+
       _user = userData;
       isRegistered = true;
       _status = AuthStatus.authenticated;
@@ -399,6 +411,15 @@ class AuthViewModel extends ChangeNotifier {
         'rating': 0.0,
         'createdAt': FieldValue.serverTimestamp(),
       });
+
+      // Notify Admins
+      if (_notificationService != null) {
+        await _notificationService!.notifyAllAdminsOfNewRegistration(
+          name: businessName.trim(),
+          role: 'Supplier',
+          targetUid: uid,
+        );
+      }
 
       _user = userData;
       isRegistered = true;
