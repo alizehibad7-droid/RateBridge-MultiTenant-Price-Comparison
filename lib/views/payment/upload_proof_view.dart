@@ -3,13 +3,12 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../constants/app_colors.dart';
-import '../../services/cloud_function_service.dart';
 import '../../theme/admin_theme.dart';
 import '../../viewmodels/auth_viewmodel.dart';
 import '../../models/payment_proof_model.dart';
+import '../../services/cloudinary_service.dart';
 
 class UploadProofView extends StatefulWidget {
   final double amount;
@@ -35,12 +34,19 @@ class _UploadProofViewState extends State<UploadProofView> {
   XFile? _pickedFile;
   bool _isUploading = false;
   String _statusMessage = '';
+  final _txController = TextEditingController();
 
   final Map<String, Map<String, String>> _accounts = {
     'easypaisa': {'name': 'RateBridge Official', 'number': '0300-1234567'},
     'jazzcash': {'name': 'RateBridge Official', 'number': '0345-7654321'},
     'bank': {'name': 'RateBridge Private Ltd', 'number': 'PK70BAHL000123456789', 'bank': 'Bank Al Habib'},
   };
+
+  @override
+  void dispose() {
+    _txController.dispose();
+    super.dispose();
+  }
 
   Future<void> _pickScreenshot() async {
     final picker = ImagePicker();
@@ -56,6 +62,10 @@ class _UploadProofViewState extends State<UploadProofView> {
 
   Future<void> _submitProof() async {
     if (_pickedFile == null) return;
+    if (_txController.text.trim().isEmpty) {
+      _showPopup(title: 'Required', message: 'Please enter the Transaction ID from your receipt.', isError: true);
+      return;
+    }
     
     setState(() {
       _isUploading = true;
@@ -64,60 +74,53 @@ class _UploadProofViewState extends State<UploadProofView> {
 
     try {
       final auth = context.read<AuthViewModel>();
-      final uid = auth.user!.uid;
+      final user = auth.user;
       
-      // 1. Upload to Firebase Storage
-      setState(() => _statusMessage = 'Uploading to Secure Storage...');
-      final storageRef = FirebaseStorage.instance
-          .ref()
-          .child('payment_proofs/${uid}_${DateTime.now().millisecondsSinceEpoch}.jpg');
-      
-      if (kIsWeb) {
-        await storageRef.putData(await _pickedFile!.readAsBytes()).timeout(const Duration(seconds: 40));
-      } else {
-        await storageRef.putFile(File(_pickedFile!.path)).timeout(const Duration(seconds: 40));
+      if (user == null) {
+        throw Exception('User session not found. Please log in again.');
       }
       
-      final downloadUrl = await storageRef.getDownloadURL();
-
-      // 2. Call AI Verification Cloud Function
-      setState(() => _statusMessage = 'AI is validating receipt...');
-      final cloudService = context.read<CloudFunctionService>();
+      final uid = user.uid;
       
-      final result = await cloudService.callFunction('verifyPaymentScreenshot', {
-        'imageUrl': downloadUrl,
-      }).timeout(const Duration(seconds: 60));
+      // 1. Upload to Cloudinary
+      final uploadFolder = 'ratebridge/payments/$uid';
+      final bytes = await _pickedFile!.readAsBytes();
+      
+      final downloadUrl = await CloudinaryService.uploadImageBytes(
+        bytes: bytes.toList(),
+        folder: uploadFolder,
+        filename: 'proof_${DateTime.now().millisecondsSinceEpoch}.jpg',
+      );
 
-      final bool isVerified = result['verified'] ?? false;
-      final bool isDuplicate = result['isDuplicate'] ?? false;
-      final double detectedAmount = (result['amountDetected'] ?? 0.0).toDouble();
-      final String transactionId = result['transactionId'] ?? 'NOT_FOUND';
-
-      if (isDuplicate) {
-        throw 'This Transaction ID ($transactionId) has already been approved. Please upload a valid receipt.';
+      if (downloadUrl == null) {
+        throw Exception('Failed to upload image to server. Please check your internet connection.');
       }
 
-      // 3. Save Record to Firestore
-      setState(() => _statusMessage = 'Saving final record...');
+      // 2. Save Record to Firestore
+      setState(() => _statusMessage = 'Submitting for Admin Review...');
       await FirebaseFirestore.instance.collection('payment_proofs').add({
         'payerId': uid,
-        'payerName': auth.user!.name,
-        'payerRole': widget.type == PaymentType.subscription ? 'ceo' : 'supplier',
+        'payerName': user.name,
+        'payerRole': user.role, 
         'amountExpected': widget.amount,
-        'amountDetected': detectedAmount,
-        'transactionIdDetected': transactionId,
+        'amountDetected': widget.amount, 
+        'transactionIdDetected': _txController.text.trim(),
         'method': widget.method,
         'screenshotUrl': downloadUrl,
-        'status': 'pending_review',
+        'status': 'pending', // Corrected status: pending
         'type': widget.type.name,
         'planKey': widget.planKey,
         'relatedTransactions': widget.relatedTransactionIds,
-        'isAiVerified': isVerified,
+        'isAiVerified': false,
         'createdAt': FieldValue.serverTimestamp(),
       });
 
       if (mounted) {
-        _handleVerificationResult(isVerified, detectedAmount);
+        _showPopup(
+          title: '✅ Submitted', 
+          message: 'Your payment proof has been sent. Admin will review and approve it shortly.', 
+          isError: false
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -125,22 +128,6 @@ class _UploadProofViewState extends State<UploadProofView> {
       }
     } finally {
       if (mounted) setState(() => _isUploading = false);
-    }
-  }
-
-  void _handleVerificationResult(bool isVerified, double detectedAmount) {
-    if (isVerified) {
-      _showPopup(
-        title: '✅ AI Verified', 
-        message: 'Your payment was successfully scanned. Admin will approve it shortly.', 
-        isError: false
-      );
-    } else {
-      _showPopup(
-        title: '⏳ Manual Review Needed', 
-        message: 'AI could not perfectly match the receipt details. Don\'t worry, Admin will check it manually and approve.', 
-        isError: false
-      );
     }
   }
 
@@ -161,7 +148,7 @@ class _UploadProofViewState extends State<UploadProofView> {
             onPressed: () {
               Navigator.pop(context);
               if (!isError) {
-                // Return to dashboard
+                // Return to dashboard/earnings
                 Navigator.pop(context);
                 Navigator.pop(context);
               }
@@ -211,7 +198,19 @@ class _UploadProofViewState extends State<UploadProofView> {
                 ],
               ),
             ),
-            const SizedBox(height: 32),
+            const SizedBox(height: 24),
+            const Text('Payment Details', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _txController,
+              decoration: InputDecoration(
+                labelText: 'Transaction ID / Reference #',
+                hintText: 'Enter the ID from your receipt',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                prefixIcon: const Icon(Icons.receipt_long),
+              ),
+            ),
+            const SizedBox(height: 24),
             const Text('Upload Screenshot', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
             const SizedBox(height: 12),
             InkWell(
@@ -227,11 +226,13 @@ class _UploadProofViewState extends State<UploadProofView> {
                   borderRadius: BorderRadius.circular(20),
                   child: _pickedFile == null 
                     ? const Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.add_photo_alternate, size: 40, color: AppColors.textSecondary), Text('Select Screenshot')]))
-                    : Image.network(_pickedFile!.path, fit: BoxFit.cover),
+                    : kIsWeb 
+                        ? Image.network(_pickedFile!.path, fit: BoxFit.cover)
+                        : Image.file(File(_pickedFile!.path), fit: BoxFit.cover),
                 ),
               ),
             ),
-            const SizedBox(height: 48),
+            const SizedBox(height: 40),
             if (_isUploading)
               Center(child: Column(children: [const CircularProgressIndicator(), const SizedBox(height: 16), Text(_statusMessage, style: const TextStyle(fontWeight: FontWeight.w500))]))
             else

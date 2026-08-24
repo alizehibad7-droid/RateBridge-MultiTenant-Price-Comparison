@@ -277,7 +277,7 @@ class FieldOrdersViewModel extends ChangeNotifier {
           await _notificationService.notifyOrderAutoApproved(
             ceoUid: ceoUid,
             orderId: order.orderId,
-            companyId: companyId,
+            companyId: order.companyId,
             materialName: order.materialName,
             totalAmount: totalAmount,
           );
@@ -342,11 +342,14 @@ class FieldOrdersViewModel extends ChangeNotifier {
       final commissionAmount = totalAmount * AppConstants.commissionRate;
       final supplierEarning = totalAmount - commissionAmount;
 
+      // 1. Update Order Status
       await _orderRepo.updateStatus(
         orderId,
         companyId,
         AppConstants.statusConfirmed,
       );
+
+      // 2. Mark commission as deducted immediately in local state
       await _orderRepo.updateOrder(orderId, {
         'commissionAmount': commissionAmount,
         'supplierEarning': supplierEarning,
@@ -355,8 +358,16 @@ class FieldOrdersViewModel extends ChangeNotifier {
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
-      // REMOVED: Transaction creation is now handled by Cloud Function only
-      // to prevent duplicate unsettled/settled records.
+      // 3. Create the unsettled transaction record immediately (UX improvement)
+      // Uses a deterministic ID to avoid double-entry when Cloud Function runs.
+      await _transactionRepo.createUnsettledCommissionTransaction(
+        orderId: orderId,
+        companyId: companyId,
+        supplierUid: order.supplierId,
+        totalAmount: totalAmount,
+        commissionAmount: commissionAmount,
+        supplierEarning: supplierEarning,
+      );
 
       await _notificationService.notifyDeliveryConfirmed(
         supplierId: order.supplierId,

@@ -353,7 +353,7 @@ class _CeoInviteHubViewState extends State<CeoInviteHubView>
           foregroundColor: CeoColors.green,
           side: const BorderSide(color: CeoColors.green),
         ),
-        child: const Text('Already Partners'),
+        child: const Text('Partner'),
       );
     }
     if (status == 'Request Pending') {
@@ -362,7 +362,7 @@ class _CeoInviteHubViewState extends State<CeoInviteHubView>
         style: OutlinedButton.styleFrom(
           foregroundColor: CeoColors.textGrey,
         ),
-        child: const Text('Request Pending'),
+        child: const Text('Pending'),
       );
     }
     if (status == 'Request Rejected') {
@@ -414,7 +414,7 @@ class _CeoInviteHubViewState extends State<CeoInviteHubView>
           return const Center(child: CircularProgressIndicator());
         }
 
-        final requests = vm.sentPartnershipRequests;
+        final requests = vm.pendingSentPartnershipRequests;
         if (requests.isEmpty) {
           return Center(
             child: Column(
@@ -423,7 +423,7 @@ class _CeoInviteHubViewState extends State<CeoInviteHubView>
                 const Icon(Icons.send_outlined,
                     size: 48, color: CeoColors.textGrey),
                 const SizedBox(height: 12),
-                Text('No sent partnership requests',
+                Text('No pending sent requests',
                     style: CeoTheme.mutedStyle()),
               ],
             ),
@@ -449,13 +449,23 @@ class _CeoInviteHubViewState extends State<CeoInviteHubView>
           Row(
             children: [
               Expanded(
-                child: Text(
-                  req.supplierName,
-                  style: GoogleFonts.plusJakartaSans(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 15,
-                    color: CeoColors.navy,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      req.supplierName,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 15,
+                        color: CeoColors.navy,
+                      ),
+                    ),
+                    if (req.supplierCity != null && req.supplierCity!.isNotEmpty)
+                      Text(
+                        req.supplierCity!,
+                        style: CeoTheme.mutedStyle(size: 12),
+                      ),
+                  ],
                 ),
               ),
               CeoStatusBadge(status: req.status),

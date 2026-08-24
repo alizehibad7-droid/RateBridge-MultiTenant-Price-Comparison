@@ -418,6 +418,13 @@ class _AdminSubscriptionViewState extends State<AdminSubscriptionView> {
                   }
                 ]),
               }, SetOptions(merge: true));
+
+              await _firestore.collection('companies').doc(companyId).update({
+                'plan': 'free',
+                'planExpiry': null,
+                'aiEnabled': false,
+              });
+
               await _loadCompanies();
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -437,10 +444,10 @@ class _AdminSubscriptionViewState extends State<AdminSubscriptionView> {
 
   Widget _planBadge(String plan) {
     final colors = plan == 'premium'
-        ? AdminTheme.statusColors('pending')
-        : plan == 'basic'
-            ? AdminTheme.statusColors('approved')
-            : AdminTheme.statusColors('suspended');
+            ? AdminTheme.statusColors('pending')
+            : plan == 'basic'
+                ? AdminTheme.statusColors('approved')
+                : AdminTheme.statusColors('suspended');
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(

@@ -42,6 +42,7 @@ import 'views/ceo/rfq/ceo_rfq_list_view.dart';
 import 'views/ceo/rfq/create_rfq_view.dart';
 import 'views/ceo/rfq/rfq_detail_view.dart';
 import 'views/ceo/ceo_dispute_list_view.dart';
+import 'views/ceo/ceo_notifications_view.dart';
 
 // Field User Views
 import 'views/field_user/shell/field_shell_view.dart';
@@ -234,6 +235,11 @@ class _RateBridgeAppState extends State<RateBridgeApp> {
           path: RouteNames.ceoDisputes,
           builder:
               (context, state) => CeoTheme.wrap(const CeoDisputeListView()),
+        ),
+        GoRoute(
+          path: RouteNames.ceoNotifications,
+          builder:
+              (context, state) => CeoTheme.wrap(const CeoNotificationsView()),
         ),
 
         GoRoute(

@@ -207,6 +207,52 @@ void navigateForSupplierNotification(
   context.push(RouteNames.supplierChat);
 }
 
+void navigateForCeoNotification(
+  BuildContext context,
+  NotificationModel notification,
+) {
+  final data = notification.data;
+  final type = notification.type.toLowerCase();
+  final orderId = data['orderId'] as String?;
+
+  if (type.contains('partnership')) {
+    context.push(RouteNames.ceoJoinRequests);
+    return;
+  }
+
+  if (type.contains('rfq')) {
+    final rfqId = data['rfqId'] as String?;
+    if (rfqId != null && rfqId.isNotEmpty) {
+      context.push(RouteNames.ceoRfqDetail.replaceFirst(':rfqId', rfqId));
+      return;
+    }
+    context.push(RouteNames.ceoRfqs);
+    return;
+  }
+
+  if (type.contains('dispute')) {
+    context.push(RouteNames.ceoDisputes);
+    return;
+  }
+
+  if (type.contains('payment')) {
+    context.push(RouteNames.ceoSubscription);
+    return;
+  }
+
+  if (orderId != null && orderId.isNotEmpty) {
+    // If it requires approval, go to orders with tab 1 (Awaiting Approval)
+    if (data['status'] == 'pending_approval') {
+      context.push('${RouteNames.ceoOrders}?tab=1');
+    } else {
+      context.push(RouteNames.ceoOrders);
+    }
+    return;
+  }
+
+  context.push(RouteNames.ceoDashboard);
+}
+
 void navigateForAdminNotification(
   BuildContext context,
   NotificationModel notification,

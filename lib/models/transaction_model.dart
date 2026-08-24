@@ -10,7 +10,7 @@ class TransactionModel {
   final double commissionRate; // always 0.02
   final double commissionAmount;
   final double supplierEarning;
-  final String status; // unsettled | settled
+  final String status; // unsettled | settled | pending | failed
   final DateTime createdAt;
   final DateTime? settledAt;
 
@@ -28,19 +28,19 @@ class TransactionModel {
     this.settledAt,
   });
 
-  bool get isUnsettled => status.toLowerCase() == 'unsettled';
-  bool get isSettled => status.toLowerCase() == 'settled';
+  bool get isUnsettled => status.toLowerCase() == 'unsettled' || status.toLowerCase() == 'pending';
+  bool get isSettled => status.toLowerCase() == 'settled' || status.toLowerCase() == 'confirmed';
 
   factory TransactionModel.fromMap(String id, Map<String, dynamic> map) => TransactionModel(
     txId: id,
     orderId: map['orderId'] ?? '',
     companyId: map['companyId'] ?? '',
-    supplierUid: map['supplierUid'] ?? '',
+    supplierUid: map['supplierUid'] ?? map['supplierId'] ?? '',
     totalAmount: (map['totalAmount'] as num?)?.toDouble() ?? 0.0,
     commissionRate: (map['commissionRate'] as num?)?.toDouble() ?? 0.02,
     commissionAmount: (map['commissionAmount'] as num?)?.toDouble() ?? 0.0,
     supplierEarning: (map['supplierEarning'] as num?)?.toDouble() ?? 0.0,
-    status: map['status'] ?? 'settled',
+    status: map['status'] ?? 'unsettled',
     createdAt: map['createdAt'] is Timestamp 
         ? (map['createdAt'] as Timestamp).toDate() 
         : DateTime.tryParse(map['createdAt']?.toString() ?? '') ?? DateTime.now(),

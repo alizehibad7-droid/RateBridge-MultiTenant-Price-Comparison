@@ -11,10 +11,12 @@ import '../constants/app_colors.dart';
 class SubscriptionGateWidget extends StatelessWidget {
   final Widget child;
   final String featureName;
+  final PlanId requiredPlan;
 
   const SubscriptionGateWidget({
     required this.child,
     required this.featureName,
+    this.requiredPlan = PlanId.basic, // Default to basic (AI recommendations, etc.)
     super.key,
   });
 
@@ -30,17 +32,20 @@ class SubscriptionGateWidget extends StatelessWidget {
       stream: context.read<SubscriptionViewModel>().watchSubscription(companyId),
       builder: (context, snapshot) {
         final sub = snapshot.data;
-        // Feature is unlocked if AI is unlocked in the plan or if explicitly enabled on company doc
-        final aiUnlocked = sub?.planDef.aiUnlocked ?? false;
         
-        // If snapshot is still loading and we don't have data yet, show a loader or just the blurred child
+        // If snapshot is still loading and we don't have data yet, show a loader
         if (snapshot.connectionState == ConnectionState.waiting && sub == null) {
           return const Center(
             child: CircularProgressIndicator(color: AppColors.amber),
           );
         }
 
-        if (aiUnlocked) return child;
+        // Use centralized feature checking logic
+        // If sub is null, the model treats it as Free plan (isActive=false)
+        final effectiveSub = sub ?? SubscriptionModel(companyId: companyId, plan: 'free', status: 'active');
+        final hasAccess = effectiveSub.hasAccess(requiredPlan);
+
+        if (hasAccess) return child;
 
         return ClipRRect(
           borderRadius: BorderRadius.circular(20),
@@ -98,9 +103,9 @@ class SubscriptionGateWidget extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 6),
-                      const Text(
-                        'Premium Feature',
-                        style: TextStyle(
+                      Text(
+                        '${requiredPlan.name[0].toUpperCase()}${requiredPlan.name.substring(1)} Feature',
+                        style: const TextStyle(
                           color: AppColors.textSecondary,
                           fontSize: 13,
                           fontWeight: FontWeight.w500,

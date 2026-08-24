@@ -1,6 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
+import 'package:go_router/go_router.dart';
+
+import '../viewmodels/notification_viewmodel.dart';
+import '../viewmodels/auth_viewmodel.dart';
+import '../widgets/notification_badge_icon.dart';
+import '../constants/route_names.dart';
 
 /// RateBridge design system for the Admin panel.
 class AdminColors {
@@ -300,12 +307,13 @@ class AdminTheme {
   static Widget wrap(Widget child) => Theme(data: theme, child: child);
 }
 
-/// Navy AppBar — standard across admin screens.
+/// Navy AppBar — standard across admin screens. Includes notification icon by default.
 class AdminAppBar extends StatelessWidget implements PreferredSizeWidget {
   final String? title;
   final List<Widget>? actions;
   final PreferredSizeWidget? bottom;
   final bool automaticallyImplyLeading;
+  final bool showNotificationIcon;
 
   const AdminAppBar({
     super.key,
@@ -313,6 +321,7 @@ class AdminAppBar extends StatelessWidget implements PreferredSizeWidget {
     this.actions,
     this.bottom,
     this.automaticallyImplyLeading = true,
+    this.showNotificationIcon = false, // Changed from true to false to exclude the bell icon
   });
 
   @override
@@ -321,10 +330,29 @@ class AdminAppBar extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context) {
+    final allActions = [...?actions];
+
+    if (showNotificationIcon) {
+      final notifVm = context.watch<NotificationViewModel>();
+      final authVm = context.read<AuthViewModel>();
+      final isAdmin = authVm.user?.role.toLowerCase().contains('admin') ?? false;
+
+      allActions.add(
+        NotificationBadgeIcon(
+          unreadCount: notifVm.unreadCount,
+          iconColor: Colors.white,
+          onPressed: () => context.push(
+            isAdmin ? RouteNames.adminNotifications : RouteNames.ceoNotifications,
+          ),
+        ),
+      );
+      allActions.add(const SizedBox(width: 8));
+    }
+
     return AppBar(
       automaticallyImplyLeading: automaticallyImplyLeading,
       title: title != null ? Text(title!) : null,
-      actions: actions,
+      actions: allActions,
       bottom: bottom,
     );
   }

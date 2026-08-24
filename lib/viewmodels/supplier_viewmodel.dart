@@ -70,16 +70,17 @@ class SupplierViewModel extends ChangeNotifier {
   bool _appealSubmitted = false;
 
   List<MaterialModel> _materials = [];
-  List<OrderModel> _orders = [];
+  List<OrderModel> _orders = []; // Selected company orders
   List<RatingModel> _ratings = [];
-  List<TransactionModel> _transactions = [];
+  List<TransactionModel> _transactions = []; // Selected month transactions
+  List<TransactionModel> _allSupplierTransactions = []; // ALL time transactions
+  List<TransactionModel> _allUnsettledTransactions = []; // ALL time unsettled/pending
+  List<OrderModel> _allSupplierOrders = []; // ALL time orders
   List<CompanyModel> _companies = [];
   List<CompanyModel> _companyDirectory = [];
   List<CompanyModel> _allCompanyDirectory = [];
   String _directorySearchQuery = '';
   String? _directoryCityFilter;
-  List<OrderModel> _allSupplierOrders = [];
-  List<TransactionModel> _allSupplierTransactions = [];
   List<RatingModel> _allSupplierRatings = [];
   bool _partnershipHubDataLoaded = false;
   List<InvitationModel> _invitations = [];
@@ -101,7 +102,10 @@ class SupplierViewModel extends ChangeNotifier {
   StreamSubscription? _companiesSubscription;
   StreamSubscription? _materialsSubscription;
   StreamSubscription? _ordersSubscription;
+  StreamSubscription? _allOrdersSubscription;
   StreamSubscription? _earningsSubscription;
+  StreamSubscription? _allTxSubscription;
+  StreamSubscription? _unsettledTxSubscription;
   StreamSubscription? _invitationsSubscription;
   StreamSubscription? _ratingsSubscription;
 
@@ -113,11 +117,13 @@ class SupplierViewModel extends ChangeNotifier {
   bool _earningsInitialized = false;
   bool _ratingsInitialized = false;
 
-  // Dashboard Aggregates
+  // Dashboard Aggregates (Selected Month)
   double totalEarnings = 0;
   double netEarnings = 0;
-  double pendingEarnings = 0;
-  double completedPayouts = 0;
+  
+  // Lifetime Totals (Real Data)
+  double lifetimeGrossEarnings = 0;
+  double lifetimeNetEarnings = 0;
 
   // Getters
   String? get supplierUid => _supplierUid;
@@ -127,30 +133,51 @@ class SupplierViewModel extends ChangeNotifier {
   String? get successMessage => _successMessage;
   bool get isLoading => _isLoading;
   bool get partnershipListsReady => _partnershipListsReady;
+
   List<PartnershipRequestModel> get incomingPartnershipRequests =>
       List<PartnershipRequestModel>.unmodifiable(_incomingPartnershipRequests);
   List<PartnershipRequestModel> get outgoingPartnershipRequests =>
       List<PartnershipRequestModel>.unmodifiable(_outgoingPartnershipRequests);
   List<PartnershipRequestModel> get allPartnershipRequests =>
       List<PartnershipRequestModel>.unmodifiable(_allPartnershipRequests);
+
+  List<TransactionModel> get allUnsettledTransactions => _allUnsettledTransactions;
+
   List<PartnershipRequestModel> get pendingCeoInvitations =>
       _allPartnershipRequests
           .where((r) => r.isCeoInitiated && r.status == 'pending')
           .toList(growable: false);
+
+  List<PartnershipRequestModel> get pastCeoInvitations =>
+      _allPartnershipRequests
+          .where((r) => r.isCeoInitiated && (r.status == 'rejected' || r.status == 'removed'))
+          .toList(growable: false);
+
   List<PartnershipRequestModel> get pendingSupplierSentRequests =>
       _allPartnershipRequests
           .where((r) => r.isSupplierInitiated && r.status == 'pending')
           .toList(growable: false);
+
+  List<PartnershipRequestModel> get pastSupplierSentRequests =>
+      _allPartnershipRequests
+          .where((r) => r.isSupplierInitiated && (r.status == 'rejected' || r.status == 'removed'))
+          .toList(growable: false);
+
+  // Legacy getter for any past request
   List<PartnershipRequestModel> get pastPartnershipRequests =>
       _allPartnershipRequests
           .where((r) => r.status == 'rejected' || r.status == 'removed')
           .take(10)
           .toList(growable: false);
+
   int get pendingPartnershipRequestsCount =>
       _allPartnershipRequests.where((r) => r.status == 'pending').length;
+
   bool get hasAnyPartnershipRequests => _allPartnershipRequests.isNotEmpty;
+
   List<CompanyModel> get activePartnerCompanies =>
       List<CompanyModel>.unmodifiable(_companies);
+
   bool get partnershipHubDataLoaded => _partnershipHubDataLoaded;
   bool get isDashboardLoading => _isDashboardLoading;
   bool get companiesLoaded => _companiesLoaded;
@@ -160,6 +187,28 @@ class SupplierViewModel extends ChangeNotifier {
   List<OrderModel> get orders => _orders;
   List<RatingModel> get ratings => _ratings;
   List<TransactionModel> get transactions => _transactions;
+  List<TransactionModel> get allSupplierTransactions => _allSupplierTransactions;
+
+  /// Global commission owed across all time.
+  /// Reconciles from all confirmed orders and existing transactions.
+  double get globalUnsettledCommission {
+    // 1. Calculate from transactions explicitly marked as not settled (unsettled, pending, etc.)
+    double totalFromTransactions = _allUnsettledTransactions.fold(0.0, (sum, tx) => sum + tx.commissionAmount);
+    
+    // 2. Identify confirmed orders that might be missing a transaction record entirely.
+    // We check ALL confirmed orders and see if a matching transaction exists.
+    final Set<String> allTxOrderIds = _allSupplierTransactions.map((t) => t.orderId).toSet();
+
+    double totalFromPhantomOrders = 0;
+    for (final order in _allSupplierOrders) {
+      if (order.status.toLowerCase() == 'confirmed' && !allTxOrderIds.contains(order.orderId)) {
+        totalFromPhantomOrders += (order.totalAmount * AppConstants.commissionRate);
+      }
+    }
+    
+    return totalFromTransactions + totalFromPhantomOrders;
+  }
+
   List<CompanyModel> get companies => _companies;
   List<CompanyModel> get companyDirectory => _companyDirectory;
   List<InvitationModel> get invitations => _invitations;
@@ -234,7 +283,7 @@ class SupplierViewModel extends ChangeNotifier {
       _orders
           .where(
             (o) =>
-                o.status == 'confirmed' &&
+                o.status.toLowerCase() == 'confirmed' &&
                 o.createdAt.month == DateTime.now().month,
           )
           .length;
@@ -285,6 +334,31 @@ class SupplierViewModel extends ChangeNotifier {
   Future<void> _ensureAuthAndLoad() async {
     final uid = _supplierUid;
     if (uid == null) return;
+    
+    // 1. Watch ALL transactions (Global for REAL reconciliation)
+    _allTxSubscription?.cancel();
+    _allTxSubscription = _transactionRepo.watchAllSupplierTransactions(uid).listen((txs) {
+      _allSupplierTransactions = txs;
+      _recalculateStats();
+      notifyListeners();
+    });
+
+    // 2. Watch ALL unsettled transactions (Global for PAY NOW button)
+    _unsettledTxSubscription?.cancel();
+    _unsettledTxSubscription = _transactionRepo.watchAllUnsettledTransactions(uid).listen((txs) {
+      _allUnsettledTransactions = txs;
+      _recalculateStats();
+      notifyListeners();
+    });
+
+    // 3. Watch ALL orders (Global for real lifetime earnings)
+    _allOrdersSubscription?.cancel();
+    _allOrdersSubscription = _orderRepo.getOrdersForSupplier(uid).listen((orders) {
+      _allSupplierOrders = orders;
+      _recalculateStats();
+      notifyListeners();
+    });
+
     ensurePartnershipStatusWatch();
     loadLinkedCompanies();
     loadInvitations();
@@ -359,7 +433,10 @@ class SupplierViewModel extends ChangeNotifier {
     _companiesSubscription?.cancel();
     _materialsSubscription?.cancel();
     _ordersSubscription?.cancel();
+    _allOrdersSubscription?.cancel();
     _earningsSubscription?.cancel();
+    _allTxSubscription?.cancel();
+    _unsettledTxSubscription?.cancel();
     _invitationsSubscription?.cancel();
     _ratingsSubscription?.cancel();
     _stopPartnershipStatusWatch();
@@ -412,7 +489,7 @@ class SupplierViewModel extends ChangeNotifier {
         );
 
     _linkedCompaniesSub = _db
-        .collection(FirestorePaths.suppliersCol)
+        .collection('suppliers')
         .doc(supplierId)
         .collection('companies')
         .snapshots()
@@ -555,38 +632,13 @@ class SupplierViewModel extends ChangeNotifier {
       await Future.wait([
         loadLinkedCompanies(),
         loadCompanyDirectory(),
-        _loadAllSupplierOrders(),
-        _loadAllSupplierTransactions(),
+        // Note: _allSupplierOrders and _allSupplierTransactions are now watched
         _loadAllSupplierRatings(),
       ]);
     } finally {
       _partnershipHubDataLoaded = true;
       notifyListeners();
     }
-  }
-
-  Future<void> _loadAllSupplierOrders() async {
-    if (_supplierUid == null) return;
-    final snap =
-        await _db
-            .collection('orders')
-            .where('supplierId', isEqualTo: _supplierUid)
-            .get();
-    _allSupplierOrders =
-        snap.docs.map((doc) => OrderModel.fromMap(doc.id, doc.data())).toList();
-  }
-
-  Future<void> _loadAllSupplierTransactions() async {
-    if (_supplierUid == null) return;
-    final snap =
-        await _db
-            .collection('transactions')
-            .where('supplierId', isEqualTo: _supplierUid)
-            .get();
-    _allSupplierTransactions =
-        snap.docs
-            .map((doc) => TransactionModel.fromMap(doc.id, doc.data()))
-            .toList();
   }
 
   Future<void> _loadAllSupplierRatings() async {
@@ -1188,8 +1240,7 @@ class SupplierViewModel extends ChangeNotifier {
           .watchSupplierEarnings(_supplierUid!, month)
           .listen((txs) {
             _transactions = txs;
-            totalEarnings = txs.fold(0.0, (sum, tx) => sum + tx.totalAmount);
-            netEarnings = txs.fold(0.0, (sum, tx) => sum + tx.supplierEarning);
+            _recalculateStats();
             _clearDashboardStreamError('earnings');
             _earningsInitialized = true;
             _checkDashboardReady();
@@ -1210,6 +1261,29 @@ class SupplierViewModel extends ChangeNotifier {
     } catch (e) {
       _onDashboardStreamError('earnings', e);
     }
+  }
+
+  /// Combined logic to ensure Gross, Net, and Owed are always real-time and global.
+  void _recalculateStats() {
+    if (_supplierUid == null) return;
+    
+    // 1. Monthly stats (Selected month from _transactions)
+    totalEarnings = _transactions.fold(0.0, (sum, tx) => sum + tx.totalAmount);
+    netEarnings = _transactions.fold(0.0, (sum, tx) => sum + tx.supplierEarning);
+
+    // 2. Lifetime stats (from ALL orders)
+    double gLifetime = 0;
+    double nLifetime = 0;
+    for (final o in _allSupplierOrders) {
+      if (o.status.toLowerCase() == 'confirmed') {
+        gLifetime += o.totalAmount;
+        // Assume 2% if not set
+        final earn = o.supplierEarning > 0 ? o.supplierEarning : (o.totalAmount * 0.98);
+        nLifetime += earn;
+      }
+    }
+    lifetimeGrossEarnings = gLifetime;
+    lifetimeNetEarnings = nLifetime;
   }
 
   Future<void> changeMonth(String month) async {
@@ -1360,7 +1434,6 @@ class SupplierViewModel extends ChangeNotifier {
       final companyName = reqDoc.data()?['companyName'] as String? ?? 'Company';
       await _partnershipRepo.acceptRequest(requestId);
       await loadLinkedCompanies();
-      await _loadAllSupplierOrders();
       return companyName;
     } catch (e) {
       _error = e.toString();

@@ -15,7 +15,7 @@ class UserModel {
   final String? assignedSite;
   final String? businessType;
   final String? profileImageUrl;
-  final String? fcmToken;
+  final List<String> fcmTokens;
   final String? status; // 'pending' | 'active' | 'rejected' | 'suspended'
   final bool approved;
   final String? rejectionReason;
@@ -39,7 +39,7 @@ class UserModel {
     this.assignedSite,
     this.businessType,
     this.profileImageUrl,
-    this.fcmToken,
+    this.fcmTokens = const [],
     this.status = 'active',
     this.approved = false,
     this.rejectionReason,
@@ -54,8 +54,10 @@ class UserModel {
   String? get profilePicture => profileImageUrl;
   String get fullName => name;
   DateTime? get joinedAt => createdAt;
-
   String? get cnicNumber => cnic;
+  
+  // Legacy support for single token getter
+  String? get fcmToken => fcmTokens.isNotEmpty ? fcmTokens.first : null;
 
   UserModel copyWith({
     String? uid,
@@ -71,8 +73,9 @@ class UserModel {
     String? assignedSite,
     String? businessType,
     String? profileImageUrl,
-    String? profilePicture, // Added for compatibility with updateProfile calls
-    String? fcmToken,
+    String? profilePicture,
+    List<String>? fcmTokens,
+    String? fcmToken, // Support legacy singular name in copyWith
     String? status,
     bool? approved,
     String? rejectionReason,
@@ -82,6 +85,11 @@ class UserModel {
     List<String>? declaredCategories,
     double? rating,
   }) {
+    List<String>? tokens = fcmTokens;
+    if (fcmToken != null) {
+      tokens = [fcmToken];
+    }
+
     return UserModel(
       uid: uid ?? this.uid,
       email: email ?? this.email,
@@ -96,7 +104,7 @@ class UserModel {
       assignedSite: assignedSite ?? this.assignedSite,
       businessType: businessType ?? this.businessType,
       profileImageUrl: profilePicture ?? profileImageUrl ?? this.profileImageUrl,
-      fcmToken: fcmToken ?? this.fcmToken,
+      fcmTokens: tokens ?? this.fcmTokens,
       status: status ?? this.status,
       approved: approved ?? this.approved,
       rejectionReason: rejectionReason ?? this.rejectionReason,
@@ -124,7 +132,7 @@ class UserModel {
       if (assignedSite != null) 'assignedSite': assignedSite,
       'businessType': businessType,
       'profileImageUrl': profileImageUrl,
-      'fcmToken': fcmToken,
+      'fcmTokens': fcmTokens,
       'status': status,
       'approved': approved,
       'rejectionReason': rejectionReason,
@@ -144,6 +152,14 @@ class UserModel {
       return DateTime.now();
     }
 
+    dynamic tokensData = map['fcmTokens'] ?? map['fcmToken'];
+    List<String> tokens = [];
+    if (tokensData is List) {
+      tokens = List<String>.from(tokensData);
+    } else if (tokensData is String && tokensData.isNotEmpty) {
+      tokens = [tokensData];
+    }
+
     return UserModel(
       uid: (map['uid'] ?? '') as String,
       email: (map['email'] ?? '') as String,
@@ -158,7 +174,7 @@ class UserModel {
       assignedSite: map['assignedSite'] as String?,
       businessType: map['businessType'] as String?,
       profileImageUrl: map['profileImageUrl'] as String?,
-      fcmToken: map['fcmToken'] as String?,
+      fcmTokens: tokens,
       status: (map['status'] as String? ?? 'active').toLowerCase().trim(),
       approved: map['approved'] ?? false,
       rejectionReason: map['rejectionReason'] as String?,

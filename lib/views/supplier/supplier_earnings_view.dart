@@ -67,35 +67,23 @@ class _SupplierEarningsViewState extends State<SupplierEarningsView> {
             return const SupplierListSkeleton(itemCount: 5, itemHeight: 72);
           }
 
-          final unsettledTransactions = viewModel.transactions.where((t) => t.isUnsettled).toList();
-          final unsettledCommission = unsettledTransactions.fold<double>(0, (sum, t) => sum + t.commissionAmount);
+          // Global calculation for Owed Commission
+          // FIX: guard against null values from the ViewModel that may not
+          // be populated yet on first build — this was the source of the
+          // "Unexpected null value" crash in this ListView.
+          final globalCommission = viewModel.globalUnsettledCommission ?? 0;
+          final globalUnsettledTxIds = (viewModel.allUnsettledTransactions ?? [])
+              .map((t) => t.txId)
+              .toList();
+          final lifetimeGross = viewModel.lifetimeGrossEarnings ?? 0;
+          final lifetimeNet = viewModel.lifetimeNetEarnings ?? 0;
+          final transactionsList = viewModel.transactions ?? [];
+          final monthlyEarningsList = viewModel.monthlyEarnings ?? [];
 
           return ListView(
             padding: const EdgeInsets.all(24),
             children: [
-              // Month selection and other cards...
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.chevron_left),
-                    onPressed: _goToPreviousMonth,
-                  ),
-                  Text(_monthLabel, style: AppTextStyles.h3),
-                  IconButton(
-                    icon: Icon(
-                      Icons.chevron_right,
-                      color: _isCurrentMonth
-                          ? FieldColors.textSecondary.withValues(alpha: 0.35)
-                          : null,
-                    ),
-                    onPressed: _isCurrentMonth ? null : _goToNextMonth,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
-              
-              if (unsettledCommission > 0)
+              if (globalCommission > 0)
                 Container(
                   margin: const EdgeInsets.only(bottom: 24),
                   padding: const EdgeInsets.all(20),
@@ -113,7 +101,7 @@ class _SupplierEarningsViewState extends State<SupplierEarningsView> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               const Text('Unsettled Commission', style: TextStyle(color: FieldColors.statusDanger, fontWeight: FontWeight.bold)),
-                              Text(CurrencyFormatter.formatPKR(unsettledCommission), style: AppTextStyles.h2.copyWith(color: FieldColors.statusDanger)),
+                              Text(CurrencyFormatter.formatPKR(globalCommission), style: AppTextStyles.h2.copyWith(color: FieldColors.statusDanger)),
                             ],
                           ),
                           ElevatedButton(
@@ -122,9 +110,9 @@ class _SupplierEarningsViewState extends State<SupplierEarningsView> {
                                 context,
                                 MaterialPageRoute(
                                   builder: (_) => PaymentMethodView(
-                                    amount: unsettledCommission,
+                                    amount: globalCommission,
                                     type: PaymentType.commission,
-                                    relatedTransactionIds: unsettledTransactions.map((t) => t.txId).toList(),
+                                    relatedTransactionIds: globalUnsettledTxIds,
                                   ),
                                 ),
                               );
@@ -132,8 +120,11 @@ class _SupplierEarningsViewState extends State<SupplierEarningsView> {
                             style: ElevatedButton.styleFrom(
                               backgroundColor: FieldColors.statusDanger,
                               foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              minimumSize: Size.zero,
                             ),
-                            child: const Text('PAY NOW'),
+                            child: const Text('PAY NOW', style: TextStyle(fontWeight: FontWeight.bold)),
                           )
                         ],
                       ),
@@ -146,57 +137,83 @@ class _SupplierEarningsViewState extends State<SupplierEarningsView> {
                   ),
                 ),
 
+              const Text('Performance Summary', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: FieldColors.primaryNavy)),
+              const SizedBox(height: 16),
+
               _buildStatsCard(
-                'Total Gross Earnings',
-                CurrencyFormatter.formatPKR(viewModel.totalEarnings),
+                'Lifetime Gross Earnings',
+                CurrencyFormatter.formatPKR(lifetimeGross),
                 Colors.white,
                 FieldColors.textPrimary,
               ),
               const SizedBox(height: 12),
               _buildStatsCard(
-                'Net Earnings (98%)',
-                CurrencyFormatter.formatPKR(viewModel.netEarnings),
+                'Lifetime Net Earnings',
+                CurrencyFormatter.formatPKR(lifetimeNet),
                 FieldColors.primaryNavy,
                 Colors.white,
               ),
               const SizedBox(height: 12),
               _buildStatsCard(
-                'Commission Owed (2%)',
-                CurrencyFormatter.formatPKR(unsettledCommission),
+                'Total Owed (Unsettled)',
+                CurrencyFormatter.formatPKR(globalCommission),
                 Colors.white,
-                FieldColors.textPrimary,
+                FieldColors.statusDanger,
               ),
-              const SizedBox(height: 12),
-              _buildStatsCard(
-                'Completed Orders',
-                '${viewModel.completedThisMonth} orders',
-                Colors.white,
-                FieldColors.textPrimary,
+
+              const SizedBox(height: 32),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Monthly Transactions', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: FieldColors.primaryNavy)),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8), border: Border.all(color: FieldColors.borderSubtle)),
+                    child: Row(
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.chevron_left, size: 20),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          onPressed: _goToPreviousMonth,
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          child: Text(DateFormat('MMM yy').format(_currentMonth), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                        ),
+                        IconButton(
+                          icon: Icon(Icons.chevron_right, size: 20, color: _isCurrentMonth ? Colors.grey : null),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          onPressed: _isCurrentMonth ? null : _goToNextMonth,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 32),
-              Text('Monthly Performance', style: AppTextStyles.h3),
               const SizedBox(height: 16),
-              if (viewModel.monthlyEarnings.isEmpty)
-                const SupplierEmptyState(
-                  icon: Icons.bar_chart_outlined,
-                  title: 'No monthly data yet',
-                  subtitle:
-                      'Monthly performance charts will appear as you complete orders',
-                )
-              else
-                ...viewModel.monthlyEarnings.map(_buildMonthlyCard),
-              const SizedBox(height: 32),
-              Text('Recent Transactions', style: AppTextStyles.h3),
-              const SizedBox(height: 16),
-              if (viewModel.transactions.isEmpty)
+
+              if (transactionsList.isEmpty)
                 SupplierEmptyState(
                   icon: Icons.receipt_long_outlined,
                   title: 'No transactions yet',
-                  subtitle:
-                      'Transactions for $_monthLabel will appear here after orders are confirmed',
+                  subtitle: 'Transactions for $_monthLabel will appear here after orders are confirmed',
                 )
               else
-                ...viewModel.transactions.map(_buildTransactionItem),
+                ...transactionsList.map(_buildTransactionItem),
+
+              const SizedBox(height: 32),
+              Text('Earnings History', style: AppTextStyles.h3),
+              const SizedBox(height: 16),
+              if (monthlyEarningsList.isEmpty)
+                const SupplierEmptyState(
+                  icon: Icons.bar_chart_outlined,
+                  title: 'No history available',
+                  subtitle: 'Historical data will appear as you complete more orders',
+                )
+              else
+                ...monthlyEarningsList.map(_buildMonthlyCard),
             ],
           );
         },
@@ -205,17 +222,20 @@ class _SupplierEarningsViewState extends State<SupplierEarningsView> {
   }
 
   Widget _buildStatsCard(
-    String label,
-    String value,
-    Color bg,
-    Color text,
-  ) {
+      String label,
+      String value,
+      Color bg,
+      Color text,
+      ) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(AppRadius.lg),
         border: Border.all(color: FieldColors.borderSubtle),
+        boxShadow: [
+          BoxConstraints().maxWidth > 0 ? BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 10, offset: const Offset(0, 4)) : const BoxShadow(),
+        ],
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,

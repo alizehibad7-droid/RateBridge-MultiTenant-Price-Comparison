@@ -42,6 +42,7 @@ class RouteNames {
   static const String ceoCreateRfq = '/ceo/rfqs/create';
   static const String ceoRfqDetail = '/ceo/rfqs/:rfqId';
   static const String ceoDisputes = '/ceo/disputes';
+  static const String ceoNotifications = '/ceo/notifications';
 
   // Supplier
   static const String supplierDashboard = '/supplier/dashboard';

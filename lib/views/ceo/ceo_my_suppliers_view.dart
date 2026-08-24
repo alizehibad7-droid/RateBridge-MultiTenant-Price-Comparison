@@ -48,12 +48,21 @@ class _CeoMySuppliersViewState extends State<CeoMySuppliersView>
   }
 
   List<Map<String, dynamic>> _filterByCity(
-      List<Map<String, dynamic>> all, String city) {
+      List<Map<String, dynamic>> all, String selectedCity) {
     var result = all;
-    if (city != 'All') {
-      result =
-          result.where((s) => (s['city'] ?? '') == city).toList();
+    
+    // 1. Filter by City (only if not 'All')
+    // Correct Logic: Only connected suppliers (already in 'all' list) 
+    // are filtered by their existing city field.
+    if (selectedCity != 'All') {
+      result = result.where((s) {
+        final supplierCity = (s['city'] ?? '').toString().trim().toLowerCase();
+        final targetCity = selectedCity.trim().toLowerCase();
+        return supplierCity == targetCity;
+      }).toList();
     }
+    
+    // 2. Filter by Search Query
     if (_searchQuery.isNotEmpty) {
       result = result
           .where((s) => (s['name'] ?? '')
@@ -102,12 +111,12 @@ class _CeoMySuppliersViewState extends State<CeoMySuppliersView>
                     if (snap.connectionState == ConnectionState.waiting) {
                       return const Center(child: CircularProgressIndicator());
                     }
-                    final all = snap.data ?? [];
+                    final allConnectedSuppliers = snap.data ?? [];
 
                     return TabBarView(
                       controller: _cityTabController,
                       children: _citiesAll.map((city) {
-                        final suppliers = _filterByCity(all, city);
+                        final suppliers = _filterByCity(allConnectedSuppliers, city);
                         if (suppliers.isEmpty) {
                           return Center(
                             child: Column(
@@ -207,39 +216,37 @@ class _CeoMySuppliersViewState extends State<CeoMySuppliersView>
           const SizedBox(height: 12),
           const Divider(height: 1),
           const SizedBox(height: 12),
-          Row(
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
             children: [
-              Expanded(
-                child: isActive
-                    ? OutlinedButton.icon(
-                        onPressed: () => _confirmToggle(
-                            context, vm, supplierId, companyId,
-                            activate: false),
-                        icon: const Icon(Icons.block, size: 16),
-                        label: const Text('Deactivate'),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: CeoColors.darkAmber,
-                          side: const BorderSide(color: CeoColors.darkAmber),
-                        ),
-                      )
-                    : ElevatedButton.icon(
-                        onPressed: () => _confirmToggle(
-                            context, vm, supplierId, companyId,
-                            activate: true),
-                        icon: const Icon(Icons.check_circle_outline,
-                            size: 16),
-                        label: const Text('Activate'),
-                        style: CeoTheme.primaryButtonStyle(height: 40),
+              isActive
+                  ? OutlinedButton.icon(
+                      onPressed: () => _confirmToggle(
+                          context, vm, supplierId, companyId,
+                          activate: false),
+                      icon: const Icon(Icons.block, size: 16),
+                      label: const Text('Deactivate'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: CeoColors.darkAmber,
+                        side: const BorderSide(color: CeoColors.darkAmber),
                       ),
-              ),
-              const SizedBox(width: 8),
+                    )
+                  : ElevatedButton.icon(
+                      onPressed: () => _confirmToggle(
+                          context, vm, supplierId, companyId,
+                          activate: true),
+                      icon: const Icon(Icons.check_circle_outline,
+                          size: 16),
+                      label: const Text('Activate'),
+                      style: CeoTheme.primaryButtonStyle(height: 40),
+                    ),
               OutlinedButton.icon(
                 onPressed: () => _showProfileSheet(context, supplier),
                 icon: const Icon(Icons.person_outline, size: 16),
                 label: const Text('Profile'),
                 style: CeoTheme.secondaryButtonStyle(height: 40),
               ),
-              const SizedBox(width: 8),
               OutlinedButton.icon(
                 onPressed: () =>
                     _confirmRemove(context, vm, supplierId, name),
@@ -316,7 +323,7 @@ class _CeoMySuppliersViewState extends State<CeoMySuppliersView>
 
   void _showProfileSheet(
       BuildContext context, Map<String, dynamic> supplier) {
-    final companyId = context.read<AuthViewModel>().user?.companyId;
+    final companyId = context.read<AuthViewModel>().user?.companyId ?? '';
     final rating = (supplier['rating'] as num? ?? 0.0).toDouble();
 
     showModalBottomSheet(

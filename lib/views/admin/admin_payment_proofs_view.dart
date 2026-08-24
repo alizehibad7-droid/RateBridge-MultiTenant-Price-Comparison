@@ -57,11 +57,10 @@ class AdminPaymentProofsView extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           _infoRow('Type:', proof.type.toUpperCase()),
-                          _infoRow('Transaction ID:', proof.transactionIdDetected),
-                          _infoRow('Detected Amount:', 'Rs. ${proof.amountDetected}'),
-                          _infoRow('AI Verified:', proof.isAiVerified ? '✅ YES' : '❌ NO'),
+                          _infoRow('Payer Transaction ID:', proof.transactionIdDetected),
+                          _infoRow('Expected Amount:', 'Rs. ${proof.amountExpected}'),
                           const SizedBox(height: 16),
-                          const Text('Receipt Screenshot:', style: TextStyle(fontWeight: FontWeight.bold)),
+                          const Text('Receipt Screenshot (Manual Verification):', style: TextStyle(fontWeight: FontWeight.bold)),
                           const SizedBox(height: 8),
                           InkWell(
                             onTap: () => _showLargeImage(context, proof.screenshotUrl),

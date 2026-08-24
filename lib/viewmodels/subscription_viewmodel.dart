@@ -48,19 +48,17 @@ class SubscriptionViewModel extends ChangeNotifier {
     }
   }
 
-  void watchLatestPayment(String companyId) {
-    // Manual flow removed
-  }
-
   Stream<SubscriptionModel?> watchSubscription(String companyId) {
     if (companyId.isEmpty) return Stream.value(null);
     return _firestoreService.streamSubscription(companyId).map((sub) {
       if (sub == null) {
-        return SubscriptionModel(
+        final defaultSub = SubscriptionModel(
           companyId: companyId,
           plan: 'free',
           status: 'active',
         );
+        _subscription = defaultSub;
+        return defaultSub;
       }
       _subscription = sub;
       return sub;
@@ -113,6 +111,7 @@ class SubscriptionViewModel extends ChangeNotifier {
       adminNote: adminNote,
     );
 
+    // 1. Save to subscriptions collection
     await _firestoreService.saveSubscription(updatedSub);
 
     final historyEntry = SubscriptionHistoryEntry(
@@ -125,6 +124,7 @@ class SubscriptionViewModel extends ChangeNotifier {
 
     await _firestoreService.updateSubscriptionHistory(companyId, historyEntry);
 
+    // 2. Update Company doc so Field Users inherit the plan automatically
     await FirebaseFirestore.instance
         .collection('companies')
         .doc(companyId)
@@ -132,6 +132,7 @@ class SubscriptionViewModel extends ChangeNotifier {
       'plan': plan.planKey,
       'planExpiry': expiry != null ? Timestamp.fromDate(expiry) : null,
       'aiEnabled': plan.aiUnlocked,
+      'status': 'active', // Ensure company is active if they have a valid sub
     }, SetOptions(merge: true));
 
     await loadSubscription(companyId);

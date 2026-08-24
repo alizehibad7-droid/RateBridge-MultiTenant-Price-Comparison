@@ -31,9 +31,9 @@ class _SupplierPartnershipsHubViewState
   void initState() {
     super.initState();
     _tabController = TabController(
-      length: 2,
+      length: 3,
       vsync: this,
-      initialIndex: widget.initialTab.clamp(0, 1),
+      initialIndex: widget.initialTab.clamp(0, 2),
     );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<SupplierViewModel>().loadPartnershipHubData();
@@ -51,46 +51,34 @@ class _SupplierPartnershipsHubViewState
   @override
   Widget build(BuildContext context) {
     final vm = context.watch<SupplierViewModel>();
-    final pendingCount = vm.pendingPartnershipRequestsCount;
+    final receivedCount = vm.pendingCeoInvitations.length;
+    final sentCount = vm.pendingSupplierSentRequests.length;
 
     return Scaffold(
       backgroundColor: FieldColors.screenBackground,
       appBar: AppBar(
-        title: const Text('My Companies & Partnerships'),
+        title: const Text('Companies & Partnerships'),
         bottom: TabBar(
           controller: _tabController,
           labelColor: FieldColors.accentAmber,
           unselectedLabelColor: Colors.white70,
           indicatorColor: FieldColors.accentAmber,
+          labelStyle: GoogleFonts.plusJakartaSans(
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+          ),
           tabs: [
-            const Tab(text: 'Active Partners'),
+            const Tab(text: 'Partners'),
             Tab(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text('Requests'),
-                  if (pendingCount > 0) ...[
-                    const SizedBox(width: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: FieldColors.accentAmber,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Text(
-                        '$pendingCount',
-                        style: GoogleFonts.plusJakartaSans(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          color: FieldColors.primaryNavy,
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
+              child: _TabWithBadge(
+                label: 'Requests',
+                count: receivedCount,
+              ),
+            ),
+            Tab(
+              child: _TabWithBadge(
+                label: 'Sent',
+                count: sentCount,
               ),
             ),
           ],
@@ -100,9 +88,45 @@ class _SupplierPartnershipsHubViewState
         controller: _tabController,
         children: [
           _ActivePartnersTab(vm: vm, onBrowse: _browseCompanies),
-          _RequestsTab(vm: vm, onBrowse: _browseCompanies),
+          _ReceivedRequestsTab(vm: vm, onBrowse: _browseCompanies),
+          _SentRequestsTab(vm: vm, onBrowse: _browseCompanies),
         ],
       ),
+    );
+  }
+}
+
+class _TabWithBadge extends StatelessWidget {
+  final String label;
+  final int count;
+
+  const _TabWithBadge({required this.label, required this.count});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(label),
+        if (count > 0) ...[
+          const SizedBox(width: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: FieldColors.accentAmber,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(
+              '$count',
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 10,
+                fontWeight: FontWeight.w800,
+                color: FieldColors.primaryNavy,
+              ),
+            ),
+          ),
+        ],
+      ],
     );
   }
 }
@@ -201,7 +225,7 @@ class _ActivePartnerCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
-                  'Active Partner',
+                  'Partner',
                   style: GoogleFonts.plusJakartaSans(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
@@ -393,11 +417,11 @@ class _MiniStat extends StatelessWidget {
   }
 }
 
-class _RequestsTab extends StatelessWidget {
+class _ReceivedRequestsTab extends StatelessWidget {
   final SupplierViewModel vm;
   final VoidCallback onBrowse;
 
-  const _RequestsTab({required this.vm, required this.onBrowse});
+  const _ReceivedRequestsTab({required this.vm, required this.onBrowse});
 
   @override
   Widget build(BuildContext context) {
@@ -406,17 +430,55 @@ class _RequestsTab extends StatelessWidget {
     }
 
     final received = vm.pendingCeoInvitations;
+
+    if (received.isEmpty) {
+      return ListView(
+        children: [
+          partnershipEmptyState(
+            icon: Icons.mail_outline,
+            title: 'No Partnership Invitations',
+            subtitle:
+                'You haven\'t received any partnership invitations from companies yet.',
+            buttonLabel: 'Browse Companies',
+            onBrowse: onBrowse,
+          ),
+        ],
+      );
+    }
+
+    return ListView.separated(
+      padding: const EdgeInsets.all(16),
+      itemCount: received.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      itemBuilder: (context, index) =>
+          _InvitationCard(request: received[index], vm: vm),
+    );
+  }
+}
+
+class _SentRequestsTab extends StatelessWidget {
+  final SupplierViewModel vm;
+  final VoidCallback onBrowse;
+
+  const _SentRequestsTab({required this.vm, required this.onBrowse});
+
+  @override
+  Widget build(BuildContext context) {
+    if (!vm.partnershipListsReady) {
+      return const SupplierListSkeleton(itemCount: 4, itemHeight: 120);
+    }
+
     final sent = vm.pendingSupplierSentRequests;
     final past = vm.pastPartnershipRequests;
 
-    if (!vm.hasAnyPartnershipRequests) {
+    if (sent.isEmpty && past.isEmpty) {
       return ListView(
         children: [
           partnershipEmptyState(
             icon: Icons.send_outlined,
-            title: 'No Requests Yet',
+            title: 'No Sent Requests',
             subtitle:
-                'You can browse companies below and send a partnership request to start working with them.',
+                'You haven\'t sent any partnership requests to companies. Start browsing to connect!',
             buttonLabel: 'Browse Companies',
             onBrowse: onBrowse,
           ),
@@ -427,18 +489,13 @@ class _RequestsTab extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        if (received.isNotEmpty) ...[
-          partnershipSectionHeader('Invitations Received'),
-          ...received.map((r) => _InvitationCard(request: r, vm: vm)),
-          const SizedBox(height: 16),
-        ],
         if (sent.isNotEmpty) ...[
-          partnershipSectionHeader('Your Sent Requests'),
+          partnershipSectionHeader('Active Requests'),
           ...sent.map((r) => _SentRequestCard(request: r, vm: vm)),
           const SizedBox(height: 16),
         ],
         if (past.isNotEmpty) ...[
-          partnershipSectionHeader('Past Requests'),
+          partnershipSectionHeader('History'),
           ...past.map((r) => _PastRequestCard(request: r, vm: vm)),
         ],
       ],
@@ -455,7 +512,6 @@ class _InvitationCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: partnershipCardDecoration(),
       child: Column(
@@ -631,17 +687,26 @@ class _SentRequestCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
-                  'Awaiting Response',
+                  'Pending Approval',
                   style: GoogleFonts.plusJakartaSans(
                     fontSize: 10,
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.w700,
                     color: FieldColors.primaryNavy,
                   ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 8),
+          Text(
+            'Waiting for Company Approval',
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: FieldColors.accentAmber,
+            ),
+          ),
+          const SizedBox(height: 4),
           Text(
             'Sent ${partnershipDaysAgo(request.createdAt)}',
             style: GoogleFonts.plusJakartaSans(
@@ -649,37 +714,42 @@ class _SentRequestCard extends StatelessWidget {
               color: FieldColors.textSecondary,
             ),
           ),
-          TextButton(
-            onPressed: () async {
-              final confirmed = await showDialog<bool>(
-                context: context,
-                builder: (ctx) => AlertDialog(
-                  title: const Text('Withdraw request?'),
-                  content: const Text(
-                    'This will cancel your pending partnership request.',
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: () async {
+                final confirmed = await showDialog<bool>(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: const Text('Withdraw request?'),
+                    content: const Text(
+                      'This will cancel your pending partnership request.',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx, false),
+                        child: const Text('Cancel'),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx, true),
+                        child: const Text('Withdraw'),
+                      ),
+                    ],
                   ),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(ctx, false),
-                      child: const Text('Cancel'),
-                    ),
-                    TextButton(
-                      onPressed: () => Navigator.pop(ctx, true),
-                      child: const Text('Withdraw'),
-                    ),
-                  ],
-                ),
-              );
-              if (confirmed == true && context.mounted) {
-                await vm.withdrawPartnershipRequest(request.requestId);
-              }
-            },
-            style: TextButton.styleFrom(
-              foregroundColor: FieldColors.textSecondary,
-              padding: EdgeInsets.zero,
-              minimumSize: const Size(0, 32),
+                );
+                if (confirmed == true && context.mounted) {
+                  await vm.withdrawPartnershipRequest(request.requestId);
+                }
+              },
+              icon: const Icon(Icons.cancel_outlined, size: 14),
+              label: const Text('Withdraw Request', style: TextStyle(fontSize: 12)),
+              style: TextButton.styleFrom(
+                foregroundColor: FieldColors.statusDanger,
+                padding: EdgeInsets.zero,
+                minimumSize: const Size(0, 32),
+              ),
             ),
-            child: const Text('Withdraw Request', style: TextStyle(fontSize: 12)),
           ),
         ],
       ),

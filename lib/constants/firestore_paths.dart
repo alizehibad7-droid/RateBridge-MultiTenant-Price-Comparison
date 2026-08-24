@@ -13,6 +13,8 @@ class FirestorePaths {
   static const String transactionsCol = 'transactions';
   static const String subscriptionsCol = 'subscriptions';
   static const String processedEventsCol = 'processedEvents';
+  static const String notificationsCol = 'notifications'; // Shared or legacy
+  static const String adminNotificationsCol = 'adminNotifications';
 
   // User document
   static String userDoc(String uid) => '$usersCol/$uid';
@@ -70,4 +72,7 @@ class FirestorePaths {
 
   static String supplierEarningsCol(String supplierUid) =>
     '$suppliersCol/$supplierUid/earnings';
+
+  static String supplierNotificationsCol(String supplierUid) =>
+    '$suppliersCol/$supplierUid/notifications';
 }
