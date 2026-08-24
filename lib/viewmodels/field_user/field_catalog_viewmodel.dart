@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../../models/material_model.dart';
 import '../../models/category_model.dart';
@@ -36,8 +38,50 @@ class FieldCatalogViewModel extends ChangeNotifier {
   String? _categoryFilter;
   CatalogSortOption _sortOption = CatalogSortOption.priceAsc;
   final Map<String, double> _supplierRatings = {};
+  StreamSubscription<List<MaterialModel>>? _materialsSubscription;
+  String? _watchingCompanyId;
 
   FieldCatalogViewModel(this._materialRepo);
+
+  @override
+  void dispose() {
+    _materialsSubscription?.cancel();
+    super.dispose();
+  }
+
+  void _watchCompanyMaterials(String companyId) {
+    if (_watchingCompanyId == companyId && _materialsSubscription != null) {
+      return;
+    }
+    _materialsSubscription?.cancel();
+    _watchingCompanyId = companyId;
+    _materialsSubscription =
+        _materialRepo.getCompanyMaterials(companyId).listen(
+      (materials) async {
+        if (materials.isNotEmpty) {
+          _materials = materials;
+        } else {
+          _materials =
+              await _materialRepo.getPopularMaterials(companyId: companyId);
+        }
+        _applyFilters();
+        _isLoading = false;
+        _notifyAfterFrame();
+      },
+      onError: (Object e) {
+        _errorMessage = e.toString();
+        _isLoading = false;
+        _notifyAfterFrame();
+      },
+    );
+  }
+
+  void _notifyAfterFrame() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!hasListeners) return;
+      notifyListeners();
+    });
+  }
 
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
@@ -162,28 +206,19 @@ class FieldCatalogViewModel extends ChangeNotifier {
     notifyListeners();
     try {
       final categoriesFuture = _materialRepo.getCategories();
-      final recentFuture = _materialRepo.getRecentCompanyMaterials(companyId, limit: 4);
-      final companyMaterialsFuture = _materialRepo.getCompanyMaterials(companyId).first;
+      final recentFuture =
+          _materialRepo.getRecentCompanyMaterials(companyId, limit: 4);
 
       final results = await Future.wait([
         categoriesFuture,
         recentFuture,
-        companyMaterialsFuture,
       ]);
 
       _categories = results[0] as List<CategoryModel>;
       _recentMaterials = results[1] as List<MaterialModel>;
-      final companyMaterials = results[2] as List<MaterialModel>;
-
-      if (companyMaterials.isNotEmpty) {
-        _materials = companyMaterials;
-      } else {
-        _materials = await _materialRepo.getPopularMaterials(companyId: companyId);
-      }
-      _applyFilters();
+      _watchCompanyMaterials(companyId);
     } catch (e) {
       _errorMessage = e.toString();
-    } finally {
       _isLoading = false;
       notifyListeners();
     }
@@ -197,17 +232,9 @@ class FieldCatalogViewModel extends ChangeNotifier {
       if (_categories.isEmpty) {
         _categories = await _materialRepo.getCategories();
       }
-
-      final companyMaterials = await _materialRepo.getCompanyMaterials(companyId).first;
-      if (companyMaterials.isNotEmpty) {
-        _materials = companyMaterials;
-      } else {
-        _materials = await _materialRepo.getPopularMaterials(companyId: companyId);
-      }
-      _applyFilters();
+      _watchCompanyMaterials(companyId);
     } catch (e) {
       _errorMessage = e.toString();
-    } finally {
       _isLoading = false;
       notifyListeners();
     }

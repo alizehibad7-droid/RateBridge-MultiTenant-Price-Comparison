@@ -43,6 +43,8 @@ class CeoViewModel extends ChangeNotifier {
       _partnershipRequestsSub;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>?
       _linkedSuppliersSub;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>?
+      _marketplaceSuppliersSub;
   final Map<String, PartnershipRequestModel> _latestPartnershipBySupplierId = {};
   final Set<String> _activePartnerSupplierIds = {};
   List<PartnershipRequestModel> _receivedPartnershipRequests = [];
@@ -188,6 +190,7 @@ class CeoViewModel extends ChangeNotifier {
 
   @override
   void dispose() {
+    _marketplaceSuppliersSub?.cancel();
     _stopPartnershipStatusWatch();
     super.dispose();
   }
@@ -495,7 +498,8 @@ class CeoViewModel extends ChangeNotifier {
         final data = Map<String, dynamic>.from(raw);
         data['id'] = doc.id;
         final supplier = SupplierModel.fromMap(data);
-        if (_isActiveMarketplaceSupplier(supplier.status)) {
+        if (_isActiveMarketplaceSupplier(supplier.status) &&
+            !supplier.commissionRestricted) {
           suppliers.add(supplier);
         }
       } catch (_) {}
@@ -525,11 +529,29 @@ class CeoViewModel extends ChangeNotifier {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
+
+    _marketplaceSuppliersSub?.cancel();
     try {
-      _marketplaceSuppliers = await _fetchMarketplaceSuppliers();
+      _marketplaceSuppliersSub = _db
+          .collection('suppliers')
+          .where('status', whereIn: _marketplaceStatuses)
+          .snapshots()
+          .listen(
+        (snap) {
+          _marketplaceSuppliers = _suppliersFromDocs(snap.docs);
+          _isLoading = false;
+          notifyListeners();
+        },
+        onError: (_) {
+          _fetchMarketplaceSuppliers().then((suppliers) {
+            _marketplaceSuppliers = suppliers;
+            _isLoading = false;
+            notifyListeners();
+          });
+        },
+      );
     } catch (e) {
       _errorMessage = 'Failed to load marketplace. Please try again.';
-    } finally {
       _isLoading = false;
       notifyListeners();
     }

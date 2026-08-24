@@ -60,6 +60,7 @@ class _FieldPriceTrendsViewState extends State<FieldPriceTrendsView> {
   static const _appBarNavy = FieldColors.primaryNavy;
 
   _TrendRange _selectedRange = _TrendRange.sixMonths;
+  bool _hasUserPickedRange = false;
   late String _activeMaterialId;
   late String _activeSupplierUid;
   List<MaterialModel> _supplierOptions = [];
@@ -84,6 +85,7 @@ class _FieldPriceTrendsViewState extends State<FieldPriceTrendsView> {
           _activeSupplierUid,
         );
     if (!mounted) return;
+    _syncDefaultRange(context.read<FieldTrendsViewModel>());
     await _loadSupplierOptions(companyId);
     if (!mounted) return;
     final vm = context.read<FieldTrendsViewModel>();
@@ -106,8 +108,31 @@ class _FieldPriceTrendsViewState extends State<FieldPriceTrendsView> {
           _activeSupplierUid,
         );
     if (!mounted) return;
+    _syncDefaultRange(context.read<FieldTrendsViewModel>());
     await _loadSupplierOptions(companyId);
   }
+
+  void _syncDefaultRange(FieldTrendsViewModel vm) {
+    if (_hasUserPickedRange) return;
+    final months = vm.distinctMonthCount;
+    if (months <= 0) return;
+    final next = months <= 3
+        ? _TrendRange.threeMonths
+        : months <= 6
+            ? _TrendRange.sixMonths
+            : _TrendRange.oneYear;
+    if (_selectedRange != next) {
+      setState(() => _selectedRange = next);
+    }
+  }
+
+  String _cleanMaterialTitle(String raw) {
+    var text = raw.trim();
+    text = text.replaceFirst(RegExp(r'[:：\s]+$'), '');
+    return text;
+  }
+
+  String _monthsLabel(int count) => count == 1 ? '1 month' : '$count months';
 
   Future<void> _loadSupplierOptions(String companyId) async {
     final vm = context.read<FieldTrendsViewModel>();
@@ -351,16 +376,13 @@ class _FieldPriceTrendsViewState extends State<FieldPriceTrendsView> {
   @override
   Widget build(BuildContext context) {
     final vm = context.watch<FieldTrendsViewModel>();
-    final materialLabel = vm.materialName ?? widget.materialId;
+    final materialLabel = _cleanMaterialTitle(vm.materialName ?? widget.materialId);
     final chartPoints = _filterByRange(vm.chartPoints);
     final stats = _computeStats(chartPoints);
     final change = _thirtyDayChange(vm.chartPoints);
     final showSupplierPicker = _supplierOptions.length > 1 &&
         !_isAggregateSupplier(_activeSupplierUid);
-    final rangeNote = chartPoints.length < _selectedRange.months &&
-            vm.chartPoints.isNotEmpty
-        ? 'Showing ${_distinctMonths(chartPoints)} months available'
-        : null;
+    final historyMonths = _distinctMonths(vm.chartPoints);
 
     return Theme(
       data: FieldTheme.theme,
@@ -379,14 +401,6 @@ class _FieldPriceTrendsViewState extends State<FieldPriceTrendsView> {
               fontWeight: FontWeight.w700,
             ),
           ),
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.share_outlined),
-              color: Colors.white,
-              tooltip: 'Share',
-              onPressed: () {},
-            ),
-          ],
         ),
         body: vm.isLoading
             ? const _TrendsLoadingBody()
@@ -409,6 +423,7 @@ class _FieldPriceTrendsViewState extends State<FieldPriceTrendsView> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
+                              const SizedBox(height: FieldSpacing.sm),
                               _MaterialSummaryCard(
                                 materialName: materialLabel,
                                 supplierName: vm.supplierName ?? '—',
@@ -420,24 +435,29 @@ class _FieldPriceTrendsViewState extends State<FieldPriceTrendsView> {
                                 latestPrice: vm.currentPrice,
                                 unit: _unit ?? 'unit',
                                 change: change,
-                                dataPointMonths: _distinctMonths(vm.chartPoints),
+                                monthsLabel: _monthsLabel(historyMonths),
                               ),
                               _TimeRangeSelector(
                                 selected: _selectedRange,
-                                onSelected: (range) =>
-                                    setState(() => _selectedRange = range),
+                                onSelected: (range) => setState(() {
+                                  _hasUserPickedRange = true;
+                                  _selectedRange = range;
+                                }),
                               ),
                               _ChartCard(
                                 rangeLabel: _selectedRange.displayLabel,
                                 points: chartPoints,
-                                rangeNote: rangeNote,
                                 showInsightWarning: chartPoints.length < 3,
                                 insightText: vm.hasEnoughDataForAi &&
                                         vm.showAiCard
                                     ? vm.aiInsight
                                     : null,
                               ),
-                              _PriceStatisticsCard(stats: stats),
+                              _PriceStatisticsCard(
+                                stats: stats,
+                                averageSubtitle:
+                                    'over ${_monthsLabel(stats.monthCount)}',
+                              ),
                               _CompareSuppliersButton(
                                 onPressed: () => _openCompare(vm),
                               ),
@@ -487,16 +507,9 @@ class _PriceStats {
 
 // ─── Shared decoration ───────────────────────────────────────────────────────
 
-BoxDecoration _softCardDecoration() => BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(16),
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withValues(alpha: 0.05),
-          blurRadius: 8,
-          offset: const Offset(0, 2),
-        ),
-      ],
+BoxDecoration _panelCardDecoration({Color? borderColor, Color? color}) =>
+    FieldTheme.cardDecoration(borderColor: borderColor).copyWith(
+      color: color ?? FieldColors.surfaceWhite,
     );
 
 Widget _shimmerBox({required double height, double? width}) {
@@ -534,9 +547,14 @@ class _MaterialSummaryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-      padding: const EdgeInsets.all(16),
-      decoration: _softCardDecoration(),
+      margin: const EdgeInsets.fromLTRB(
+        FieldSpacing.md,
+        FieldSpacing.sm,
+        FieldSpacing.md,
+        0,
+      ),
+      padding: const EdgeInsets.all(FieldSpacing.md),
+      decoration: _panelCardDecoration(),
       child: Row(
         children: [
           Container(
@@ -619,108 +637,63 @@ class _CurrentPriceStrip extends StatelessWidget {
   final double? latestPrice;
   final String unit;
   final ({double? diff, double? percent, bool noChange}) change;
-  final int dataPointMonths;
+  final String monthsLabel;
 
   const _CurrentPriceStrip({
     required this.latestPrice,
     required this.unit,
     required this.change,
-    required this.dataPointMonths,
+    required this.monthsLabel,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: FieldColors.accentAmber.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: FieldColors.accentAmber),
+      margin: const EdgeInsets.fromLTRB(
+        FieldSpacing.md,
+        FieldSpacing.md,
+        FieldSpacing.md,
+        0,
       ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Current Price',
-                  style: FieldTypography.labelSmall.copyWith(
-                    fontSize: 11,
-                    color: FieldColors.textSecondary,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  latestPrice != null
-                      ? CurrencyFormatter.formatPKR(latestPrice!)
-                      : '—',
-                  style: FieldTypography.headlineMedium.copyWith(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w700,
-                    color: FieldColors.accentAmber,
-                  ),
-                ),
-                Text(
-                  'per $unit',
-                  style: FieldTypography.bodyMedium.copyWith(
-                    fontSize: 12,
-                    color: FieldColors.textSecondary,
-                  ),
-                ),
-              ],
+      padding: const EdgeInsets.symmetric(
+        horizontal: FieldSpacing.md,
+        vertical: 14,
+      ),
+      decoration: _panelCardDecoration(
+        borderColor: FieldColors.accentAmber,
+        color: FieldColors.accentAmberSoft,
+      ),
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: _PriceMetric(
+                label: 'Current Price',
+                value: latestPrice != null
+                    ? CurrencyFormatter.formatPKR(latestPrice!)
+                    : '—',
+                valueColor: FieldColors.accentAmber,
+                subtitle: 'per $unit',
+              ),
             ),
-          ),
-          _verticalDivider(),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '30-Day Change',
-                  style: FieldTypography.labelSmall.copyWith(
-                    fontSize: 11,
-                    color: FieldColors.textSecondary,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                _ChangeValue(change: change),
-              ],
+            _verticalDivider(),
+            Expanded(
+              child: _PriceMetric(
+                label: '30-Day Change',
+                child: _ChangeValue(change: change),
+              ),
             ),
-          ),
-          _verticalDivider(),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Data Points',
-                  style: FieldTypography.labelSmall.copyWith(
-                    fontSize: 11,
-                    color: FieldColors.textSecondary,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '$dataPointMonths months',
-                  style: FieldTypography.titleMedium.copyWith(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: FieldColors.primaryNavy,
-                  ),
-                ),
-                Text(
-                  'of history',
-                  style: FieldTypography.labelSmall.copyWith(
-                    fontSize: 11,
-                    color: FieldColors.textSecondary,
-                  ),
-                ),
-              ],
+            _verticalDivider(),
+            Expanded(
+              child: _PriceMetric(
+                label: 'Data Points',
+                value: monthsLabel,
+                valueColor: FieldColors.primaryNavy,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -728,9 +701,68 @@ class _CurrentPriceStrip extends StatelessWidget {
   Widget _verticalDivider() {
     return Container(
       width: 1,
-      height: 40,
-      margin: const EdgeInsets.symmetric(horizontal: 8),
+      margin: const EdgeInsets.symmetric(horizontal: FieldSpacing.sm),
       color: FieldColors.borderSubtle,
+    );
+  }
+}
+
+class _PriceMetric extends StatelessWidget {
+  final String label;
+  final String? value;
+  final Color? valueColor;
+  final String? subtitle;
+  final Widget? child;
+
+  const _PriceMetric({
+    required this.label,
+    this.value,
+    this.valueColor,
+    this.subtitle,
+    this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: FieldTypography.labelSmall.copyWith(
+            fontSize: 11,
+            color: FieldColors.textSecondary,
+          ),
+        ),
+        const SizedBox(height: 6),
+        if (child != null)
+          child!
+        else
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              value ?? '—',
+              maxLines: 1,
+              style: FieldTypography.titleMedium.copyWith(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                height: 1.2,
+                color: valueColor ?? FieldColors.primaryNavy,
+              ),
+            ),
+          ),
+        if (subtitle != null) ...[
+          const SizedBox(height: 2),
+          Text(
+            subtitle!,
+            style: FieldTypography.labelSmall.copyWith(
+              fontSize: 11,
+              color: FieldColors.textSecondary,
+            ),
+          ),
+        ],
+      ],
     );
   }
 }
@@ -743,39 +775,76 @@ class _ChangeValue extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (change.noChange || change.diff == null) {
-      return Text(
-        '— No change',
-        style: FieldTypography.bodyMedium.copyWith(
-          fontSize: 14,
-          color: FieldColors.textSecondary,
-          fontWeight: FontWeight.w600,
-        ),
+      return Row(
+        children: [
+          const Icon(
+            Icons.trending_flat,
+            size: 16,
+            color: FieldColors.statusMuted,
+          ),
+          const SizedBox(width: 4),
+          Expanded(
+            child: Text(
+              'No change',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: FieldTypography.titleMedium.copyWith(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                height: 1.2,
+                color: FieldColors.statusMuted,
+              ),
+            ),
+          ),
+        ],
       );
     }
 
     final isUp = change.diff! > 0;
     final color = isUp ? FieldColors.statusDanger : FieldColors.statusSuccess;
-    final arrow = isUp ? '▲' : '▼';
-    final amount = change.diff!.abs();
+    final percentText = change.percent == null
+        ? null
+        : '${isUp ? '+' : ''}${change.percent!.toStringAsFixed(1)}%';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          '$arrow ${CurrencyFormatter.formatPKR(amount)}',
-          style: FieldTypography.titleMedium.copyWith(
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
-            color: color,
-          ),
-        ),
-        if (change.percent != null)
-          Text(
-            '${isUp ? '+' : ''}${change.percent!.toStringAsFixed(1)}%',
-            style: FieldTypography.bodyMedium.copyWith(
-              fontSize: 12,
+        Row(
+          children: [
+            Icon(
+              isUp ? Icons.trending_up : Icons.trending_down,
+              size: 16,
               color: color,
-              fontWeight: FontWeight.w600,
+            ),
+            const SizedBox(width: 4),
+            Expanded(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  CurrencyFormatter.formatPKR(change.diff!.abs()),
+                  maxLines: 1,
+                  style: FieldTypography.titleMedium.copyWith(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    height: 1.2,
+                    color: color,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+        if (percentText != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(
+              percentText,
+              style: FieldTypography.labelSmall.copyWith(
+                fontSize: 11,
+                color: color,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
       ],
@@ -797,7 +866,12 @@ class _TimeRangeSelector extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      padding: const EdgeInsets.fromLTRB(
+        FieldSpacing.md,
+        FieldSpacing.md,
+        FieldSpacing.md,
+        0,
+      ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: _TrendRange.values.map((range) {
@@ -849,14 +923,12 @@ class _TimeRangeSelector extends StatelessWidget {
 class _ChartCard extends StatelessWidget {
   final String rangeLabel;
   final List<PriceHistoryModel> points;
-  final String? rangeNote;
   final bool showInsightWarning;
   final String? insightText;
 
   const _ChartCard({
     required this.rangeLabel,
     required this.points,
-    this.rangeNote,
     required this.showInsightWarning,
     this.insightText,
   });
@@ -864,9 +936,14 @@ class _ChartCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-      padding: const EdgeInsets.all(16),
-      decoration: _softCardDecoration(),
+      margin: const EdgeInsets.fromLTRB(
+        FieldSpacing.md,
+        FieldSpacing.md,
+        FieldSpacing.md,
+        0,
+      ),
+      padding: const EdgeInsets.all(FieldSpacing.md),
+      decoration: _panelCardDecoration(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -943,17 +1020,6 @@ class _ChartCard extends StatelessWidget {
               ),
             ),
           ],
-          if (rangeNote != null) ...[
-            const SizedBox(height: 8),
-            Text(
-              rangeNote!,
-              textAlign: TextAlign.center,
-              style: FieldTypography.labelSmall.copyWith(
-                fontSize: 11,
-                color: FieldColors.textSecondary,
-              ),
-            ),
-          ],
           if (showInsightWarning) ...[
             const SizedBox(height: 10),
             Container(
@@ -999,8 +1065,12 @@ class _ChartCard extends StatelessWidget {
 
 class _PriceStatisticsCard extends StatelessWidget {
   final _PriceStats stats;
+  final String averageSubtitle;
 
-  const _PriceStatisticsCard({required this.stats});
+  const _PriceStatisticsCard({
+    required this.stats,
+    required this.averageSubtitle,
+  });
 
   String _monthLabel(PriceHistoryModel? point) {
     if (point == null) return '—';
@@ -1010,9 +1080,14 @@ class _PriceStatisticsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-      padding: const EdgeInsets.all(14),
-      decoration: _softCardDecoration(),
+      margin: const EdgeInsets.fromLTRB(
+        FieldSpacing.md,
+        FieldSpacing.md,
+        FieldSpacing.md,
+        0,
+      ),
+      padding: const EdgeInsets.all(FieldSpacing.md),
+      decoration: _panelCardDecoration(),
       child: IntrinsicHeight(
         child: Row(
           children: [
@@ -1045,7 +1120,7 @@ class _PriceStatisticsCard extends StatelessWidget {
                     ? CurrencyFormatter.formatPKR(stats.average!)
                     : '—',
                 valueColor: FieldColors.primaryNavy,
-                subtitle: 'over ${stats.monthCount} months',
+                subtitle: averageSubtitle,
               ),
             ),
           ],
@@ -1125,7 +1200,12 @@ class _CompareSuppliersButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+      padding: const EdgeInsets.fromLTRB(
+        FieldSpacing.md,
+        FieldSpacing.md,
+        FieldSpacing.md,
+        FieldSpacing.md,
+      ),
       child: SizedBox(
         height: 52,
         width: double.infinity,
@@ -1165,28 +1245,49 @@ class _TrendsLoadingBody extends StatelessWidget {
       child: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+            padding: const EdgeInsets.fromLTRB(
+              FieldSpacing.md,
+              FieldSpacing.sm,
+              FieldSpacing.md,
+              0,
+            ),
             child: _shimmerBox(height: 76),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+            padding: const EdgeInsets.fromLTRB(
+              FieldSpacing.md,
+              FieldSpacing.md,
+              FieldSpacing.md,
+              0,
+            ),
             child: _shimmerBox(height: 88),
           ),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            padding: const EdgeInsets.fromLTRB(
+              FieldSpacing.md,
+              FieldSpacing.md,
+              FieldSpacing.md,
+              0,
+            ),
             child: _shimmerBox(height: 34),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+            padding: const EdgeInsets.fromLTRB(
+              FieldSpacing.md,
+              FieldSpacing.md,
+              FieldSpacing.md,
+              0,
+            ),
             child: _shimmerBox(height: 248),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+            padding: const EdgeInsets.fromLTRB(
+              FieldSpacing.md,
+              FieldSpacing.md,
+              FieldSpacing.md,
+              FieldSpacing.md,
+            ),
             child: _shimmerBox(height: 88),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-            child: _shimmerBox(height: 110),
           ),
         ],
       ),

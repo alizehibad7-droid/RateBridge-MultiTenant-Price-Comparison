@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/rfq_model.dart';
 import '../models/rfq_bid_model.dart';
@@ -17,6 +19,7 @@ import '../models/invitation_model.dart';
 import '../models/join_request_model.dart';
 import '../models/notification_model.dart';
 import '../models/category_model.dart';
+import '../utils/seed_data_guard.dart';
 
 class FirestoreService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -117,13 +120,21 @@ class FirestoreService {
         .doc(companyId)
         .collection('suppliers')
         .snapshots()
-        .asyncMap((suppliersSnap) async {
+        .asyncExpand((suppliersSnap) {
           final supplierIds =
               suppliersSnap.docs
                   .where((doc) => _isActiveSupplierLink(doc.data()))
                   .map((doc) => doc.id)
+                  .where((id) => !SeedDataGuard.isSeedId(id))
                   .toList();
-          return _materialsForSupplierIds(supplierIds);
+
+          if (supplierIds.isEmpty) {
+            return Stream.value(<MaterialModel>[]);
+          }
+
+          return watchUnrestrictedSupplierIds(supplierIds).asyncMap(
+            (visibleIds) => _materialsForSupplierIds(visibleIds),
+          );
         });
   }
 
@@ -169,6 +180,10 @@ class FirestoreService {
     ) {
       for (final doc in docs) {
         final material = _materialFromDoc(doc.id, doc.data());
+        if (SeedDataGuard.isSeedId(material.id) ||
+            SeedDataGuard.isSeedId(material.supplierId)) {
+          continue;
+        }
         if (seenIds.add(material.id)) {
           allMaterials.add(material);
         }
@@ -254,56 +269,65 @@ class FirestoreService {
           .doc(companyId)
           .collection('suppliers')
           .snapshots()
-          .asyncMap((suppliersSnap) async {
+          .asyncExpand((suppliersSnap) {
             final supplierIds =
                 suppliersSnap.docs
                     .where((doc) => _isActiveSupplierLink(doc.data()))
                     .map((doc) => doc.id)
+                    .where((id) => !SeedDataGuard.isSeedId(id))
                     .toList();
-            if (supplierIds.isEmpty) return [];
+            if (supplierIds.isEmpty) return Stream.value(<MaterialModel>[]);
 
-            final chunks = <List<String>>[];
-            for (var i = 0; i < supplierIds.length; i += 30) {
-              chunks.add(
-                supplierIds.sublist(
-                  i,
-                  i + 30 > supplierIds.length ? supplierIds.length : i + 30,
-                ),
-              );
-            }
+            return watchUnrestrictedSupplierIds(supplierIds).asyncMap(
+              (visibleIds) async {
+                if (visibleIds.isEmpty) return <MaterialModel>[];
 
-            final filteredMaterials = <MaterialModel>[];
-            for (final chunk in chunks) {
-              Query query = _db
-                  .collection('materials')
-                  .where('supplierId', whereIn: chunk)
-                  .where('category', isEqualTo: category);
+                final chunks = <List<String>>[];
+                for (var i = 0; i < visibleIds.length; i += 30) {
+                  chunks.add(
+                    visibleIds.sublist(
+                      i,
+                      i + 30 > visibleIds.length ? visibleIds.length : i + 30,
+                    ),
+                  );
+                }
 
-              if (filters != null) {
-                filters.forEach((key, value) {
-                  if (value != null) query = query.where(key, isEqualTo: value);
-                });
-              }
+                final filteredMaterials = <MaterialModel>[];
+                for (final chunk in chunks) {
+                  Query query = _db
+                      .collection('materials')
+                      .where('supplierId', whereIn: chunk)
+                      .where('category', isEqualTo: category);
 
-              final materialsSnap = await query.get();
-              filteredMaterials.addAll(
-                materialsSnap.docs.map(
-                  (doc) => MaterialModel.fromMap(_queryDocData(doc)),
-                ),
-              );
-            }
+                  if (filters != null) {
+                    filters.forEach((key, value) {
+                      if (value != null) {
+                        query = query.where(key, isEqualTo: value);
+                      }
+                    });
+                  }
 
-            if (sort == 'price_asc') {
-              filteredMaterials.sort(
-                (a, b) => a.pricePerUnit.compareTo(b.pricePerUnit),
-              );
-            } else if (sort == 'price_desc') {
-              filteredMaterials.sort(
-                (a, b) => b.pricePerUnit.compareTo(a.pricePerUnit),
-              );
-            }
+                  final materialsSnap = await query.get();
+                  filteredMaterials.addAll(
+                    materialsSnap.docs.map(
+                      (doc) => MaterialModel.fromMap(_queryDocData(doc)),
+                    ),
+                  );
+                }
 
-            return filteredMaterials;
+                if (sort == 'price_asc') {
+                  filteredMaterials.sort(
+                    (a, b) => a.pricePerUnit.compareTo(b.pricePerUnit),
+                  );
+                } else if (sort == 'price_desc') {
+                  filteredMaterials.sort(
+                    (a, b) => b.pricePerUnit.compareTo(a.pricePerUnit),
+                  );
+                }
+
+                return filteredMaterials;
+              },
+            );
           });
     }
 
@@ -338,7 +362,17 @@ class FirestoreService {
             .collection('materials')
             .where('name', isEqualTo: materialName)
             .get();
-    return snap.docs.map((doc) => MaterialModel.fromMap(doc.data())).toList();
+    final materials = snap.docs.map((doc) => MaterialModel.fromMap(doc.data())).toList();
+    if (materials.isEmpty) return materials;
+
+    final supplierIds = materials
+        .map((m) => m.supplierId)
+        .where((id) => id.isNotEmpty)
+        .toSet()
+        .toList();
+    final visibleIds = await filterUnrestrictedSupplierIds(supplierIds);
+    final visible = visibleIds.toSet();
+    return materials.where((m) => visible.contains(m.supplierId)).toList();
   }
 
   /// Linked supplier UIDs for a company (`companies/{id}/suppliers`, with
@@ -355,6 +389,7 @@ class FirestoreService {
       return suppliersSnap.docs
           .where((doc) => _isActiveSupplierLink(doc.data()))
           .map((doc) => doc.id)
+          .where((id) => !SeedDataGuard.isSeedId(id))
           .toList();
     }
 
@@ -372,6 +407,62 @@ class FirestoreService {
   bool _isActiveSupplierLink(Map<String, dynamic> data) {
     final status = (data['status'] as String?)?.toLowerCase() ?? 'active';
     return status == 'active' || status == 'approved';
+  }
+
+  bool _isCommissionRestricted(Map<String, dynamic>? data) =>
+      data?['commissionRestricted'] == true;
+
+  Future<List<String>> filterUnrestrictedSupplierIds(
+    List<String> supplierIds,
+  ) async {
+    if (supplierIds.isEmpty) return [];
+    final visible = <String>[];
+    for (final id in supplierIds) {
+      final doc = await _db.collection('suppliers').doc(id).get();
+      if (!_isCommissionRestricted(doc.data())) {
+        visible.add(id);
+      }
+    }
+    return visible;
+  }
+
+  /// Re-emits whenever any linked supplier's commission restriction flag changes.
+  Stream<List<String>> watchUnrestrictedSupplierIds(List<String> supplierIds) {
+    if (supplierIds.isEmpty) return Stream.value(const []);
+
+    late StreamController<List<String>> controller;
+    final subscriptions =
+        <StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>>[];
+    final restricted = <String, bool>{};
+
+    void emitVisible() {
+      if (controller.isClosed) return;
+      controller.add(
+        supplierIds.where((id) => restricted[id] != true).toList(),
+      );
+    }
+
+    controller = StreamController<List<String>>.broadcast(
+      onListen: () {
+        for (final id in supplierIds) {
+          restricted[id] = false;
+          subscriptions.add(
+            _db.collection('suppliers').doc(id).snapshots().listen((snap) {
+              restricted[id] = _isCommissionRestricted(snap.data());
+              emitVisible();
+            }),
+          );
+        }
+      },
+      onCancel: () async {
+        for (final sub in subscriptions) {
+          await sub.cancel();
+        }
+        subscriptions.clear();
+      },
+    );
+
+    return controller.stream;
   }
 
   String _normalizeMaterialName(String value) =>
@@ -393,7 +484,9 @@ class FirestoreService {
     final nameLower = _normalizeMaterialName(name);
     if (nameLower.isEmpty) return [];
 
-    final supplierIds = await getCompanyLinkedSupplierIds(companyId);
+    final supplierIds = await filterUnrestrictedSupplierIds(
+      await getCompanyLinkedSupplierIds(companyId),
+    );
     if (supplierIds.isEmpty) return [];
     final chunks = <List<String>>[];
     for (var i = 0; i < supplierIds.length; i += 30) {
@@ -461,6 +554,9 @@ class FirestoreService {
     if (!link.exists) return [];
     final linkData = link.data();
     if (linkData == null || !_isActiveSupplierLink(linkData)) return [];
+
+    final supplierDoc = await _db.collection('suppliers').doc(supplierId).get();
+    if (_isCommissionRestricted(supplierDoc.data())) return [];
 
     final snap =
         await _db

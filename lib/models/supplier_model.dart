@@ -28,6 +28,11 @@ class SupplierModel {
   final String? certificationUrl;
   final List<String> declaredCategories;
   final String? rejectionReason;
+  final bool commissionRestricted;
+  final String? commissionRestrictionReason;
+  final double commissionOutstandingAmount;
+  final int commissionOldestUnsettledDays;
+  final String commissionRestrictionOverride;
 
   SupplierModel({
     required this.id,
@@ -58,6 +63,11 @@ class SupplierModel {
     this.certificationUrl,
     this.declaredCategories = const [],
     this.rejectionReason,
+    this.commissionRestricted = false,
+    this.commissionRestrictionReason,
+    this.commissionOutstandingAmount = 0,
+    this.commissionOldestUnsettledDays = 0,
+    this.commissionRestrictionOverride = 'none',
   });
 
   SupplierModel copyWith({
@@ -89,6 +99,11 @@ class SupplierModel {
     String? certificationUrl,
     List<String>? declaredCategories,
     String? rejectionReason,
+    bool? commissionRestricted,
+    String? commissionRestrictionReason,
+    double? commissionOutstandingAmount,
+    int? commissionOldestUnsettledDays,
+    String? commissionRestrictionOverride,
   }) {
     return SupplierModel(
       id: id ?? this.id,
@@ -121,6 +136,15 @@ class SupplierModel {
       certificationUrl: certificationUrl ?? this.certificationUrl,
       declaredCategories: declaredCategories ?? this.declaredCategories,
       rejectionReason: rejectionReason ?? this.rejectionReason,
+      commissionRestricted: commissionRestricted ?? this.commissionRestricted,
+      commissionRestrictionReason:
+          commissionRestrictionReason ?? this.commissionRestrictionReason,
+      commissionOutstandingAmount:
+          commissionOutstandingAmount ?? this.commissionOutstandingAmount,
+      commissionOldestUnsettledDays:
+          commissionOldestUnsettledDays ?? this.commissionOldestUnsettledDays,
+      commissionRestrictionOverride:
+          commissionRestrictionOverride ?? this.commissionRestrictionOverride,
     );
   }
 
@@ -161,6 +185,12 @@ class SupplierModel {
       if (declaredCategories.isNotEmpty)
         'declaredCategories': declaredCategories,
       if (rejectionReason != null) 'rejectionReason': rejectionReason,
+      'commissionRestricted': commissionRestricted,
+      if (commissionRestrictionReason != null)
+        'commissionRestrictionReason': commissionRestrictionReason,
+      'commissionOutstandingAmount': commissionOutstandingAmount,
+      'commissionOldestUnsettledDays': commissionOldestUnsettledDays,
+      'commissionRestrictionOverride': commissionRestrictionOverride,
     };
   }
 
@@ -222,6 +252,14 @@ class SupplierModel {
       certificationUrl: map['certificationUrl'] as String?,
       declaredCategories: declared,
       rejectionReason: map['rejectionReason'] as String?,
+      commissionRestricted: map['commissionRestricted'] == true,
+      commissionRestrictionReason:
+          map['commissionRestrictionReason'] as String?,
+      commissionOutstandingAmount: readDouble(map['commissionOutstandingAmount']),
+      commissionOldestUnsettledDays:
+          readInt(map['commissionOldestUnsettledDays']),
+      commissionRestrictionOverride:
+          (map['commissionRestrictionOverride'] as String?) ?? 'none',
     );
   }
 }

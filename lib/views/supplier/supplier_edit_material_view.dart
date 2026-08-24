@@ -9,6 +9,7 @@ import '../../theme/supplier_theme.dart';
 import '../../models/material_model.dart';
 import '../../utils/app_theme.dart';
 import '../../utils/chat_image_utils.dart';
+import '../../utils/material_form_defaults.dart';
 import '../../viewmodels/auth_viewmodel.dart';
 import '../../viewmodels/material_viewmodel.dart';
 import '../../viewmodels/supplier_viewmodel.dart';
@@ -24,18 +25,6 @@ class SupplierEditMaterialView extends StatefulWidget {
 }
 
 class _SupplierEditMaterialViewState extends State<SupplierEditMaterialView> {
-  static const _stockStatuses = [
-    'Available',
-    'Limited Stock',
-    'Out of Stock',
-  ];
-  static const _deliveryTimes = [
-    'Same day',
-    '24 hours',
-    '2-3 days',
-    '1 week+',
-  ];
-
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _nameController;
   late final TextEditingController _priceController;
@@ -51,6 +40,17 @@ class _SupplierEditMaterialViewState extends State<SupplierEditMaterialView> {
   Uint8List? _imagePreviewBytes;
   bool _categoriesLoaded = false;
 
+  List<String> get _deliveryOptions {
+    final options = [...MaterialFormDefaults.deliveryTimes];
+    final current = _deliveryTime;
+    if (current != null &&
+        current.isNotEmpty &&
+        !options.contains(current)) {
+      options.add(current);
+    }
+    return options;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -63,8 +63,11 @@ class _SupplierEditMaterialViewState extends State<SupplierEditMaterialView> {
     _minOrderController = TextEditingController(
       text: material.minOrderQuantity?.toString() ?? '',
     );
-    _stockStatus = material.stockStatus ?? 'Available';
-    _deliveryTime = material.deliveryTime;
+    _stockStatus = MaterialFormDefaults.stockStatuses.contains(material.stockStatus)
+        ? material.stockStatus!
+        : 'Available';
+    _deliveryTime =
+        MaterialFormDefaults.canonicalDeliveryTime(material.deliveryTime);
     _selectedBrand = material.brand;
     _selectedGrade = material.grade;
 
@@ -129,8 +132,8 @@ class _SupplierEditMaterialViewState extends State<SupplierEditMaterialView> {
     final materialVM = context.watch<MaterialViewModel>();
     final authVM = context.watch<AuthViewModel>();
     final category = materialVM.selectedCategory;
-    final brands = category?.brands ?? const <String>[];
-    final grades = category?.grades ?? const <String>[];
+    final brands = MaterialFormDefaults.uniqueOptions(category?.brands ?? const <String>[]);
+    final grades = MaterialFormDefaults.uniqueOptions(category?.grades ?? const <String>[]);
 
     if (!_categoriesLoaded && materialVM.isLoading) {
       return Scaffold(
@@ -234,10 +237,10 @@ class _SupplierEditMaterialViewState extends State<SupplierEditMaterialView> {
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
               decoration: const InputDecoration(labelText: 'Stock Status'),
-              value: _stockStatuses.contains(_stockStatus)
+              value: MaterialFormDefaults.stockStatuses.contains(_stockStatus)
                   ? _stockStatus
                   : 'Available',
-              items: _stockStatuses
+              items: MaterialFormDefaults.stockStatuses
                   .map(
                     (s) => DropdownMenuItem(
                       value: s,
@@ -263,13 +266,15 @@ class _SupplierEditMaterialViewState extends State<SupplierEditMaterialView> {
               decoration: const InputDecoration(
                 labelText: 'Delivery Time (optional)',
               ),
-              value: _deliveryTime,
+              value: _deliveryOptions.contains(_deliveryTime)
+                  ? _deliveryTime
+                  : null,
               items: [
                 DropdownMenuItem<String>(
                   value: null,
                   child: Text('Not specified', style: AppTextStyles.bodyMuted),
                 ),
-                ..._deliveryTimes.map(
+                ..._deliveryOptions.map(
                   (d) => DropdownMenuItem(
                     value: d,
                     child: Text(d, style: AppTextStyles.body),

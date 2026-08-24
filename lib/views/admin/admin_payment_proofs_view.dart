@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import '../../models/payment_proof_model.dart';
+import '../../models/transaction_model.dart';
 import '../../theme/admin_theme.dart';
 import '../../widgets/admin/admin_widgets.dart';
 
 class AdminPaymentProofsView extends StatelessWidget {
   const AdminPaymentProofsView({super.key});
+
+  static const double _amountMismatchThreshold = 0.95;
 
   @override
   Widget build(BuildContext context) {
@@ -168,33 +171,155 @@ class AdminPaymentProofsView extends StatelessWidget {
     );
   }
 
+  Future<List<TransactionModel>> _loadUnsettledCommissionTransactions(
+    List<String> txIds,
+  ) async {
+    final unsettled = <TransactionModel>[];
+    for (final id in txIds) {
+      final doc = await FirebaseFirestore.instance
+          .collection('transactions')
+          .doc(id)
+          .get();
+      if (!doc.exists || doc.data() == null) continue;
+      final tx = TransactionModel.fromMap(doc.id, doc.data()!);
+      if (tx.isUnsettled) unsettled.add(tx);
+    }
+    return unsettled;
+  }
+
+  Future<bool> _confirmAmountMismatch(
+    BuildContext context, {
+    required double detectedAmount,
+    required double expectedTotal,
+  }) async {
+    final currency = NumberFormat.currency(symbol: 'Rs ', decimalDigits: 0);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Amount mismatch'),
+        content: Text(
+          'The detected payment amount (${currency.format(detectedAmount)}) is '
+          'significantly less than the commission owed for the linked records '
+          '(${currency.format(expectedTotal)}).\n\n'
+          'Approve anyway?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: AdminColors.amber),
+            child: const Text('Approve anyway'),
+          ),
+        ],
+      ),
+    );
+    return confirmed == true;
+  }
+
   Future<void> _approvePayment(BuildContext context, PaymentProofModel proof) async {
+    if (proof.type == 'commission') {
+      final txIds = proof.relatedTransactions ?? [];
+      if (txIds.isEmpty) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Cannot approve: no commission records are linked to this proof.',
+              ),
+              backgroundColor: AdminColors.red,
+            ),
+          );
+        }
+        return;
+      }
+
+      final unsettledTxs = await _loadUnsettledCommissionTransactions(txIds);
+      if (unsettledTxs.isEmpty) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Cannot approve: all linked commission records are already settled.',
+              ),
+              backgroundColor: AdminColors.red,
+            ),
+          );
+        }
+        return;
+      }
+
+      final expectedTotal = unsettledTxs.fold<double>(
+        0,
+        (sum, tx) => sum + tx.commissionAmount,
+      );
+      if (proof.amountDetected < expectedTotal * _amountMismatchThreshold) {
+        if (!context.mounted) return;
+        final proceed = await _confirmAmountMismatch(
+          context,
+          detectedAmount: proof.amountDetected,
+          expectedTotal: expectedTotal,
+        );
+        if (!proceed) return;
+      }
+
+      final batch = FirebaseFirestore.instance.batch();
+      batch.update(
+        FirebaseFirestore.instance.collection('payment_proofs').doc(proof.id),
+        {
+          'status': 'approved',
+          'approvedAt': FieldValue.serverTimestamp(),
+        },
+      );
+
+      for (final tx in unsettledTxs) {
+        batch.update(
+          FirebaseFirestore.instance.collection('transactions').doc(tx.txId),
+          {
+            'status': 'settled',
+            'settledAt': FieldValue.serverTimestamp(),
+          },
+        );
+      }
+
+      try {
+        await batch.commit();
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Approved payment and settled ${unsettledTxs.length} commission record(s).',
+              ),
+              backgroundColor: AdminColors.green,
+            ),
+          );
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: $e'), backgroundColor: AdminColors.red),
+          );
+        }
+      }
+      return;
+    }
+
     final batch = FirebaseFirestore.instance.batch();
     
-    // 1. Update Proof Status
     batch.update(FirebaseFirestore.instance.collection('payment_proofs').doc(proof.id), {
       'status': 'approved',
       'approvedAt': FieldValue.serverTimestamp(),
     });
 
-    // 2. Handle Logic based on Type
     if (proof.type == 'subscription') {
-      // Activate Subscription for CEO
       batch.set(FirebaseFirestore.instance.collection('subscriptions').doc(proof.payerId), {
         'plan': proof.planKey,
         'status': 'active',
         'updatedAt': FieldValue.serverTimestamp(),
         'expiresAt': Timestamp.fromDate(DateTime.now().add(const Duration(days: 30))),
       }, SetOptions(merge: true));
-    } else {
-      // Settle Transactions for Supplier
-      final List<String> txIds = proof.relatedTransactions ?? [];
-      for (var id in txIds) {
-        batch.update(FirebaseFirestore.instance.collection('transactions').doc(id), {
-          'status': 'settled',
-          'settledAt': FieldValue.serverTimestamp(),
-        });
-      }
     }
 
     try {

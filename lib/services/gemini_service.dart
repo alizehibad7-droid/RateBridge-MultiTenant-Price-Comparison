@@ -1,7 +1,11 @@
 // MVVM: Service — external API wrapper only
+import 'dart:async';
 import 'dart:convert';
-import 'package:cloud_functions/cloud_functions.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import '../constants/firestore_paths.dart';
 import '../models/voice_intent_model.dart';
 import '../models/price_history_model.dart';
 import '../models/supplier_compare_model.dart';
@@ -10,13 +14,19 @@ import '../utils/app_exception.dart';
 class GeminiService {
   static const String _baseUrl =
     'https://api.groq.com/openai/v1/chat/completions';
-  final String _apiKey = const String.fromEnvironment('GROQ_API_KEY');
+  final String _groqKey = const String.fromEnvironment('GROQ_API_KEY');
+  final String _geminiKey = const String.fromEnvironment('GEMINI_API_KEY');
   final http.Client _client;
-  final FirebaseFunctions _functions;
+  final FirebaseFirestore _db;
+  final FirebaseAuth _auth;
 
-  GeminiService({http.Client? client, FirebaseFunctions? functions})
-      : _client = client ?? http.Client(),
-        _functions = functions ?? FirebaseFunctions.instance;
+  GeminiService({
+    http.Client? client,
+    FirebaseFirestore? firestore,
+    FirebaseAuth? auth,
+  })  : _client = client ?? http.Client(),
+        _db = firestore ?? FirebaseFirestore.instance,
+        _auth = auth ?? FirebaseAuth.instance;
 
   // Rate limit: rolling 1-minute window
   int _requestCount = 0;
@@ -34,33 +44,131 @@ class GeminiService {
     return true;
   }
 
+  String _asText(dynamic value) {
+    if (value == null) return '';
+    if (value is String) return value;
+    return value.toString();
+  }
+
   Future<String> _callGemini(String prompt) async {
     if (!_checkRateLimit()) {
       return 'AI recommendations temporarily unavailable. Please try again in a minute.';
     }
-    if (_apiKey.isNotEmpty) {
-      return _callGroq(prompt);
+    if (_groqKey.isNotEmpty) {
+      try {
+        return await _callGroq(prompt);
+      } catch (e) {
+        debugPrint('Groq path failed, using Vertex job: $e');
+      }
     }
-    return _callCloudFunction(prompt);
+    if (_geminiKey.isNotEmpty) {
+      try {
+        return await _callGeminiApi(prompt);
+      } catch (e) {
+        debugPrint('Gemini API key path failed, using Vertex job: $e');
+      }
+    }
+    return _callFirestoreJob(prompt);
   }
 
-  Future<String> _callCloudFunction(String prompt) async {
+  Future<String> _callFirestoreJob(String prompt) async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) {
+      throw AppException('Sign in required for AI.');
+    }
+
+    final ref = _db.collection(FirestorePaths.aiJobsCol).doc();
+    await ref.set({
+      'uid': uid,
+      'prompt': prompt,
+      'status': 'pending',
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+
+    final completer = Completer<String>();
+    late final StreamSubscription<DocumentSnapshot<Map<String, dynamic>>> sub;
+    sub = ref.snapshots().listen((snap) {
+      final data = snap.data();
+      if (data == null) return;
+      final status = _asText(data['status']);
+      if (status == 'complete') {
+        if (!completer.isCompleted) {
+          completer.complete(_asText(data['text']).trim());
+        }
+        sub.cancel();
+      } else if (status == 'error') {
+        if (!completer.isCompleted) {
+          completer.completeError(
+            AppException(_asText(data['error']).isEmpty
+                ? 'AI request failed.'
+                : _asText(data['error'])),
+          );
+        }
+        sub.cancel();
+      }
+    }, onError: (Object error) {
+      if (!completer.isCompleted) {
+        completer.completeError(AppException('AI request failed.'));
+      }
+      sub.cancel();
+    });
+
     try {
-      final callable = _functions.httpsCallable(
-        'generateAiText',
-        options: HttpsCallableOptions(timeout: const Duration(seconds: 60)),
+      return await completer.future.timeout(
+        const Duration(seconds: 60),
+        onTimeout: () {
+          sub.cancel();
+          throw AppException('AI request timed out. Please try again.');
+        },
       );
-      final result = await callable.call({'prompt': prompt});
-      final data = result.data;
-      if (data is Map && data['text'] is String) {
-        return data['text'] as String;
+    } catch (e) {
+      await sub.cancel();
+      rethrow;
+    }
+  }
+
+  Future<String> _callGeminiApi(String prompt) async {
+    final uri = Uri.parse(
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=$_geminiKey',
+    );
+    final response = await _client.post(
+      uri,
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'contents': [
+          {
+            'role': 'user',
+            'parts': [
+              {'text': prompt},
+            ],
+          }
+        ],
+        'generationConfig': {
+          'maxOutputTokens': 500,
+          'temperature': 0.3,
+        },
+      }),
+    );
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final candidates = data['candidates'] as List<dynamic>? ?? [];
+      if (candidates.isEmpty) {
+        throw AppException('AI returned an empty response.');
       }
-      throw AppException('AI returned an empty response.');
-    } on FirebaseFunctionsException catch (e) {
-      if (e.code == 'resource-exhausted') {
-        return 'AI temporarily unavailable due to rate limiting. Please try again shortly.';
+      final content = candidates.first['content'] as Map<String, dynamic>?;
+      final parts = content?['parts'] as List<dynamic>? ?? [];
+      final text = parts
+          .map((part) => (part as Map<String, dynamic>)['text'] as String? ?? '')
+          .join()
+          .trim();
+      if (text.isEmpty) {
+        throw AppException('AI returned an empty response.');
       }
-      throw AppException('Gemini API error: ${e.message ?? e.code}');
+      return text;
+    } else if (response.statusCode == 429) {
+      throw AppException('AI temporarily unavailable due to rate limiting.');
+    } else {
+      throw AppException('Gemini API error: ${response.statusCode}');
     }
   }
 
@@ -69,10 +177,10 @@ class GeminiService {
       Uri.parse(_baseUrl),
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer $_apiKey',
+        'Authorization': 'Bearer $_groqKey',
       },
       body: jsonEncode({
-        'model': 'llama-3.3-70b-versatile',
+        'model': 'groq/compound-mini',
         'max_tokens': 500,
         'temperature': 0.3,
         'messages': [
@@ -82,7 +190,18 @@ class GeminiService {
     );
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
-      return data['choices'][0]['message']['content'] as String;
+      final choices = data is Map ? data['choices'] : null;
+      final first = (choices is List && choices.isNotEmpty) ? choices[0] : null;
+      final message = first is Map ? first['message'] : null;
+      final messageMap = message is Map ? message : const <String, dynamic>{};
+      var content = _asText(messageMap['content']).trim();
+      if (content.isEmpty) {
+        content = _asText(messageMap['reasoning']).trim();
+      }
+      if (content.isEmpty) {
+        throw AppException('AI returned an empty response.');
+      }
+      return content;
     } else if (response.statusCode == 429) {
       return 'AI temporarily unavailable due to rate limiting. Please try again shortly.';
     } else {

@@ -2,3 +2,4 @@
 build/
 .dart_tool/
 .idea/
+dart_defines.json

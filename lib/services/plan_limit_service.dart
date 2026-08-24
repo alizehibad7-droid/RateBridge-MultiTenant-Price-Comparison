@@ -64,9 +64,12 @@ class PlanLimitService {
     if (plan.maxActiveOrders == -1) return;
 
     try {
+      // Orders are written to the top-level `orders` collection (OrderRepository).
+      // Avoid collectionGroup here — that requires a separate recursive rules
+      // match and was returning permission-denied on place-order.
       final count =
           await db
-              .collectionGroup('orders')
+              .collection('orders')
               .where('companyId', isEqualTo: companyId)
               .where('status', whereIn: activeOrderStatuses)
               .count()

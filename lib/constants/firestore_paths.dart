@@ -11,8 +11,11 @@ class FirestorePaths {
   static const String joinRequestsCol = 'joinRequests';
   static const String partnershipRequestsCol = 'partnershipRequests';
   static const String transactionsCol = 'transactions';
+  static const String platformSettingsCol = 'platform_settings';
+  static const String commissionSettingsDoc = '$platformSettingsCol/commission';
   static const String subscriptionsCol = 'subscriptions';
   static const String processedEventsCol = 'processedEvents';
+  static const String aiJobsCol = 'ai_jobs';
 
   // User document
   static String userDoc(String uid) => '$usersCol/$uid';

@@ -27,6 +27,9 @@ class _AdminAuditLogViewState extends State<AdminAuditLogView> {
     (value: 'reactivate_supplier', label: 'Reactivate Supplier'),
     (value: 'resolve_dispute', label: 'Resolve Dispute'),
     (value: 'settle_commission', label: 'Settle Commission'),
+    (value: 'restrict_supplier_commission', label: 'Restrict Commission'),
+    (value: 'lift_commission_restriction', label: 'Lift Commission Restriction'),
+    (value: 'update_commission_settings', label: 'Commission Settings'),
   ];
 
   @override

@@ -73,6 +73,7 @@ class SupplierViewModel extends ChangeNotifier {
   List<OrderModel> _orders = [];
   List<RatingModel> _ratings = [];
   List<TransactionModel> _transactions = [];
+  List<TransactionModel> _unsettledTransactions = [];
   List<CompanyModel> _companies = [];
   List<CompanyModel> _companyDirectory = [];
   List<CompanyModel> _allCompanyDirectory = [];
@@ -82,6 +83,8 @@ class SupplierViewModel extends ChangeNotifier {
   List<TransactionModel> _allSupplierTransactions = [];
   List<RatingModel> _allSupplierRatings = [];
   bool _partnershipHubDataLoaded = false;
+  bool _commissionRestricted = false;
+  String? _commissionRestrictionReason;
   List<InvitationModel> _invitations = [];
   List<Map<String, dynamic>> _monthlyChart = [];
   List<MonthlyEarning> _monthlyEarnings = [];
@@ -102,8 +105,10 @@ class SupplierViewModel extends ChangeNotifier {
   StreamSubscription? _materialsSubscription;
   StreamSubscription? _ordersSubscription;
   StreamSubscription? _earningsSubscription;
+  StreamSubscription? _unsettledSubscription;
   StreamSubscription? _invitationsSubscription;
   StreamSubscription? _ratingsSubscription;
+  StreamSubscription? _supplierRestrictionSub;
 
   bool _isDashboardLoading = false;
   bool _companiesLoaded = false;
@@ -160,12 +165,15 @@ class SupplierViewModel extends ChangeNotifier {
   List<OrderModel> get orders => _orders;
   List<RatingModel> get ratings => _ratings;
   List<TransactionModel> get transactions => _transactions;
+  List<TransactionModel> get unsettledTransactions => _unsettledTransactions;
   List<CompanyModel> get companies => _companies;
   List<CompanyModel> get companyDirectory => _companyDirectory;
   List<InvitationModel> get invitations => _invitations;
   List<Map<String, dynamic>> get monthlyChart => _monthlyChart;
   List<MonthlyEarning> get monthlyEarnings => _monthlyEarnings;
   UserModel? get profile => _profile;
+  bool get isCommissionRestricted => _commissionRestricted;
+  String? get commissionRestrictionReason => _commissionRestrictionReason;
   String get status => _status;
 
   int get totalMaterialsCount => _materials.length;
@@ -289,6 +297,23 @@ class SupplierViewModel extends ChangeNotifier {
     loadLinkedCompanies();
     loadInvitations();
     loadNotificationPreferences();
+    _ensureSupplierRestrictionWatch();
+  }
+
+  void _ensureSupplierRestrictionWatch() {
+    final uid = _supplierUid;
+    if (uid == null) return;
+    _supplierRestrictionSub?.cancel();
+    _supplierRestrictionSub = _db.collection('suppliers').doc(uid).snapshots().listen(
+      (snap) {
+        final data = snap.data();
+        _commissionRestricted = data?['commissionRestricted'] == true;
+        _commissionRestrictionReason =
+            data?['commissionRestrictionReason'] as String?;
+        notifyListeners();
+      },
+      onError: (_) {},
+    );
   }
 
   static const Map<String, bool> defaultNotificationPrefs = {
@@ -360,8 +385,10 @@ class SupplierViewModel extends ChangeNotifier {
     _materialsSubscription?.cancel();
     _ordersSubscription?.cancel();
     _earningsSubscription?.cancel();
+    _unsettledSubscription?.cancel();
     _invitationsSubscription?.cancel();
     _ratingsSubscription?.cancel();
+    _supplierRestrictionSub?.cancel();
     _stopPartnershipStatusWatch();
   }
 
@@ -1183,7 +1210,15 @@ class SupplierViewModel extends ChangeNotifier {
       return;
     }
     _earningsSubscription?.cancel();
+    _unsettledSubscription?.cancel();
     try {
+      _unsettledSubscription = _transactionRepo
+          .watchSupplierUnsettledTransactions(_supplierUid!)
+          .listen((txs) {
+            _unsettledTransactions = txs;
+            notifyListeners();
+          }, onError: (e) => _onDashboardStreamError('earnings', e));
+
       _earningsSubscription = _transactionRepo
           .watchSupplierEarnings(_supplierUid!, month)
           .listen((txs) {
@@ -1494,55 +1529,59 @@ class SupplierViewModel extends ChangeNotifier {
   }
 
   // --- RFQ / Bulk Quotes ---
-  Stream<List<RfqModel>> streamOpenRfqsForSupplier() async* {
+  Stream<List<RfqModel>> streamOpenRfqsForSupplier() {
     if (_supplierUid == null) {
-      yield const [];
-      return;
+      return Stream.value(const []);
     }
 
-    final supplierDoc =
-        await _db.collection('suppliers').doc(_supplierUid).get();
-    final supplier = supplierDoc.data();
-    final status = supplier?['status']?.toString().toLowerCase() ?? '';
-    if (supplier == null || (status != 'active' && status != 'approved')) {
-      yield const [];
-      return;
-    }
+    return _db.collection('suppliers').doc(_supplierUid).snapshots().asyncExpand(
+      (supplierSnap) {
+        final supplier = supplierSnap.data();
+        final status = supplier?['status']?.toString().toLowerCase() ?? '';
+        if (supplier == null || (status != 'active' && status != 'approved')) {
+          return Stream.value(const <RfqModel>[]);
+        }
+        if (supplier['commissionRestricted'] == true) {
+          return Stream.value(const <RfqModel>[]);
+        }
 
-    List<String> strings(Object? value) =>
-        value is List
-            ? value.map((item) => item.toString().trim().toLowerCase()).toList()
-            : const [];
+        List<String> strings(Object? value) =>
+            value is List
+                ? value
+                    .map((item) => item.toString().trim().toLowerCase())
+                    .toList()
+                : const [];
 
-    final declared = strings(supplier['declaredCategories']);
-    final categories =
-        declared.isNotEmpty ? declared : strings(supplier['categories']);
-    final coverage = strings(supplier['deliveryCoverageAreas']);
-    final supplierCity =
-        supplier['city']?.toString().trim().toLowerCase() ?? '';
-    if (categories.isEmpty || (coverage.isEmpty && supplierCity.isEmpty)) {
-      yield const [];
-      return;
-    }
+        final declared = strings(supplier['declaredCategories']);
+        final categories =
+            declared.isNotEmpty ? declared : strings(supplier['categories']);
+        final coverage = strings(supplier['deliveryCoverageAreas']);
+        final supplierCity =
+            supplier['city']?.toString().trim().toLowerCase() ?? '';
+        if (categories.isEmpty || (coverage.isEmpty && supplierCity.isEmpty)) {
+          return Stream.value(const <RfqModel>[]);
+        }
 
-    yield* _db
-        .collection('rfqs')
-        .where('status', isEqualTo: 'open')
-        .snapshots()
-        .map((snap) {
-          final matches =
-              snap.docs
-                  .map((doc) => RfqModel.fromMap(doc.id, doc.data()))
-                  .where((rfq) {
-                    final category = rfq.category.trim().toLowerCase();
-                    final city = rfq.city.trim().toLowerCase();
-                    return categories.contains(category) &&
-                        (coverage.contains(city) || supplierCity == city);
-                  })
-                  .toList();
-          matches.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-          return matches;
-        });
+        return _db
+            .collection('rfqs')
+            .where('status', isEqualTo: 'open')
+            .snapshots()
+            .map((snap) {
+              final matches =
+                  snap.docs
+                      .map((doc) => RfqModel.fromMap(doc.id, doc.data()))
+                      .where((rfq) {
+                        final category = rfq.category.trim().toLowerCase();
+                        final city = rfq.city.trim().toLowerCase();
+                        return categories.contains(category) &&
+                            (coverage.contains(city) || supplierCity == city);
+                      })
+                      .toList();
+              matches.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+              return matches;
+            });
+      },
+    );
   }
 
   Future<void> submitRfqBid({

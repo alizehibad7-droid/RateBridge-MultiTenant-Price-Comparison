@@ -1,5 +1,6 @@
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
+const { isSupplierCommissionRestricted } = require('./commission_restrictions');
 
 const db = admin.firestore();
 const activeOrderStatuses = [
@@ -42,6 +43,10 @@ function effectivePlan(companyData, subscriptionData) {
 function isActiveSupplier(supplier) {
   const status = normalize(supplier.status);
   return status === 'active' || status === 'approved';
+}
+
+function canSupplierBid(supplier) {
+  return isActiveSupplier(supplier) && !isSupplierCommissionRestricted(supplier);
 }
 
 function stringList(value) {
@@ -174,7 +179,7 @@ exports.createRfq = functions.https.onCall(async (data, context) => {
   const suppliers = await db.collection('suppliers').get();
   const matches = suppliers.docs.filter((doc) => {
     const supplier = doc.data();
-    return isActiveSupplier(supplier) && supplierMatches(supplier, category, city);
+    return canSupplierBid(supplier) && supplierMatches(supplier, category, city);
   });
 
   const writer = db.bulkWriter();
@@ -239,6 +244,12 @@ exports.submitRfqBid = functions.https.onCall(async (data, context) => {
       throw new functions.https.HttpsError(
         'permission-denied',
         'Your supplier account must be approved before bidding.',
+      );
+    }
+    if (isSupplierCommissionRestricted(supplierDoc.data())) {
+      throw new functions.https.HttpsError(
+        'failed-precondition',
+        'Your account is restricted due to overdue commission. Settle outstanding commission from Earnings to submit bids again.',
       );
     }
 

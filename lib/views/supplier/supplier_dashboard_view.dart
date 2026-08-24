@@ -286,6 +286,46 @@ class _SupplierDashboardViewState extends State<SupplierDashboardView> {
                           todayCount: _todaysOrdersCount(orders),
                           confirmedCount: _confirmedThisMonth(orders),
                         ),
+                        if (viewModel.isCommissionRestricted)
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                            child: Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color: FieldColors.statusDanger.withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: FieldColors.statusDanger.withValues(alpha: 0.35),
+                                ),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Account restricted — commission overdue',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      color: FieldColors.statusDanger,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  const Text(
+                                    'Your listings are hidden from buyers and you cannot submit new bulk-quote bids until outstanding commission is settled. Existing orders are not affected.',
+                                    style: TextStyle(fontSize: 12),
+                                  ),
+                                  const SizedBox(height: 10),
+                                  Align(
+                                    alignment: Alignment.centerRight,
+                                    child: TextButton(
+                                      onPressed: () => context.push(RouteNames.supplierEarnings),
+                                      child: const Text('Go to Earnings'),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
                         if (viewModel.companies.isNotEmpty) ...[
                           if (viewModel.companies.length > 1)
                             Padding(

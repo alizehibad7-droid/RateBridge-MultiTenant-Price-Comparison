@@ -11,6 +11,29 @@ class TransactionRepository {
 
   TransactionRepository(FirestoreService _);
 
+  /// Live stream of every unsettled commission record for [supplierUid],
+  /// regardless of month.
+  Stream<List<TransactionModel>> watchSupplierUnsettledTransactions(
+    String supplierUid,
+  ) {
+    try {
+      return _db
+          .collection(FirestorePaths.transactionsCol)
+          .where('supplierUid', isEqualTo: supplierUid)
+          .where('status', isEqualTo: 'unsettled')
+          .snapshots()
+          .map((snapshot) {
+        final txs = snapshot.docs
+            .map((d) => TransactionModel.fromMap(d.id, d.data()))
+            .toList()
+          ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        return txs;
+      });
+    } on FirebaseException catch (e) {
+      throw AppException('Failed to watch unsettled commissions: ${e.message}');
+    }
+  }
+
   Stream<List<TransactionModel>> watchSupplierEarnings(
     String supplierUid,
     String month,

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../theme/admin_theme.dart';
 import 'admin_commission_ledger_view.dart';
+import 'admin_commission_policy_view.dart';
 import 'admin_payment_queue_view.dart';
 
 /// Finance hub: commission reconciliation + subscription payments.
@@ -11,7 +12,7 @@ class AdminFinanceView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const DefaultTabController(
-      length: 2,
+      length: 3,
       child: Column(
         children: [
           Material(
@@ -21,6 +22,7 @@ class AdminFinanceView extends StatelessWidget {
               tabs: [
                 Tab(text: 'Payment Queue'),
                 Tab(text: 'Commission Ledger'),
+                Tab(text: 'Commission Policy'),
               ],
             ),
           ),
@@ -29,6 +31,7 @@ class AdminFinanceView extends StatelessWidget {
               children: [
                 AdminPaymentQueueView(embedded: true),
                 AdminCommissionLedgerView(),
+                AdminCommissionPolicyView(),
               ],
             ),
           ),

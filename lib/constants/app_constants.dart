@@ -2,6 +2,9 @@
 class AppConstants {
   AppConstants._();
 
+  static const double defaultMaxOutstandingCommission = 50000;
+  static const int defaultMaxUnsettledAgeDays = 30;
+
   // Commission
   static const double commissionRate = 0.02;
 

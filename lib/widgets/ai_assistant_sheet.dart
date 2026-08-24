@@ -73,20 +73,24 @@ class _AiAssistantSheetState extends State<AiAssistantSheet> {
           .timeout(const Duration(seconds: 45));
 
       if (!mounted) return;
+      final reply = (response).toString().trim();
       setState(() {
         _messages.add(_ChatMsg(
-          response.trim().isEmpty
+          reply.isEmpty
               ? "Sorry, I couldn't process that. Please try again."
-              : response.trim(),
+              : reply,
           false,
         ));
         _isResponding = false;
       });
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
+      final errorText = e.toString().trim();
       setState(() {
         _messages.add(_ChatMsg(
-          "Sorry, I couldn't process that. Please try again.",
+          errorText.isEmpty || errorText.contains('TypeError')
+              ? "Sorry, I couldn't process that. Please try again."
+              : errorText,
           false,
         ));
         _isResponding = false;

@@ -67,8 +67,20 @@ class _SupplierEarningsViewState extends State<SupplierEarningsView> {
             return const SupplierListSkeleton(itemCount: 5, itemHeight: 72);
           }
 
-          final unsettledTransactions = viewModel.transactions.where((t) => t.isUnsettled).toList();
-          final unsettledCommission = unsettledTransactions.fold<double>(0, (sum, t) => sum + t.commissionAmount);
+          if (viewModel.error != null && viewModel.transactions.isEmpty) {
+            return SupplierEmptyState(
+              icon: Icons.error_outline,
+              title: 'Could not load earnings',
+              subtitle: viewModel.error!,
+            );
+          }
+
+          final unsettledTransactions = viewModel.unsettledTransactions;
+          final unsettledCommission = unsettledTransactions.fold<double>(
+            0,
+            (sum, t) => sum + t.commissionAmount,
+          );
+          final monthTransactions = viewModel.transactions;
 
           return ListView(
             padding: const EdgeInsets.all(24),
@@ -107,15 +119,29 @@ class _SupplierEarningsViewState extends State<SupplierEarningsView> {
                   child: Column(
                     children: [
                       Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text('Unsettled Commission', style: TextStyle(color: FieldColors.statusDanger, fontWeight: FontWeight.bold)),
-                              Text(CurrencyFormatter.formatPKR(unsettledCommission), style: AppTextStyles.h2.copyWith(color: FieldColors.statusDanger)),
-                            ],
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Unsettled Commission',
+                                  style: TextStyle(
+                                    color: FieldColors.statusDanger,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                Text(
+                                  CurrencyFormatter.formatPKR(unsettledCommission),
+                                  style: AppTextStyles.h2.copyWith(
+                                    color: FieldColors.statusDanger,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
+                          const SizedBox(width: 12),
                           ElevatedButton(
                             onPressed: () {
                               Navigator.push(
@@ -124,7 +150,9 @@ class _SupplierEarningsViewState extends State<SupplierEarningsView> {
                                   builder: (_) => PaymentMethodView(
                                     amount: unsettledCommission,
                                     type: PaymentType.commission,
-                                    relatedTransactionIds: unsettledTransactions.map((t) => t.txId).toList(),
+                                    relatedTransactionIds: unsettledTransactions
+                                        .map((t) => t.txId)
+                                        .toList(),
                                   ),
                                 ),
                               );
@@ -132,9 +160,13 @@ class _SupplierEarningsViewState extends State<SupplierEarningsView> {
                             style: ElevatedButton.styleFrom(
                               backgroundColor: FieldColors.statusDanger,
                               foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 12,
+                              ),
                             ),
                             child: const Text('PAY NOW'),
-                          )
+                          ),
                         ],
                       ),
                       const SizedBox(height: 12),
@@ -188,7 +220,7 @@ class _SupplierEarningsViewState extends State<SupplierEarningsView> {
               const SizedBox(height: 32),
               Text('Recent Transactions', style: AppTextStyles.h3),
               const SizedBox(height: 16),
-              if (viewModel.transactions.isEmpty)
+              if (monthTransactions.isEmpty)
                 SupplierEmptyState(
                   icon: Icons.receipt_long_outlined,
                   title: 'No transactions yet',
@@ -196,7 +228,7 @@ class _SupplierEarningsViewState extends State<SupplierEarningsView> {
                       'Transactions for $_monthLabel will appear here after orders are confirmed',
                 )
               else
-                ...viewModel.transactions.map(_buildTransactionItem),
+                ...monthTransactions.map(_buildTransactionItem),
             ],
           );
         },

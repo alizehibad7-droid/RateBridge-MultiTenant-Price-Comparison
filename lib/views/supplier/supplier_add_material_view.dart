@@ -27,18 +27,8 @@ class _SupplierAddMaterialViewState extends State<SupplierAddMaterialView> {
   static const _otherBrandValue = '__other_brand__';
   static const _otherGradeValue = '__other_grade__';
 
-  static const _stockStatuses = [
-    'Available',
-    'Limited Stock',
-    'Out of Stock',
-  ];
-
-  static const _deliveryTimes = [
-    'Same Day',
-    'Next Day',
-    '2-3 Days',
-    'Within a Week',
-  ];
+  static const _stockStatuses = MaterialFormDefaults.stockStatuses;
+  static const _deliveryTimes = MaterialFormDefaults.deliveryTimes;
 
   static const _deliveryChargeOptions = [
     'Free Delivery',

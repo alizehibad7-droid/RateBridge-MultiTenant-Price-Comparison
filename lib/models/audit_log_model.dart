@@ -39,6 +39,12 @@ class AuditLogModel {
         return const {'reactivate_supplier'};
       case 'settle_commission':
         return const {'settle_commission'};
+      case 'restrict_supplier_commission':
+        return const {'restrict_supplier_commission'};
+      case 'lift_commission_restriction':
+        return const {'lift_commission_restriction'};
+      case 'update_commission_settings':
+        return const {'update_commission_settings'};
       default:
         return {selected};
     }

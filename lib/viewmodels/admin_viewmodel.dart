@@ -7,6 +7,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../models/company_model.dart';
 import '../models/user_model.dart';
 import '../models/category_model.dart';
+import '../models/commission_settings_model.dart';
+import '../constants/firestore_paths.dart';
 import '../utils/invite_code_generator.dart';
 import 'auth_viewmodel.dart';
 
@@ -559,4 +561,121 @@ class AdminViewModel extends ChangeNotifier {
             .toList()
           ..sort((a, b) => a.name.compareTo(b.name)),
       );
+
+  Future<CommissionSettingsModel> loadCommissionSettings() async {
+    final doc = await _db.doc(FirestorePaths.commissionSettingsDoc).get();
+    return CommissionSettingsModel.fromMap(doc.data());
+  }
+
+  Stream<CommissionSettingsModel> watchCommissionSettings() {
+    return _db.doc(FirestorePaths.commissionSettingsDoc).snapshots().map(
+      (doc) => CommissionSettingsModel.fromMap(doc.data()),
+    );
+  }
+
+  Future<void> saveCommissionSettings({
+    required double maxOutstandingAmount,
+    required int maxUnsettledAgeDays,
+  }) async {
+    final actorId = _uid ?? FirebaseAuth.instance.currentUser?.uid;
+    if (actorId == null) return;
+
+    final settings = CommissionSettingsModel(
+      maxOutstandingAmount: maxOutstandingAmount,
+      maxUnsettledAgeDays: maxUnsettledAgeDays,
+    );
+    await _db
+        .doc(FirestorePaths.commissionSettingsDoc)
+        .set(settings.toMap(actorId), SetOptions(merge: true));
+
+    await _logAction(
+      actionType: 'update_commission_settings',
+      targetType: 'settings',
+      targetId: FirestorePaths.commissionSettingsDoc,
+      description:
+          'Updated commission thresholds to Rs ${maxOutstandingAmount.toStringAsFixed(0)} outstanding and $maxUnsettledAgeDays day age limit',
+    );
+  }
+
+  Stream<List<SupplierCommissionMonitorRow>> watchRestrictedSuppliers() {
+    return _db
+        .collection('suppliers')
+        .where('commissionRestricted', isEqualTo: true)
+        .snapshots()
+        .map(
+          (snap) => snap.docs
+              .map(
+                (doc) => SupplierCommissionMonitorRow.fromMap(
+                  doc.id,
+                  doc.data(),
+                ),
+              )
+              .toList()
+            ..sort((a, b) => b.outstandingAmount.compareTo(a.outstandingAmount)),
+        );
+  }
+
+  Stream<List<SupplierCommissionMonitorRow>> watchApproachingRestrictionSuppliers() {
+    return _db
+        .collection('suppliers')
+        .where('commissionReminderStage', whereIn: ['gentle', 'urgent'])
+        .snapshots()
+        .map(
+          (snap) => snap.docs
+              .map(
+                (doc) => SupplierCommissionMonitorRow.fromMap(
+                  doc.id,
+                  doc.data(),
+                ),
+              )
+              .where((row) => !row.restricted)
+              .toList()
+            ..sort((a, b) => b.oldestUnsettledDays.compareTo(a.oldestUnsettledDays)),
+        );
+  }
+
+  Future<void> manuallyRestrictSupplierCommission({
+    required String supplierUid,
+    required String supplierName,
+    required String reason,
+  }) async {
+    await _db.collection('suppliers').doc(supplierUid).set({
+      'commissionRestricted': true,
+      'commissionRestrictionReason': 'manual',
+      'commissionRestrictionOverride': 'force_restrict',
+      'commissionRestrictedAt': FieldValue.serverTimestamp(),
+      'commissionStatusUpdatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+
+    await _logAction(
+      actionType: 'restrict_supplier_commission',
+      targetType: 'supplier',
+      targetId: supplierUid,
+      description: 'Manually restricted $supplierName from marketplace visibility and RFQ bidding',
+      reason: reason,
+    );
+  }
+
+  Future<void> manuallyLiftCommissionRestriction({
+    required String supplierUid,
+    required String supplierName,
+    required String reason,
+  }) async {
+    await _db.collection('suppliers').doc(supplierUid).set({
+      'commissionRestricted': false,
+      'commissionRestrictionReason': null,
+      'commissionRestrictionOverride': 'force_allow',
+      'commissionRestrictedAt': null,
+      'commissionReminderStage': 'none',
+      'commissionStatusUpdatedAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+
+    await _logAction(
+      actionType: 'lift_commission_restriction',
+      targetType: 'supplier',
+      targetId: supplierUid,
+      description: 'Manually lifted commission restriction for $supplierName',
+      reason: reason,
+    );
+  }
 }
