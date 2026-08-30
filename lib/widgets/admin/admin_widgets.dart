@@ -33,7 +33,7 @@ class AdminStatCard extends StatelessWidget {
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.15),
+              color: color.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(icon, color: color, size: 18),
@@ -43,12 +43,12 @@ class AdminStatCard extends StatelessWidget {
             value,
             style: GoogleFonts.plusJakartaSans(
               fontSize: 24,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w800,
               color: AdminColors.navy,
             ),
           ),
           const SizedBox(height: 2),
-          Text(label, style: AdminTheme.mutedStyle(size: 12)),
+          Text(label, style: AdminTheme.mutedStyle(size: 11).copyWith(fontWeight: FontWeight.w600)),
         ],
       ),
     );
@@ -58,12 +58,14 @@ class AdminStatCard extends StatelessWidget {
 /// Section header with optional trailing action.
 class AdminSectionHeader extends StatelessWidget {
   final String title;
+  final IconData? icon;
   final String? actionLabel;
   final VoidCallback? onAction;
 
   const AdminSectionHeader({
     super.key,
     required this.title,
+    this.icon,
     this.actionLabel,
     this.onAction,
   });
@@ -73,11 +75,20 @@ class AdminSectionHeader extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(title, style: AdminTheme.titleStyle()),
+        Row(
+          children: [
+            if (icon != null) ...[
+              Icon(icon, size: 20, color: AdminColors.navy),
+              const SizedBox(width: 8),
+            ],
+            Text(title, style: AdminTheme.titleStyle(size: 16)),
+          ],
+        ),
         if (actionLabel != null)
-          TextButton(
+          TextButton.icon(
             onPressed: onAction,
-            child: Text(actionLabel!),
+            icon: const Icon(Icons.arrow_forward_rounded, size: 14),
+            label: Text(actionLabel!),
           ),
       ],
     );
@@ -95,20 +106,35 @@ class StatusChip extends StatelessWidget {
     final style = AdminTheme.statusColors(status);
     final label = status.isEmpty
         ? status
-        : status[0].toUpperCase() + status.substring(1);
+        : status[0].toUpperCase() + status.substring(1).replaceAll('_', ' ');
+        
+    IconData statusIcon = Icons.info_outline_rounded;
+    if (status == 'active' || status == 'confirmed' || status == 'approved') statusIcon = Icons.check_circle_rounded;
+    if (status == 'pending') statusIcon = Icons.hourglass_empty_rounded;
+    if (status == 'rejected' || status == 'suspended' || status == 'failed') statusIcon = Icons.cancel_rounded;
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         color: style.bg,
         borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: style.fg.withValues(alpha: 0.2)),
       ),
-      child: Text(
-        label,
-        style: GoogleFonts.plusJakartaSans(
-          color: style.fg,
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(statusIcon, size: 10, color: style.fg),
+          const SizedBox(width: 4),
+          Text(
+            label.toUpperCase(),
+            style: GoogleFonts.plusJakartaSans(
+              color: style.fg,
+              fontSize: 9,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.5,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -118,27 +144,47 @@ class StatusChip extends StatelessWidget {
 class AdminEmptyState extends StatelessWidget {
   final IconData icon;
   final String message;
+  final String? subMessage;
 
   const AdminEmptyState({
     super.key,
     required this.icon,
     required this.message,
+    this.subMessage,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 48),
-      child: Column(
-        children: [
-          Icon(icon, size: 40, color: AdminColors.textGrey),
-          const SizedBox(height: 12),
-          Text(
-            message,
-            style: AdminTheme.mutedStyle(),
-            textAlign: TextAlign.center,
-          ),
-        ],
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 64, horizontal: 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: AdminColors.navy.withValues(alpha: 0.05),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, size: 48, color: AdminColors.textGrey.withValues(alpha: 0.5)),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              message,
+              style: AdminTheme.titleStyle(size: 18).copyWith(color: AdminColors.navy.withValues(alpha: 0.7)),
+              textAlign: TextAlign.center,
+            ),
+            if (subMessage != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                subMessage!,
+                style: AdminTheme.mutedStyle(size: 13),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -162,28 +208,34 @@ class ApprovalActions extends StatelessWidget {
     final reason = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Reject application'),
+        title: Row(
+          children: [
+            const Icon(Icons.cancel_outlined, color: AdminColors.red),
+            const SizedBox(width: 10),
+            const Text('Reject Application'),
+          ],
+        ),
         content: TextField(
           controller: controller,
           maxLines: 3,
           decoration: AdminTheme.inputDecoration(
-            hintText: 'Reason for rejection (shown to the applicant)',
+            labelText: 'Reason for rejection',
+            hintText: 'This will be shown to the applicant...',
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: const Text('CANCEL'),
           ),
-          TextButton(
+          ElevatedButton.icon(
             onPressed: () {
               if (controller.text.trim().isEmpty) return;
               Navigator.pop(context, controller.text.trim());
             },
-            child: Text(
-              'Reject',
-              style: GoogleFonts.plusJakartaSans(color: AdminColors.red),
-            ),
+            icon: const Icon(Icons.close_rounded, size: 18),
+            label: const Text('REJECT'),
+            style: ElevatedButton.styleFrom(backgroundColor: AdminColors.red),
           ),
         ],
       ),
@@ -201,27 +253,29 @@ class ApprovalActions extends StatelessWidget {
         Expanded(
           child: OutlinedButton.icon(
             onPressed: isLoading ? null : () => _showRejectDialog(context),
-            icon: const Icon(Icons.close, size: 16),
-            label: const Text('Reject'),
-            style: AdminTheme.destructiveButtonStyle(),
+            icon: const Icon(Icons.close_rounded, size: 18),
+            label: const Text('REJECT'),
+            style: AdminTheme.destructiveButtonStyle(height: 46),
           ),
         ),
-        const SizedBox(width: 10),
+        const SizedBox(width: 12),
         Expanded(
           child: ElevatedButton.icon(
             onPressed: isLoading ? null : onApprove,
             icon: isLoading
                 ? const SizedBox(
-                    width: 14,
-                    height: 14,
+                    width: 18,
+                    height: 18,
                     child: CircularProgressIndicator(
                       color: Colors.white,
                       strokeWidth: 2,
                     ),
                   )
-                : const Icon(Icons.check, size: 16),
-            label: const Text('Approve'),
-            style: AdminTheme.primaryButtonStyle(height: 46),
+                : const Icon(Icons.check_rounded, size: 18),
+            label: const Text('APPROVE'),
+            style: AdminTheme.primaryButtonStyle(height: 46).copyWith(
+              backgroundColor: WidgetStateProperty.all(AdminColors.green),
+            ),
           ),
         ),
       ],
@@ -246,8 +300,16 @@ class AdminApprovalSection extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         AdminSectionLabel(title),
-        const SizedBox(height: 10),
-        ...children,
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: AdminColors.screenBg.withValues(alpha: 0.5),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: AdminColors.border.withValues(alpha: 0.5)),
+          ),
+          child: Column(children: children),
+        ),
       ],
     );
   }
@@ -268,24 +330,25 @@ class AdminDetailRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final display = value.trim().isEmpty ? '—' : value.trim();
+    final display = value.trim().isEmpty ? 'Not Provided' : value.trim();
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 132,
-            child: Text(label, style: AdminTheme.mutedStyle(size: 12)),
+            width: 120,
+            child: Text(label, style: AdminTheme.mutedStyle(size: 11).copyWith(fontWeight: FontWeight.w600)),
           ),
+          const SizedBox(width: 8),
           Expanded(
             child: Text(
               display,
               maxLines: maxLines,
               overflow: TextOverflow.ellipsis,
               style: GoogleFonts.plusJakartaSans(
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
                 color: AdminColors.navy,
               ),
             ),
@@ -310,26 +373,27 @@ class AdminChipList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (items.isEmpty) {
-      return Text('—', style: AdminTheme.mutedStyle(size: 13));
+      return Text('None declared', style: AdminTheme.mutedStyle(size: 12).copyWith(fontStyle: FontStyle.italic));
     }
     final chipColor = color ?? AdminColors.navy;
     return Wrap(
-      spacing: 8,
-      runSpacing: 8,
+      spacing: 6,
+      runSpacing: 6,
       children: items.map((item) {
         return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
           decoration: BoxDecoration(
             color: chipColor.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: chipColor.withValues(alpha: 0.25)),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: chipColor.withValues(alpha: 0.2)),
           ),
           child: Text(
             item,
             style: GoogleFonts.plusJakartaSans(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
+              fontSize: 10,
+              fontWeight: FontWeight.w800,
               color: chipColor,
+              letterSpacing: 0.3,
             ),
           ),
         );
@@ -356,15 +420,23 @@ class AdminDocumentThumbnail extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            label,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: AdminTheme.mutedStyle(size: 11),
+          Row(
+            children: [
+              const Icon(Icons.description_rounded, size: 12, color: AdminColors.textGrey),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  label.toUpperCase(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AdminTheme.mutedStyle(size: 10).copyWith(fontWeight: FontWeight.w800, letterSpacing: 0.5),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 8),
           AspectRatio(
-            aspectRatio: 4 / 3,
+            aspectRatio: 16 / 10,
             child: Material(
               color: AdminColors.screenBg,
               borderRadius: BorderRadius.circular(10),
@@ -390,6 +462,8 @@ class AdminDocumentThumbnail extends StatelessWidget {
                               fit: BoxFit.cover,
                               errorBuilder: (_, __, ___) =>
                                   const _MissingDocPlaceholder(),
+                              loadingBuilder: (context, child, progress) =>
+                                  progress == null ? child : const Center(child: CircularProgressIndicator(strokeWidth: 2)),
                             ),
                             Positioned(
                               right: 6,
@@ -401,9 +475,9 @@ class AdminDocumentThumbnail extends StatelessWidget {
                                   borderRadius: BorderRadius.circular(6),
                                 ),
                                 child: const Icon(
-                                  Icons.zoom_in,
+                                  Icons.zoom_in_rounded,
                                   color: Colors.white,
-                                  size: 14,
+                                  size: 16,
                                 ),
                               ),
                             ),
@@ -429,10 +503,10 @@ class _MissingDocPlaceholder extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.image_not_supported_outlined,
-              size: 22, color: AdminColors.textGrey),
+          Icon(Icons.image_not_supported_rounded,
+              size: 24, color: AdminColors.textGrey.withValues(alpha: 0.5)),
           const SizedBox(height: 4),
-          Text('Not uploaded', style: AdminTheme.mutedStyle(size: 10)),
+          Text('NO DOCUMENT', style: AdminTheme.mutedStyle(size: 9).copyWith(fontWeight: FontWeight.bold)),
         ],
       ),
     );
@@ -451,7 +525,7 @@ class AdminDocumentThumbnailRow extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         for (var i = 0; i < documents.length; i++) ...[
-          if (i > 0) const SizedBox(width: 10),
+          if (i > 0) const SizedBox(width: 12),
           AdminDocumentThumbnail(
             label: documents[i].label,
             imageUrl: documents[i].url,
@@ -471,7 +545,7 @@ class AdminCard extends StatelessWidget {
   const AdminCard({
     super.key,
     required this.child,
-    this.padding = const EdgeInsets.all(16),
+    this.padding = const EdgeInsets.all(20),
     this.margin,
   });
 

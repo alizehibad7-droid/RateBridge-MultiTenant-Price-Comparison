@@ -225,13 +225,7 @@ class _FieldCompareViewState extends State<FieldCompareView> {
                                                 child: _SupplierCompareCard(
                                                   listing: listing,
                                                   badge: vm.badgeFor(listing),
-                                                  aiInsightLine:
-                                                      vm.badgeFor(listing) ==
-                                                              CompareBadgeType
-                                                                  .bestValue &&
-                                                          vm.showAiCard
-                                                      ? vm.aiRecommendation
-                                                      : null,
+                                                  aiInsightLine: null,
                                                   onOrder: () =>
                                                       _openPlaceOrder(listing),
                                                   onViewProfile: () =>

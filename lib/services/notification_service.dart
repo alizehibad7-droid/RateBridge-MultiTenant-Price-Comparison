@@ -1,11 +1,11 @@
+import 'dart:developer' as developer;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../constants/app_constants.dart';
-import '../constants/firestore_paths.dart';
 import '../models/notification_model.dart';
 import '../models/user_model.dart';
 import '../repositories/notification_repository.dart';
 
-/// Central helper for creating in-app notifications.
+/// Central helper for creating in-app notifications in the top-level 'notifications' collection.
 /// FCM pushes are triggered server-side via Cloud Functions when these docs are created.
 class NotificationService {
   final NotificationRepository _repo;
@@ -24,42 +24,48 @@ class NotificationService {
   static const typeApproval = 'approval';
 
   Future<void> _create({
-    required String userId,
+    required String recipientUserId,
+    required String recipientRole,
     required String type,
     required String title,
-    required String body,
-    String? path,
+    required String message,
+    String? senderUserId,
+    String? companyId,
     Map<String, dynamic> data = const {},
   }) async {
-    final id = '${userId}_${DateTime.now().microsecondsSinceEpoch}';
+    final id = '${recipientUserId}_${DateTime.now().microsecondsSinceEpoch}';
+    
+    // Ensure data contains useful info for navigation
+    final extendedData = Map<String, dynamic>.from(data);
+    if (companyId != null) extendedData['companyId'] = companyId;
+    if (senderUserId != null) extendedData['senderUserId'] = senderUserId;
+
     await _repo.createNotification(
       NotificationModel(
         notifId: id,
-        userId: userId,
+        recipientUserId: recipientUserId,
+        recipientRole: recipientRole,
         type: type,
         title: title,
-        body: body,
-        data: data,
+        message: message,
+        data: extendedData,
         isRead: false,
         createdAt: DateTime.now(),
+        senderUserId: senderUserId,
+        companyId: companyId,
       ),
-      path: path,
     );
   }
 
-  /// Helper to determine notification path based on user role and company.
-  Future<String?> _getPathForUser(String userId) async {
+  /// Helper to get user info for notification delivery.
+  Future<UserModel?> _getUser(String userId) async {
     try {
-      final doc = await _db.collection(FirestorePaths.usersCol).doc(userId).get();
+      final doc = await _db.collection('users').doc(userId).get();
       if (!doc.exists) return null;
-      final user = UserModel.fromMap(doc.data()!);
-      
-      final role = user.role.toLowerCase();
-      if (role == 'admin' || role == 'administrator') return FirestorePaths.adminNotificationsCol;
-      if (role == 'supplier') return FirestorePaths.supplierNotificationsCol(userId);
-      if (user.companyId.isNotEmpty) return FirestorePaths.companyNotificationsCol(user.companyId);
-    } catch (_) {}
-    return null;
+      return UserModel.fromMap(doc.data()!);
+    } catch (_) {
+      return null;
+    }
   }
 
   // --- Order & Delivery Notifications ---
@@ -72,15 +78,17 @@ class NotificationService {
     required String fieldUserName,
   }) async {
     await _create(
-      userId: ceoUid,
+      recipientUserId: ceoUid,
+      recipientRole: 'CEO',
       type: typeOrderUpdate,
       title: 'Order awaiting approval',
-      body: '$fieldUserName requested $materialName — review and approve',
-      path: FirestorePaths.companyNotificationsCol(companyId),
+      message: '$fieldUserName requested $materialName — review and approve',
+      companyId: companyId,
       data: {
         'orderId': orderId,
-        'companyId': companyId,
         'status': AppConstants.statusPendingApproval,
+        'relatedId': orderId,
+        'relatedCollection': 'orders',
       },
     );
   }
@@ -93,16 +101,17 @@ class NotificationService {
     required double totalAmount,
   }) async {
     await _create(
-      userId: ceoUid,
+      recipientUserId: ceoUid,
+      recipientRole: 'CEO',
       type: typeOrderUpdate,
       title: 'Order Auto-Approved',
-      body:
-          'Order for $materialName (Rs. ${totalAmount.toStringAsFixed(0)}) was auto-approved per your threshold.',
-      path: FirestorePaths.companyNotificationsCol(companyId),
+      message: 'Order for $materialName (Rs. ${totalAmount.toStringAsFixed(0)}) was auto-approved per your threshold.',
+      companyId: companyId,
       data: {
         'orderId': orderId,
-        'companyId': companyId,
         'status': AppConstants.statusPending,
+        'relatedId': orderId,
+        'relatedCollection': 'orders',
       },
     );
   }
@@ -115,15 +124,17 @@ class NotificationService {
     required String supplierName,
   }) async {
     await _create(
-      userId: fieldUserUid,
+      recipientUserId: fieldUserUid,
+      recipientRole: 'Field User',
       type: typeOrderUpdate,
       title: 'Order accepted',
-      body: '$supplierName accepted your order for $materialName',
-      path: FirestorePaths.companyNotificationsCol(companyId),
+      message: '$supplierName accepted your order for $materialName',
+      companyId: companyId,
       data: {
         'orderId': orderId,
-        'companyId': companyId,
         'status': 'accepted',
+        'relatedId': orderId,
+        'relatedCollection': 'orders',
       },
     );
   }
@@ -138,15 +149,17 @@ class NotificationService {
   }) async {
     final reasonText = reason.trim().isEmpty ? '' : ': ${reason.trim()}';
     await _create(
-      userId: fieldUserUid,
+      recipientUserId: fieldUserUid,
+      recipientRole: 'Field User',
       type: typeOrderUpdate,
       title: 'Order rejected',
-      body: '$supplierName rejected your order for $materialName$reasonText',
-      path: FirestorePaths.companyNotificationsCol(companyId),
+      message: '$supplierName rejected your order for $materialName$reasonText',
+      companyId: companyId,
       data: {
         'orderId': orderId,
-        'companyId': companyId,
         'status': 'rejected',
+        'relatedId': orderId,
+        'relatedCollection': 'orders',
         if (reason.trim().isNotEmpty) 'rejectionReason': reason.trim(),
       },
     );
@@ -160,15 +173,17 @@ class NotificationService {
     required String supplierName,
   }) async {
     await _create(
-      userId: fieldUserUid,
+      recipientUserId: fieldUserUid,
+      recipientRole: 'Field User',
       type: typeOrderUpdate,
       title: 'Order delivered',
-      body: 'Your order has been delivered. Please confirm.',
-      path: FirestorePaths.companyNotificationsCol(companyId),
+      message: 'Your order for $materialName has been delivered by $supplierName. Please confirm.',
+      companyId: companyId,
       data: {
         'orderId': orderId,
-        'companyId': companyId,
         'status': 'delivered',
+        'relatedId': orderId,
+        'relatedCollection': 'orders',
       },
     );
   }
@@ -181,15 +196,17 @@ class NotificationService {
     required String fieldUserName,
   }) async {
     await _create(
-      userId: supplierId,
+      recipientUserId: supplierId,
+      recipientRole: 'Supplier',
       type: typeNewOrder,
       title: 'New order received',
-      body: '$fieldUserName ordered $materialName',
-      path: FirestorePaths.supplierNotificationsCol(supplierId),
+      message: '$fieldUserName ordered $materialName',
+      companyId: companyId,
       data: {
         'orderId': orderId,
-        'companyId': companyId,
         'status': 'pending',
+        'relatedId': orderId,
+        'relatedCollection': 'orders',
       },
     );
   }
@@ -202,15 +219,17 @@ class NotificationService {
     required String fieldUserName,
   }) async {
     await _create(
-      userId: supplierId,
+      recipientUserId: supplierId,
+      recipientRole: 'Supplier',
       type: typeOrderUpdate,
       title: 'Delivery confirmed',
-      body: '$fieldUserName confirmed delivery of $materialName',
-      path: FirestorePaths.supplierNotificationsCol(supplierId),
+      message: '$fieldUserName confirmed delivery of $materialName',
+      companyId: companyId,
       data: {
         'orderId': orderId,
-        'companyId': companyId,
         'status': 'confirmed',
+        'relatedId': orderId,
+        'relatedCollection': 'orders',
       },
     );
   }
@@ -223,20 +242,55 @@ class NotificationService {
     required String fieldUserName,
   }) async {
     await _create(
-      userId: supplierId,
+      recipientUserId: supplierId,
+      recipientRole: 'Supplier',
       type: typeOrderUpdate,
       title: 'Order cancelled',
-      body: '$fieldUserName cancelled the order for $materialName',
-      path: FirestorePaths.supplierNotificationsCol(supplierId),
+      message: '$fieldUserName cancelled the order for $materialName',
+      companyId: companyId,
       data: {
         'orderId': orderId,
-        'companyId': companyId,
         'status': 'cancelled',
+        'relatedId': orderId,
+        'relatedCollection': 'orders',
       },
     );
   }
 
   // --- Admin Notifications ---
+
+  Future<void> notifyAllAdmins({
+    required String title,
+    required String message,
+    String? type,
+    Map<String, dynamic> data = const {},
+  }) async {
+    try {
+      // Expanded role matching to handle case variations in Firestore
+      final query = await _db
+          .collection('users')
+          .where('role', whereIn: [
+            'Admin', 'admin', 'ADMIN', 
+            'Administrator', 'administrator', 'ADMINISTRATOR'
+          ])
+          .get();
+      
+      developer.log('Notifying ${query.docs.length} admins: $title');
+      
+      for (var doc in query.docs) {
+        await _create(
+          recipientUserId: doc.id,
+          recipientRole: 'Admin',
+          type: type ?? typeApproval,
+          title: title,
+          message: message,
+          data: data,
+        );
+      }
+    } catch (e) {
+      developer.log('Error notifying all admins: $e');
+    }
+  }
 
   Future<void> notifyNewRegistration({
     required String adminUid,
@@ -245,12 +299,17 @@ class NotificationService {
     required String targetUid,
   }) async {
     await _create(
-      userId: adminUid,
+      recipientUserId: adminUid,
+      recipientRole: 'Admin',
       type: typeApproval,
       title: 'New $role Registration',
-      body: '$name is awaiting approval',
-      path: FirestorePaths.adminNotificationsCol,
-      data: {'uid': targetUid, 'role': role},
+      message: '$name is awaiting approval',
+      data: {
+        'uid': targetUid, 
+        'role': role,
+        'relatedId': targetUid,
+        'relatedCollection': 'users',
+      },
     );
   }
 
@@ -259,23 +318,17 @@ class NotificationService {
     required String role,
     required String targetUid,
   }) async {
-    try {
-      final query = await _db
-          .collection(FirestorePaths.usersCol)
-          .where('role', whereIn: ['Admin', 'admin', 'Administrator', 'administrator'])
-          .get();
-      
-      for (var doc in query.docs) {
-        await notifyNewRegistration(
-          adminUid: doc.id,
-          name: name,
-          role: role,
-          targetUid: targetUid,
-        );
-      }
-    } catch (e) {
-      print('Error notifying admins: $e');
-    }
+    await notifyAllAdmins(
+      title: 'New $role Registration',
+      message: '$name is awaiting approval',
+      type: typeApproval,
+      data: {
+        'uid': targetUid, 
+        'role': role,
+        'relatedId': targetUid,
+        'relatedCollection': 'users',
+      },
+    );
   }
 
   Future<void> notifyDisputeRaised({
@@ -285,14 +338,16 @@ class NotificationService {
     required String raisedByRole,
   }) async {
     await _create(
-      userId: adminUid,
+      recipientUserId: adminUid,
+      recipientRole: 'Admin',
       type: typeDispute,
       title: 'New Dispute Raised',
-      body: 'A dispute was raised for order $orderId by a $raisedByRole.',
-      path: FirestorePaths.adminNotificationsCol,
+      message: 'A dispute was raised for order $orderId by a $raisedByRole.',
+      companyId: companyId,
       data: {
         'orderId': orderId,
-        'companyId': companyId,
+        'relatedId': orderId,
+        'relatedCollection': 'orders',
       },
     );
   }
@@ -300,14 +355,20 @@ class NotificationService {
   Future<void> notifySubscriptionPaymentSubmitted({
     required String adminUserId,
     required String companyName,
+    required String companyId,
   }) async {
     await _create(
-      userId: adminUserId,
+      recipientUserId: adminUserId,
+      recipientRole: 'Admin',
       type: typePayment,
       title: 'New subscription payment',
-      body: 'New subscription payment from $companyName',
-      path: FirestorePaths.adminNotificationsCol,
-      data: {'companyName': companyName},
+      message: 'New subscription payment from $companyName',
+      companyId: companyId,
+      data: {
+        'companyName': companyName,
+        'relatedId': companyId,
+        'relatedCollection': 'companies',
+      },
     );
   }
 
@@ -315,17 +376,20 @@ class NotificationService {
     required String adminUserId,
     required double outstandingAmount,
     required double threshold,
+    required String supplierId,
   }) async {
     await _create(
-      userId: adminUserId,
+      recipientUserId: adminUserId,
+      recipientRole: 'Admin',
       type: typeCommission,
       title: 'Commission threshold exceeded',
-      body:
-          'Outstanding commission Rs. ${outstandingAmount.toStringAsFixed(0)} exceeds threshold of Rs. ${threshold.toStringAsFixed(0)}',
-      path: FirestorePaths.adminNotificationsCol,
+      message: 'Outstanding commission Rs. ${outstandingAmount.toStringAsFixed(0)} exceeds threshold of Rs. ${threshold.toStringAsFixed(0)}',
       data: {
         'outstandingAmount': outstandingAmount,
         'threshold': threshold,
+        'supplierId': supplierId,
+        'relatedId': supplierId,
+        'relatedCollection': 'suppliers',
       },
     );
   }
@@ -333,79 +397,85 @@ class NotificationService {
   // --- Partnership Notifications ---
 
   Future<void> notifyPartnershipInvitation({
-    required String supplierId,
+    required String recipientUserId,
     required String companyName,
     required String requestId,
     required String companyId,
   }) async {
+    final user = await _getUser(recipientUserId);
     await _create(
-      userId: supplierId,
+      recipientUserId: recipientUserId,
+      recipientRole: user?.role ?? 'Supplier',
       type: typePartnership,
       title: 'Partnership invitation',
-      body: '📩 $companyName has sent you a partnership invitation. Tap to respond.',
-      path: FirestorePaths.supplierNotificationsCol(supplierId),
+      message: '📩 $companyName has sent you a partnership invitation. Tap to respond.',
+      companyId: companyId,
       data: {
         'requestId': requestId,
-        'companyId': companyId,
         'companyName': companyName,
         'event': 'invitation_received',
+        'relatedId': requestId,
+        'relatedCollection': 'partnershipRequests',
       },
     );
   }
 
   Future<void> notifyPartnershipAccepted({
-    required String supplierId,
-    required String companyName,
+    required String recipientUserId,
+    required String senderName,
     required String companyId,
   }) async {
+    final user = await _getUser(recipientUserId);
     await _create(
-      userId: supplierId,
+      recipientUserId: recipientUserId,
+      recipientRole: user?.role ?? 'CEO',
       type: typePartnership,
       title: 'Partnership accepted',
-      body: '✅ $companyName accepted your partnership request! You can now supply to their team.',
-      path: FirestorePaths.supplierNotificationsCol(supplierId),
+      message: '✅ $senderName accepted your partnership request!',
+      companyId: companyId,
       data: {
-        'companyId': companyId,
-        'companyName': companyName,
         'event': 'accepted',
+        'senderName': senderName,
       },
     );
   }
 
   Future<void> notifyPartnershipDeclined({
-    required String supplierId,
-    required String companyName,
+    required String recipientUserId,
+    required String senderName,
     required String companyId,
   }) async {
+    final user = await _getUser(recipientUserId);
     await _create(
-      userId: supplierId,
+      recipientUserId: recipientUserId,
+      recipientRole: user?.role ?? 'CEO',
       type: typePartnership,
       title: 'Partnership declined',
-      body: '❌ $companyName declined your partnership request. You can send a new request after 7 days.',
-      path: FirestorePaths.supplierNotificationsCol(supplierId),
+      message: '❌ $senderName declined your partnership request.',
+      companyId: companyId,
       data: {
-        'companyId': companyId,
-        'companyName': companyName,
         'event': 'declined',
+        'senderName': senderName,
       },
     );
   }
 
   Future<void> notifyPartnershipRemoved({
-    required String supplierId,
+    required String recipientUserId,
     required String companyName,
     required String companyId,
   }) async {
+    final user = await _getUser(recipientUserId);
     await _create(
-      userId: supplierId,
+      recipientUserId: recipientUserId,
+      recipientRole: user?.role ?? 'Supplier',
       type: typePartnership,
       title: 'Partnership removed',
-      body: '⚠️ $companyName has removed the partnership. Your materials are no longer visible to their field team.',
-      path: FirestorePaths.supplierNotificationsCol(supplierId),
+      message: 'The partnership with $companyName has been terminated.',
+      companyId: companyId,
       data: {
-        'companyId': companyId,
-        'companyName': companyName,
         'event': 'removed',
+        'companyName': companyName,
       },
     );
   }
@@ -419,14 +489,16 @@ class NotificationService {
     required String companyName,
   }) async {
     await _create(
-      userId: supplierId,
+      recipientUserId: supplierId,
+      recipientRole: 'Supplier',
       type: typeRFQ,
       title: 'New RFQ Available',
-      body: '$companyName is looking for $category. Submit your bid now!',
-      path: FirestorePaths.supplierNotificationsCol(supplierId),
+      message: '$companyName is looking for $category. Submit your bid now!',
       data: {
         'rfqId': rfqId,
         'companyName': companyName,
+        'relatedId': rfqId,
+        'relatedCollection': 'rfqs',
       },
     );
   }
@@ -439,14 +511,17 @@ class NotificationService {
     required String companyId,
   }) async {
     await _create(
-      userId: ceoUid,
+      recipientUserId: ceoUid,
+      recipientRole: 'CEO',
       type: typeRFQ,
       title: 'New Bid for $category',
-      body: '$supplierName has submitted a bid for your quote request.',
-      path: FirestorePaths.companyNotificationsCol(companyId),
+      message: '$supplierName has submitted a bid for your quote request.',
+      companyId: companyId,
       data: {
         'rfqId': rfqId,
         'supplierName': supplierName,
+        'relatedId': rfqId,
+        'relatedCollection': 'rfqs',
       },
     );
   }
@@ -459,16 +534,18 @@ class NotificationService {
     required bool awarded,
   }) async {
     await _create(
-      userId: supplierId,
+      recipientUserId: supplierId,
+      recipientRole: 'Supplier',
       type: typeRFQ,
       title: awarded ? 'RFQ Awarded! ✅' : 'RFQ Closed',
-      body: awarded
+      message: awarded
           ? 'Congratulations! $companyName has awarded you the contract for $category.'
           : 'The RFQ for $category from $companyName has been closed.',
-      path: FirestorePaths.supplierNotificationsCol(supplierId),
       data: {
         'rfqId': rfqId,
         'awarded': awarded.toString(),
+        'relatedId': rfqId,
+        'relatedCollection': 'rfqs',
       },
     );
   }
@@ -478,16 +555,36 @@ class NotificationService {
   Future<void> notifySubscriptionDecision({
     required String ceoUid,
     required String title,
-    required String body,
+    required String message,
     required String companyId,
     Map<String, dynamic> data = const {},
   }) async {
     await _create(
-      userId: ceoUid,
+      recipientUserId: ceoUid,
+      recipientRole: 'CEO',
       type: typePayment,
       title: title,
-      body: body,
-      path: FirestorePaths.companyNotificationsCol(companyId),
+      message: message,
+      companyId: companyId,
+      data: data,
+    );
+  }
+
+  Future<void> notifyPaymentStatus({
+    required String userId,
+    required String title,
+    required String message,
+    String? companyId,
+    Map<String, dynamic> data = const {},
+  }) async {
+    final user = await _getUser(userId);
+    await _create(
+      recipientUserId: userId,
+      recipientRole: user?.role ?? 'User',
+      type: typePayment,
+      title: title,
+      message: message,
+      companyId: companyId,
       data: data,
     );
   }
@@ -506,21 +603,24 @@ class NotificationService {
     required String supplierName,
     String? orderId,
   }) async {
-    final path = await _getPathForUser(recipientUserId);
+    final user = await _getUser(recipientUserId);
     await _create(
-      userId: recipientUserId,
+      recipientUserId: recipientUserId,
+      recipientRole: user?.role ?? 'User',
       type: typeChat,
       title: senderName,
-      body: preview,
-      path: path,
+      message: preview,
+      companyId: companyId,
+      senderUserId: fieldUserId == recipientUserId ? supplierId : fieldUserId,
       data: {
         'chatId': chatId,
-        'companyId': companyId,
         'fieldUserId': fieldUserId,
         'fieldUserName': fieldUserName,
         'supplierUid': supplierId,
         'supplierId': supplierId,
         'supplierName': supplierName,
+        'relatedId': chatId,
+        'relatedCollection': 'chats',
         if (orderId != null && orderId.isNotEmpty) 'orderId': orderId,
       },
     );

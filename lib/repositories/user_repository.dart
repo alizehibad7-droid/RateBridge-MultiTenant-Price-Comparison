@@ -82,7 +82,12 @@ class UserRepository {
       if (!doc.exists || doc.data() == null) {
         throw Exception("User doc does not exist");
       }
-      return UserModel.fromMap(doc.data()!);
+      final data = Map<String, dynamic>.from(doc.data()!);
+      // Ensure uid is set from document ID
+      if (data['uid'] == null || data['uid'].toString().isEmpty) {
+        data['uid'] = doc.id;
+      }
+      return UserModel.fromMap(data);
     });
   }
 

@@ -49,11 +49,22 @@ class _AdminCeoManagementViewState extends State<AdminCeoManagementView>
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Bulk Approve CEOs'),
+        title: Row(
+          children: [
+            const Icon(Icons.verified_user_rounded, color: AdminColors.navy),
+            const SizedBox(width: 10),
+            const Text('Bulk Approval'),
+          ],
+        ),
         content: Text('Approve all ${_selectedCeoUids.length} selected CEOs and generate company invite codes?'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('CANCEL')),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('APPROVE ALL', style: TextStyle(fontWeight: FontWeight.bold))),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.pop(context, true),
+            icon: const Icon(Icons.check_circle_rounded, size: 18),
+            label: const Text('APPROVE ALL'),
+            style: AdminTheme.primaryButtonStyle(height: 40),
+          ),
         ],
       ),
     );
@@ -68,7 +79,16 @@ class _AdminCeoManagementViewState extends State<AdminCeoManagementView>
       }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Successfully approved ${_selectedCeoUids.length} CEOs')),
+          SnackBar(
+            behavior: SnackBarBehavior.floating,
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+                const SizedBox(width: 12),
+                Text('Successfully approved ${_selectedCeoUids.length} CEOs'),
+              ],
+            ),
+          ),
         );
         setState(() => _selectedCeoUids.clear());
       }
@@ -99,6 +119,10 @@ class _AdminCeoManagementViewState extends State<AdminCeoManagementView>
               title: 'CEO Management',
               bottom: TabBar(
                 controller: _tabController,
+                indicatorColor: AdminColors.amber,
+                indicatorWeight: 3,
+                labelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 13),
+                unselectedLabelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w500, fontSize: 13),
                 tabs: const [
                   Tab(text: 'Pending'),
                   Tab(text: 'Active'),
@@ -114,6 +138,12 @@ class _AdminCeoManagementViewState extends State<AdminCeoManagementView>
                   color: AdminColors.navy,
                   child: TabBar(
                     controller: _tabController,
+                    indicatorColor: AdminColors.amber,
+                    indicatorWeight: 3,
+                    labelColor: AdminColors.amber,
+                    unselectedLabelColor: Colors.white70,
+                    labelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 12),
+                    unselectedLabelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w500, fontSize: 12),
                     tabs: const [
                       Tab(text: 'Pending'),
                       Tab(text: 'Active'),
@@ -129,11 +159,11 @@ class _AdminCeoManagementViewState extends State<AdminCeoManagementView>
       floatingActionButton: (_tabController.index == 0 && _selectedCeoUids.isNotEmpty)
           ? FloatingActionButton.extended(
               onPressed: _isBulkProcessing ? null : () => _bulkApprove(adminVM),
-              backgroundColor: AdminColors.amber,
+              backgroundColor: AdminColors.navy,
               label: _isBulkProcessing 
                   ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                   : Text('Approve Selected (${_selectedCeoUids.length})', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-              icon: const Icon(Icons.done_all, color: Colors.white),
+              icon: const Icon(Icons.verified_user_rounded, color: Colors.white),
             )
           : null,
     );
@@ -154,7 +184,7 @@ class _AdminCeoManagementViewState extends State<AdminCeoManagementView>
         final docs = snapshot.data?.docs ?? [];
         if (docs.isEmpty) {
           return AdminEmptyState(
-            icon: Icons.business_outlined,
+            icon: _emptyIcon(status),
             message: 'No $status CEOs found.',
           );
         }
@@ -166,7 +196,6 @@ class _AdminCeoManagementViewState extends State<AdminCeoManagementView>
             final data = docs[index].data() as Map<String, dynamic>;
             final ceo = UserModel.fromMap(data);
             
-            // Map for bulk approval lookup
             _ceoToCompanyMap[ceo.uid] = ceo.companyId;
 
             return FutureBuilder<DocumentSnapshot>(
@@ -190,6 +219,15 @@ class _AdminCeoManagementViewState extends State<AdminCeoManagementView>
     );
   }
 
+  IconData _emptyIcon(String status) {
+    switch(status) {
+      case 'pending': return Icons.person_search_rounded;
+      case 'active': return Icons.verified_user_rounded;
+      case 'suspended': return Icons.person_off_rounded;
+      default: return Icons.no_accounts_rounded;
+    }
+  }
+
   Widget _buildCeoCard(
     UserModel ceo,
     CompanyModel? company,
@@ -208,24 +246,34 @@ class _AdminCeoManagementViewState extends State<AdminCeoManagementView>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (isPending)
-                  Checkbox(
-                    value: isSelected,
-                    onChanged: (val) {
-                      setState(() {
-                        if (val == true) {
-                          _selectedCeoUids.add(ceo.uid);
-                        } else {
-                          _selectedCeoUids.remove(ceo.uid);
-                        }
-                      });
-                    },
-                    activeColor: AdminColors.amber,
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: SizedBox(
+                      width: 24, height: 24,
+                      child: Checkbox(
+                        value: isSelected,
+                        onChanged: (val) {
+                          setState(() {
+                            if (val == true) {
+                              _selectedCeoUids.add(ceo.uid);
+                            } else {
+                              _selectedCeoUids.remove(ceo.uid);
+                            }
+                          });
+                        },
+                        activeColor: AdminColors.amber,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                      ),
+                    ),
                   ),
-                CircleAvatar(
-                  radius: 20,
-                  backgroundColor: AdminColors.navy.withValues(alpha: 0.1),
-                  child: const Icon(Icons.business_center_outlined,
-                      color: AdminColors.navy, size: 20),
+                Container(
+                  width: 44, height: 44,
+                  decoration: BoxDecoration(
+                    color: AdminColors.navy.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.business_center_rounded,
+                      color: AdminColors.navy, size: 24),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -237,17 +285,27 @@ class _AdminCeoManagementViewState extends State<AdminCeoManagementView>
                               fontWeight: FontWeight.w700,
                               fontSize: 16,
                               color: AdminColors.navy)),
-                      Text(ceo.email,
-                          style: AdminTheme.mutedStyle(size: 12)),
+                      Row(
+                        children: [
+                          const Icon(Icons.email_outlined, size: 12, color: AdminColors.textGrey),
+                          const SizedBox(width: 4),
+                          Text(ceo.email, style: AdminTheme.mutedStyle(size: 12)),
+                        ],
+                      ),
                       if (company != null)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 4),
+                        Container(
+                          margin: const EdgeInsets.only(top: 6),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AdminColors.navy.withValues(alpha: 0.05),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
                           child: Text(
                             company.name,
                             style: GoogleFonts.plusJakartaSans(
                               color: AdminColors.navy,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
                             ),
                           ),
                         ),
@@ -257,52 +315,50 @@ class _AdminCeoManagementViewState extends State<AdminCeoManagementView>
                 StatusChip(status: status),
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             Row(
               children: [
-                const Icon(Icons.calendar_today_outlined,
-                    size: 14, color: AdminColors.textGrey),
-                const SizedBox(width: 4),
+                const Icon(Icons.calendar_today_rounded, size: 14, color: AdminColors.textGrey),
+                const SizedBox(width: 6),
                 Text(
-                  DateFormat('MMM d, yyyy').format(ceo.createdAt),
+                  'Joined ${DateFormat('MMM d, yyyy').format(ceo.createdAt)}',
                   style: AdminTheme.mutedStyle(size: 12),
                 ),
                 if (ceo.phone.isNotEmpty) ...[
                   const SizedBox(width: 16),
-                  const Icon(Icons.phone_outlined,
-                      size: 14, color: AdminColors.textGrey),
-                  const SizedBox(width: 4),
+                  const Icon(Icons.phone_outlined, size: 14, color: AdminColors.textGrey),
+                  const SizedBox(width: 6),
                   Text(ceo.phone, style: AdminTheme.mutedStyle(size: 12)),
                 ],
               ],
             ),
             if (company != null) ...[
-              const Divider(height: 28),
+              const Divider(height: 32),
               AdminApprovalSection(
                 title: 'COMPANY IDENTITY',
                 children: [
-                  AdminDetailRow(label: 'Company name', value: company.name),
-                  AdminDetailRow(
-                      label: 'Company type',
-                      value: company.companyType ?? ''),
-                  AdminDetailRow(
-                    label: 'Years in operation',
-                    value: company.yearsInOperation?.toString() ?? '',
-                  ),
-                  AdminDetailRow(
-                    label: 'Registration / NTN',
-                    value: company.registrationNumber,
-                  ),
+                  AdminDetailRow(label: 'Company Name', value: company.name),
+                  AdminDetailRow(label: 'Business Type', value: company.companyType ?? 'N/A'),
+                  AdminDetailRow(label: 'Experience', value: '${company.yearsInOperation ?? 0} years'),
+                  AdminDetailRow(label: 'Registration / NTN', value: company.registrationNumber),
                 ],
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 20),
               AdminApprovalSection(
                 title: 'CEO / AUTHORIZED PERSON',
                 children: [
-                  AdminDetailRow(label: 'Full name', value: company.ceoFullName ?? ceo.name),
+                  AdminDetailRow(label: 'Full Name', value: company.ceoFullName ?? ceo.name),
                   AdminDetailRow(label: 'Designation', value: company.designation ?? 'CEO'),
-                  AdminDetailRow(label: 'CNIC', value: _formatCnic(company.cnicNumber ?? ceo.cnic)),
-                  const SizedBox(height: 4),
+                  AdminDetailRow(label: 'CNIC Number', value: _formatCnic(company.cnicNumber ?? ceo.cnic)),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      const Icon(Icons.attachment_rounded, size: 14, color: AdminColors.textGrey),
+                      const SizedBox(width: 6),
+                      Text('VERIFICATION DOCUMENTS', style: AdminTheme.sectionHeaderStyle().copyWith(fontSize: 10)),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
                   AdminDocumentThumbnailRow(
                     documents: [
                       (label: 'CNIC Front', url: company.cnicFrontUrl),
@@ -312,7 +368,7 @@ class _AdminCeoManagementViewState extends State<AdminCeoManagementView>
                 ],
               ),
             ],
-            const Divider(height: 28),
+            const Divider(height: 32),
             _buildActionButtons(company, ceo, adminVM),
           ],
         ),
@@ -320,7 +376,7 @@ class _AdminCeoManagementViewState extends State<AdminCeoManagementView>
   }
 
   String _formatCnic(String? raw) {
-    if (raw == null || raw.trim().isEmpty) return '';
+    if (raw == null || raw.trim().isEmpty) return 'Not Provided';
     return PakistanValidators.formatCnic(raw);
   }
 
@@ -332,45 +388,61 @@ class _AdminCeoManagementViewState extends State<AdminCeoManagementView>
     final status = (ceo.status ?? 'pending').toLowerCase();
 
     return Wrap(
-      spacing: 8,
-      runSpacing: 8,
+      spacing: 12,
+      runSpacing: 12,
       children: [
         if (status == 'pending') ...[
-          ElevatedButton(
+          ElevatedButton.icon(
             onPressed: () => _showConfirmDialog(
-              'Approve CEO',
-              'Activate account and generate company invite code?',
+              'Approve CEO Account',
+              'This will activate the account and generate a unique company invite code.',
               () => adminVM.acceptCEO(company?.id, ceo.uid),
+              confirmIcon: Icons.verified_user_rounded,
             ),
-            style: AdminTheme.primaryButtonStyle(height: 46),
-            child: const Text('Approve'),
+            icon: const Icon(Icons.check_rounded, size: 18),
+            label: const Text('Approve'),
+            style: AdminTheme.primaryButtonStyle(height: 46).copyWith(
+              minimumSize: WidgetStateProperty.all(const Size(140, 46)),
+            ),
           ),
-          OutlinedButton(
+          OutlinedButton.icon(
             onPressed: () => _showRejectDialog(company?.id, ceo.uid, adminVM),
-            style: AdminTheme.destructiveButtonStyle(),
-            child: const Text('Reject'),
+            icon: const Icon(Icons.close_rounded, size: 18),
+            label: const Text('Reject'),
+            style: AdminTheme.destructiveButtonStyle().copyWith(
+              minimumSize: WidgetStateProperty.all(const Size(120, 46)),
+            ),
           ),
         ],
         if (status == 'active') ...[
-          OutlinedButton(
+          OutlinedButton.icon(
             onPressed: () => _showConfirmDialog(
               'Suspend Account',
-              'User will lose access immediately.',
+              'The user will lose dashboard access immediately. Active field users will also be restricted.',
               () => adminVM.suspendCEO(company?.id, ceo.uid),
+              confirmIcon: Icons.block_rounded,
+              isDestructive: true,
             ),
-            style: AdminTheme.destructiveButtonStyle(),
-            child: const Text('Suspend'),
+            icon: const Icon(Icons.block_rounded, size: 18),
+            label: const Text('Suspend Access'),
+            style: AdminTheme.destructiveButtonStyle().copyWith(
+              minimumSize: WidgetStateProperty.all(const Size(170, 46)),
+            ),
           ),
         ],
         if (status == 'suspended' || status == 'rejected') ...[
-          ElevatedButton(
+          ElevatedButton.icon(
             onPressed: () => _showConfirmDialog(
-              'Activate Account',
-              'Restore dashboard access?',
+              'Reactivate Account',
+              'Restore full dashboard access for this CEO?',
               () => adminVM.activateCEO(company?.id, ceo.uid),
+              confirmIcon: Icons.bolt_rounded,
             ),
-            style: AdminTheme.primaryButtonStyle(height: 46),
-            child: const Text('Activate'),
+            icon: const Icon(Icons.bolt_rounded, size: 18),
+            label: const Text('Reactivate CEO'),
+            style: AdminTheme.primaryButtonStyle(height: 46).copyWith(
+              minimumSize: WidgetStateProperty.all(const Size(170, 46)),
+            ),
           ),
         ],
       ],
@@ -380,32 +452,52 @@ class _AdminCeoManagementViewState extends State<AdminCeoManagementView>
   void _showConfirmDialog(
     String title,
     String message,
-    Future<void> Function() action,
-  ) {
+    Future<void> Function() action, {
+    IconData? confirmIcon,
+    bool isDestructive = false,
+  }) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(title),
+        title: Row(
+          children: [
+            if (confirmIcon != null) Icon(confirmIcon, color: isDestructive ? AdminColors.red : AdminColors.navy),
+            if (confirmIcon != null) const SizedBox(width: 10),
+            Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+          ],
+        ),
         content: Text(message),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel')),
+              child: const Text('CANCEL')),
           TextButton(
             onPressed: () async {
               Navigator.pop(context);
               try {
                 await action();
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      behavior: SnackBarBehavior.floating,
+                      content: Text('Operation completed successfully')),
+                  );
+                }
               } catch (e) {
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Error: $e')),
+                    SnackBar(behavior: SnackBarBehavior.floating, content: Text('Error: $e')),
                   );
                 }
               }
             },
-            child: const Text('Confirm',
-                style: TextStyle(fontWeight: FontWeight.bold)),
+            child: Text(
+              'CONFIRM',
+              style: TextStyle(
+                color: isDestructive ? AdminColors.red : AdminColors.navy,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ),
         ],
       ),
@@ -421,19 +513,25 @@ class _AdminCeoManagementViewState extends State<AdminCeoManagementView>
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Reject Application'),
+        title: Row(
+          children: [
+            const Icon(Icons.cancel_outlined, color: AdminColors.red),
+            const SizedBox(width: 10),
+            const Text('Reject Application'),
+          ],
+        ),
         content: TextField(
           controller: reasonController,
           maxLines: 3,
           decoration: AdminTheme.inputDecoration(
             labelText: 'Reason for rejection',
-            hintText: 'Shown to the applicant',
+            hintText: 'Provide context for the applicant...',
           ),
         ),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel')),
+              child: const Text('CANCEL')),
           TextButton(
             onPressed: () {
               final reason = reasonController.text.trim();
@@ -442,8 +540,11 @@ class _AdminCeoManagementViewState extends State<AdminCeoManagementView>
               Navigator.pop(context);
             },
             child: Text(
-              'Reject',
-              style: GoogleFonts.plusJakartaSans(color: AdminColors.red),
+              'REJECT',
+              style: GoogleFonts.plusJakartaSans(
+                color: AdminColors.red,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
         ],

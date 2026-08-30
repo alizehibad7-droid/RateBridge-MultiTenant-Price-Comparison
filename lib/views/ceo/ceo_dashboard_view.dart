@@ -12,6 +12,7 @@ import '../../theme/ceo_theme.dart';
 import '../../utils/formatters.dart';
 import '../../viewmodels/ceo_viewmodel.dart';
 import '../../viewmodels/auth_viewmodel.dart';
+import '../../viewmodels/notification_viewmodel.dart';
 import '../../widgets/ceo_nav_bar.dart';
 import '../../widgets/ceo/ceo_widgets.dart';
 
@@ -58,6 +59,7 @@ class _CeoDashboardViewState extends State<CeoDashboardView> {
         title: context.select<CeoViewModel, String>(
           (vm) => vm.company?.name ?? 'Dashboard',
         ),
+        showNotificationIcon: true,
       ),
       body: Consumer<CeoViewModel>(
         builder: (context, vm, _) {
@@ -98,15 +100,21 @@ class _CeoDashboardViewState extends State<CeoDashboardView> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              'Welcome back, ${vm.name}',
-                              style: GoogleFonts.plusJakartaSans(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w600,
-                                color: CeoColors.navy,
-                              ),
+                            Row(
+                              children: [
+                                const Icon(Icons.waving_hand_rounded, color: CeoColors.amber, size: 20),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Welcome back, ${vm.name}',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w600,
+                                    color: CeoColors.navy,
+                                  ),
+                                ),
+                              ],
                             ),
-                            const SizedBox(height: 4),
+                            const SizedBox(height: 8),
                             Text(
                               'You have $pendingOrders order approvals and '
                               '$pendingJoin supplier requests waiting.',
@@ -141,24 +149,28 @@ class _CeoDashboardViewState extends State<CeoDashboardView> {
                         childAspectRatio: 1.15,
                         children: [
                           CeoStatCard(
-                            icon: Icons.engineering_outlined,
+                            icon: Icons.engineering_rounded,
                             value: '$fieldUserCount',
                             label: 'Field Users',
+                            color: CeoColors.navy,
                           ),
                           CeoStatCard(
-                            icon: Icons.store_outlined,
+                            icon: Icons.store_rounded,
                             value: '$supplierCount',
                             label: 'Active Suppliers',
+                            color: CeoColors.green,
                           ),
                           CeoStatCard(
-                            icon: Icons.pending_actions_outlined,
+                            icon: Icons.pending_actions_rounded,
                             value: '$pendingJoin',
                             label: 'Pending Requests',
+                            color: CeoColors.amber,
                           ),
                           CeoStatCard(
-                            icon: Icons.receipt_long_outlined,
+                            icon: Icons.assignment_late_rounded,
                             value: '$pendingOrders',
                             label: 'Orders to Review',
+                            color: CeoColors.red,
                           ),
                         ],
                       ),
@@ -178,7 +190,7 @@ class _CeoDashboardViewState extends State<CeoDashboardView> {
                           ),
                           child: Row(
                             children: [
-                              const Icon(Icons.warning_amber_outlined,
+                              const Icon(Icons.warning_amber_rounded,
                                   color: CeoColors.amber),
                               const SizedBox(width: 8),
                               Expanded(
@@ -201,7 +213,13 @@ class _CeoDashboardViewState extends State<CeoDashboardView> {
                         ),
                       ],
                       const SizedBox(height: 24),
-                      const CeoSectionLabel('Quick Actions'),
+                      Row(
+                        children: [
+                          const Icon(Icons.bolt_rounded, color: CeoColors.navy, size: 20),
+                          const SizedBox(width: 8),
+                          const CeoSectionLabel('Quick Actions'),
+                        ],
+                      ),
                       const SizedBox(height: 12),
                       GridView.count(
                         crossAxisCount: 2,
@@ -213,46 +231,52 @@ class _CeoDashboardViewState extends State<CeoDashboardView> {
                         children: [
                           _actionCard(
                             context,
-                            icon: Icons.store_outlined,
+                            icon: Icons.store_rounded,
                             title: 'My Suppliers',
                             onTap: () => context.go(RouteNames.ceoMySuppliers),
                           ),
                           _actionCard(
                             context,
-                            icon: Icons.person_add_outlined,
+                            icon: Icons.person_add_rounded,
                             title: 'Invite Suppliers',
                             onTap: () => context.go(RouteNames.ceoInvite),
                           ),
                           _actionCard(
                             context,
-                            icon: Icons.group_outlined,
+                            icon: Icons.groups_rounded,
                             title: 'Field Users',
                             onTap: () => context.go(RouteNames.ceoFieldUsers),
                           ),
                           _actionCard(
                             context,
-                            icon: Icons.receipt_outlined,
+                            icon: Icons.receipt_long_rounded,
                             title: 'All Orders',
                             onTap: () => context.go(RouteNames.ceoOrders),
                           ),
                           _actionCard(
                             context,
-                            icon: Icons.request_page_outlined,
+                            icon: Icons.request_quote_rounded,
                             title: 'Bulk Quotes',
                             onTap: () => context.push(RouteNames.ceoRfqs),
                           ),
                           _actionCard(
                             context,
-                            icon: Icons.report_gmailerrorred_outlined,
+                            icon: Icons.report_problem_rounded,
                             title: 'Issues',
                             onTap: () => context.push(RouteNames.ceoDisputes),
                           ),
                         ],
                       ),
                       const SizedBox(height: 24),
-                      Text(
-                        'Recent Orders',
-                        style: CeoTheme.titleStyle(size: 16),
+                      Row(
+                        children: [
+                          const Icon(Icons.history_rounded, color: CeoColors.navy, size: 20),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Recent Orders',
+                            style: CeoTheme.titleStyle(size: 16),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 8),
                       StreamBuilder<List<OrderModel>>(
@@ -334,6 +358,15 @@ class _CeoDashboardViewState extends State<CeoDashboardView> {
       decoration: CeoTheme.cardDecoration(),
       child: Row(
         children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: CeoColors.navy.withValues(alpha: 0.05),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.shopping_bag_rounded, size: 16, color: CeoColors.navy),
+          ),
+          const SizedBox(width: 12),
           Expanded(
             child: Text(
               order.materialName,
@@ -344,11 +377,11 @@ class _CeoDashboardViewState extends State<CeoDashboardView> {
             ),
           ),
           CeoStatusBadge(status: order.status),
-          const SizedBox(width: 8),
+          const SizedBox(width: 12),
           Text(
             AppFormatters.formatPKRCurrency(order.totalAmount),
             style: GoogleFonts.plusJakartaSans(
-              fontWeight: FontWeight.w600,
+              fontWeight: FontWeight.w700,
               color: CeoColors.navy,
             ),
           ),
@@ -385,17 +418,32 @@ class _SubscriptionCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                isFree ? 'Free Plan' : '$plan Plan',
-                style: GoogleFonts.plusJakartaSans(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 16,
-                  color: isFree ? CeoColors.navy : Colors.white,
-                ),
+              Row(
+                children: [
+                  Icon(
+                    isFree ? Icons.eco_rounded : Icons.workspace_premium_rounded,
+                    color: isFree ? CeoColors.navy : CeoColors.amber,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    isFree ? 'Free Plan' : '$plan Plan',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 16,
+                      color: isFree ? CeoColors.navy : Colors.white,
+                    ),
+                  ),
+                ],
               ),
-              TextButton(
+              TextButton.icon(
                 onPressed: () => context.go(RouteNames.ceoSubscription),
-                child: Text(
+                icon: Icon(
+                  isFree ? Icons.upgrade_rounded : Icons.settings_rounded,
+                  size: 16,
+                  color: isFree ? CeoColors.amber : Colors.white,
+                ),
+                label: Text(
                   isFree ? 'Upgrade' : 'Manage',
                   style: TextStyle(
                     color: isFree ? CeoColors.amber : Colors.white,
@@ -405,19 +453,22 @@ class _SubscriptionCard extends StatelessWidget {
             ],
           ),
           if (expiresAt != null) ...[
-            Text(
-              'Expires: ${AppFormatters.date(expiresAt!)}',
-              style: GoogleFonts.plusJakartaSans(
-                color: isFree ? CeoColors.textGrey : Colors.white70,
-                fontSize: 12,
+            Padding(
+              padding: const EdgeInsets.only(left: 28),
+              child: Text(
+                'Expires: ${AppFormatters.date(expiresAt!)}',
+                style: GoogleFonts.plusJakartaSans(
+                  color: isFree ? CeoColors.textGrey : Colors.white70,
+                  fontSize: 12,
+                ),
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             ClipRRect(
               borderRadius: BorderRadius.circular(4),
               child: LinearProgressIndicator(
                 value: (daysLeft / 30).clamp(0.0, 1.0),
-                minHeight: 4,
+                minHeight: 6,
                 backgroundColor:
                     isFree ? CeoColors.border : Colors.white24,
                 color: CeoColors.amber,

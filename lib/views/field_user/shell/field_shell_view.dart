@@ -6,7 +6,7 @@ import '../../../widgets/ai_assistant_sheet.dart';
 import '../../../viewmodels/auth_viewmodel.dart';
 import '../../../viewmodels/field_user/field_chat_viewmodel.dart';
 import '../../../viewmodels/field_user/field_session_viewmodel.dart';
-import '../../../viewmodels/field_user/field_notifications_viewmodel.dart';
+import '../../../viewmodels/notification_viewmodel.dart';
 import '../chat/field_chat_list_view.dart';
 import '../home/field_home_view.dart';
 import '../notifications/field_notifications_view.dart';
@@ -75,7 +75,8 @@ class _FieldShellViewState extends State<FieldShellView> {
     final companyId = session.companyId;
     if (uid == null) return;
 
-    context.read<FieldNotificationsViewModel>().watchNotifications(uid);
+    // NotificationViewModel is updated via ProxyProvider, but we can explicitly load if needed.
+    context.read<NotificationViewModel>().loadNotifications(uid);
 
     if (companyId != null) {
       context.read<FieldChatViewModel>().watchConversations(companyId, uid);
@@ -101,7 +102,7 @@ class _FieldShellViewState extends State<FieldShellView> {
   Widget build(BuildContext context) {
     final user = context.watch<AuthViewModel>().user;
     final unreadNotifications =
-        context.watch<FieldNotificationsViewModel>().unreadCount;
+        context.watch<NotificationViewModel>().unreadCount;
     final unreadMessages =
         context.watch<FieldChatViewModel>().unreadMessageCount;
 

@@ -47,14 +47,21 @@ class _CeoFieldUsersViewState extends State<CeoFieldUsersView>
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Deactivate Selected Users?'),
+        title: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded, color: CeoColors.red),
+            const SizedBox(width: 10),
+            const Text('Bulk Deactivation'),
+          ],
+        ),
         content: Text('They will lose access to the app immediately. Total: ${_selectedUserUids.length} users.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('CANCEL')),
-          ElevatedButton(
+          ElevatedButton.icon(
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(backgroundColor: CeoColors.red),
-            child: const Text('DEACTIVATE ALL'),
+            icon: const Icon(Icons.block_rounded, size: 18),
+            label: const Text('DEACTIVATE ALL'),
           ),
         ],
       ),
@@ -69,7 +76,16 @@ class _CeoFieldUsersViewState extends State<CeoFieldUsersView>
       }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Successfully deactivated ${_selectedUserUids.length} users')),
+          SnackBar(
+            behavior: SnackBarBehavior.floating,
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+                const SizedBox(width: 12),
+                Text('Successfully deactivated ${_selectedUserUids.length} users'),
+              ],
+            ),
+          ),
         );
         setState(() => _selectedUserUids.clear());
       }
@@ -85,20 +101,26 @@ class _CeoFieldUsersViewState extends State<CeoFieldUsersView>
     return Scaffold(
       backgroundColor: CeoColors.screenBg,
       appBar: CeoAppBar(
-        title: 'Field Users',
+        title: 'User Management',
         actions: [
           IconButton(
-            icon: const Icon(Icons.vpn_key_outlined),
-            tooltip: 'Invite Code',
+            icon: const Icon(Icons.person_add_alt_1_rounded),
+            tooltip: 'Invite Users',
             onPressed: () => _showInviteCodeSheet(context),
           ),
         ],
         bottom: TabBar(
           controller: _tabController,
+          indicatorColor: CeoColors.amber,
+          indicatorWeight: 3,
+          labelColor: CeoColors.navy,
+          unselectedLabelColor: CeoColors.textGrey,
+          labelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 13),
+          unselectedLabelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w500, fontSize: 13),
           tabs: const [
-            Tab(text: 'Pending'),
-            Tab(text: 'Active'),
-            Tab(text: 'Deactivated'),
+            Tab(icon: Icon(Icons.pending_actions_rounded, size: 20), text: 'Pending'),
+            Tab(icon: Icon(Icons.verified_user_rounded, size: 20), text: 'Active'),
+            Tab(icon: Icon(Icons.person_off_rounded, size: 20), text: 'Deactivated'),
           ],
         ),
       ),
@@ -120,19 +142,30 @@ class _CeoFieldUsersViewState extends State<CeoFieldUsersView>
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.engineering_outlined,
-                              size: 40, color: CeoColors.textGrey),
-                          const SizedBox(height: 12),
+                          Container(
+                            padding: const EdgeInsets.all(20),
+                            decoration: BoxDecoration(
+                              color: CeoColors.navy.withValues(alpha: 0.05),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              _emptyIcon(filters[i]),
+                              size: 48, 
+                              color: CeoColors.textGrey,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
                           Text(
-                            'No ${filters[i]} field users',
-                            style: CeoTheme.mutedStyle(),
+                            'No ${filters[i]} field users found',
+                            style: CeoTheme.titleStyle(size: 16).copyWith(color: CeoColors.textGrey),
                           ),
                           if (i == 0) ...[
-                            const SizedBox(height: 8),
-                            TextButton.icon(
+                            const SizedBox(height: 24),
+                            ElevatedButton.icon(
                               onPressed: () => _showInviteCodeSheet(context),
-                              icon: const Icon(Icons.vpn_key_outlined),
+                              icon: const Icon(Icons.share_rounded, size: 18),
                               label: const Text('Share invite code'),
+                              style: CeoTheme.primaryButtonStyle(height: 48),
                             ),
                           ],
                         ],
@@ -142,7 +175,7 @@ class _CeoFieldUsersViewState extends State<CeoFieldUsersView>
                   return ListView.separated(
                     padding: const EdgeInsets.all(16),
                     itemCount: users.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 10),
+                    separatorBuilder: (_, __) => const SizedBox(height: 12),
                     itemBuilder: (context, idx) =>
                         _userCard(context, vm, users[idx], filters[i]),
                   );
@@ -159,14 +192,23 @@ class _CeoFieldUsersViewState extends State<CeoFieldUsersView>
                 _bulkDeactivate(vm);
               },
               backgroundColor: CeoColors.red,
+              elevation: 4,
               label: _isBulkProcessing 
                   ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                  : Text('Deactivate Selected (${_selectedUserUids.length})', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-              icon: const Icon(Icons.block, color: Colors.white),
+                  : Text('Deactivate (${_selectedUserUids.length})', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              icon: const Icon(Icons.block_rounded, color: Colors.white),
             )
           : null,
       bottomNavigationBar: const CeoNavBar(currentIndex: 3),
     );
+  }
+
+  IconData _emptyIcon(String status) {
+    switch (status) {
+      case 'pending': return Icons.person_search_rounded;
+      case 'active': return Icons.groups_rounded;
+      default: return Icons.person_off_rounded;
+    }
   }
 
   Widget _userCard(BuildContext context, CeoViewModel vm, UserModel user,
@@ -175,40 +217,55 @@ class _CeoFieldUsersViewState extends State<CeoFieldUsersView>
     final canSelect = filter == 'active';
 
     return AdminCard(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
               if (canSelect)
-                Checkbox(
-                  value: isSelected,
-                  onChanged: (val) {
-                    setState(() {
-                      if (val == true) {
-                        _selectedUserUids.add(user.uid);
-                      } else {
-                        _selectedUserUids.remove(user.uid);
-                      }
-                    });
-                  },
-                  activeColor: CeoColors.amber,
-                ),
-              CircleAvatar(
-                radius: 20,
-                backgroundColor: _statusColor(filter).withValues(alpha: 0.12),
-                child: Text(
-                  user.name.isNotEmpty
-                      ? user.name[0].toUpperCase()
-                      : 'F',
-                  style: GoogleFonts.plusJakartaSans(
-                    color: _statusColor(filter),
-                    fontWeight: FontWeight.w700,
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: Checkbox(
+                      value: isSelected,
+                      onChanged: (val) {
+                        setState(() {
+                          if (val == true) {
+                            _selectedUserUids.add(user.uid);
+                          } else {
+                            _selectedUserUids.remove(user.uid);
+                          }
+                        });
+                      },
+                      activeColor: CeoColors.amber,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                    ),
                   ),
                 ),
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: _statusColor(filter).withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: user.profileImageUrl != null
+                    ? CircleAvatar(radius: 22, backgroundImage: NetworkImage(user.profileImageUrl!))
+                    : Text(
+                        user.name.isNotEmpty ? user.name[0].toUpperCase() : 'F',
+                        style: GoogleFonts.plusJakartaSans(
+                          color: _statusColor(filter),
+                          fontWeight: FontWeight.w800,
+                          fontSize: 18,
+                        ),
+                      ),
+                ),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -216,26 +273,38 @@ class _CeoFieldUsersViewState extends State<CeoFieldUsersView>
                     Text(
                       user.name,
                       style: GoogleFonts.plusJakartaSans(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
                         color: CeoColors.navy,
                       ),
                     ),
-                    Text(user.phone, style: CeoTheme.mutedStyle(size: 12)),
+                    Row(
+                      children: [
+                        const Icon(Icons.phone_outlined, size: 12, color: CeoColors.textGrey),
+                        const SizedBox(width: 4),
+                        Text(user.phone, style: CeoTheme.mutedStyle(size: 12)),
+                      ],
+                    ),
                   ],
                 ),
               ),
               CeoStatusBadge(status: filter),
             ],
           ),
-          const SizedBox(height: 4),
-          Text(
-            'Joined: ${_fmtDate(user.createdAt)}',
-            style: CeoTheme.mutedStyle(size: 11),
-          ),
           const SizedBox(height: 12),
+          Row(
+            children: [
+              const Icon(Icons.event_available_rounded, size: 12, color: CeoColors.textGrey),
+              const SizedBox(width: 6),
+              Text(
+                'Member since ${_fmtDate(user.createdAt)}',
+                style: CeoTheme.mutedStyle(size: 11),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
           const Divider(height: 1),
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
           Row(
             children: _buildActions(context, vm, user, filter),
           ),
@@ -250,18 +319,20 @@ class _CeoFieldUsersViewState extends State<CeoFieldUsersView>
       return [
         Expanded(
           flex: 2,
-          child: ElevatedButton(
+          child: ElevatedButton.icon(
             onPressed: () => vm.approveFieldUser(user.uid),
+            icon: const Icon(Icons.check_rounded, size: 18),
+            label: const Text('Approve'),
             style: CeoTheme.primaryButtonStyle(height: 44),
-            child: const Text('Approve'),
           ),
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: 12),
         Expanded(
-          child: OutlinedButton(
+          child: OutlinedButton.icon(
             onPressed: () => _showRejectDialog(context, vm, user.uid),
+            icon: const Icon(Icons.close_rounded, size: 18),
+            label: const Text('Reject'),
             style: CeoTheme.destructiveButtonStyle(height: 44),
-            child: const Text('Reject'),
           ),
         ),
       ];
@@ -273,18 +344,20 @@ class _CeoFieldUsersViewState extends State<CeoFieldUsersView>
           child: OutlinedButton.icon(
             onPressed: () => _confirmAction(
               context,
-              title: 'Deactivate ${user.name}?',
-              body: 'They will lose access to the app immediately.',
+              title: 'Deactivate Access',
+              body: 'Are you sure you want to deactivate ${user.name}? They will lose dashboard access immediately.',
               confirmLabel: 'Deactivate',
+              confirmIcon: Icons.block_rounded,
               isDestructive: false,
               useAmber: true,
               onConfirm: () => vm.deactivateFieldUser(user.uid),
             ),
-            icon: const Icon(Icons.block, size: 16),
-            label: const Text('Deactivate'),
+            icon: const Icon(Icons.person_remove_rounded, size: 16),
+            label: const Text('Deactivate User'),
             style: OutlinedButton.styleFrom(
               foregroundColor: CeoColors.darkAmber,
               side: const BorderSide(color: CeoColors.darkAmber),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
           ),
         ),
@@ -296,13 +369,14 @@ class _CeoFieldUsersViewState extends State<CeoFieldUsersView>
         child: ElevatedButton.icon(
           onPressed: () => _confirmAction(
             context,
-            title: 'Reactivate ${user.name}?',
-            body: 'They will regain full access to the field dashboard.',
-            confirmLabel: 'Reactivate',
+            title: 'Restore Access',
+            body: 'Reactivate ${user.name}? They will be able to place orders and manage sites again.',
+            confirmLabel: 'Restore Access',
+            confirmIcon: Icons.check_circle_rounded,
             onConfirm: () => vm.reactivateFieldUser(user.uid),
           ),
-          icon: const Icon(Icons.check_circle_outline, size: 16),
-          label: const Text('Reactivate'),
+          icon: const Icon(Icons.settings_backup_restore_rounded, size: 16),
+          label: const Text('Reactivate User'),
           style: CeoTheme.primaryButtonStyle(height: 44),
         ),
       ),
@@ -315,26 +389,33 @@ class _CeoFieldUsersViewState extends State<CeoFieldUsersView>
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Reject field user'),
+        title: Row(
+          children: [
+            const Icon(Icons.person_remove_rounded, color: CeoColors.red),
+            const SizedBox(width: 10),
+            const Text('Reject Applicant'),
+          ],
+        ),
         content: TextField(
           controller: reasonCtrl,
           maxLines: 3,
           decoration: CeoTheme.inputDecoration(
-            labelText: 'Reason',
-            hintText: 'Let them know why they were rejected...',
+            labelText: 'Reason for rejection',
+            hintText: 'e.g. Identity not verified, project cancelled...',
           ),
         ),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx),
               child: const Text('Cancel')),
-          OutlinedButton(
+          OutlinedButton.icon(
             style: CeoTheme.destructiveButtonStyle(height: 40),
             onPressed: () {
               vm.rejectFieldUser(uid, reasonCtrl.text.trim());
               Navigator.pop(ctx);
             },
-            child: const Text('Reject'),
+            icon: const Icon(Icons.close_rounded, size: 18),
+            label: const Text('Confirm Rejection'),
           ),
         ],
       ),
@@ -346,6 +427,7 @@ class _CeoFieldUsersViewState extends State<CeoFieldUsersView>
     required String title,
     required String body,
     required String confirmLabel,
+    required IconData confirmIcon,
     required VoidCallback onConfirm,
     bool isDestructive = false,
     bool useAmber = false,
@@ -353,23 +435,30 @@ class _CeoFieldUsersViewState extends State<CeoFieldUsersView>
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(title),
+        title: Row(
+          children: [
+            Icon(confirmIcon, color: useAmber ? CeoColors.amber : (isDestructive ? CeoColors.red : CeoColors.navy)),
+            const SizedBox(width: 10),
+            Text(title),
+          ],
+        ),
         content: Text(body),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx),
               child: const Text('Cancel')),
           if (isDestructive)
-            OutlinedButton(
+            OutlinedButton.icon(
               style: CeoTheme.destructiveButtonStyle(height: 40),
               onPressed: () {
                 Navigator.pop(ctx);
                 onConfirm();
               },
-              child: Text(confirmLabel),
+              icon: Icon(confirmIcon, size: 18),
+              label: Text(confirmLabel),
             )
           else
-            ElevatedButton(
+            ElevatedButton.icon(
               style: useAmber
                   ? ElevatedButton.styleFrom(
                       backgroundColor: CeoColors.darkAmber,
@@ -380,7 +469,8 @@ class _CeoFieldUsersViewState extends State<CeoFieldUsersView>
                 Navigator.pop(ctx);
                 onConfirm();
               },
-              child: Text(confirmLabel),
+              icon: Icon(confirmIcon, size: 18),
+              label: Text(confirmLabel),
             ),
         ],
       ),
@@ -389,13 +479,13 @@ class _CeoFieldUsersViewState extends State<CeoFieldUsersView>
 
   void _showInviteCodeSheet(BuildContext context) {
     final vm = context.read<CeoViewModel>();
-    final code = vm.company?.inviteCode ?? 'Not generated yet';
+    final code = vm.company?.inviteCode ?? 'RB-XXXXXX';
 
     showModalBottomSheet(
       context: context,
       backgroundColor: CeoColors.screenBg,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (ctx) => Padding(
         padding: const EdgeInsets.all(24),
@@ -412,88 +502,112 @@ class _CeoFieldUsersViewState extends State<CeoFieldUsersView>
                     borderRadius: BorderRadius.circular(2)),
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.group_add_rounded, color: CeoColors.navy, size: 24),
+                const SizedBox(width: 12),
+                Text(
+                  'Invite Team Members',
+                  style: CeoTheme.titleStyle(size: 20),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
             Text(
-              'Company Invite Code',
-              style: CeoTheme.titleStyle(size: 16),
+              'Share this unique code with your field engineers. They can enter it during registration to join your workspace.',
+              style: CeoTheme.mutedStyle(size: 14),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 4),
-            Text(
-              'Share this code with your field users so they can '
-              'register and join your team.',
-              style: CeoTheme.mutedStyle(),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 24),
             Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 20, vertical: 16),
-              decoration: CeoTheme.cardDecoration(),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: CeoColors.border),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.03),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Expanded(
                     child: Text(
                       code,
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 24,
-                        fontWeight: FontWeight.w700,
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 26,
+                        fontWeight: FontWeight.w800,
                         letterSpacing: 4,
                         color: CeoColors.navy,
                       ),
                       textAlign: TextAlign.center,
                     ),
                   ),
+                  Container(
+                    width: 1, height: 32, color: CeoColors.border, margin: const EdgeInsets.symmetric(horizontal: 12),
+                  ),
                   IconButton(
-                    icon: const Icon(Icons.copy_outlined,
-                        color: CeoColors.navy),
+                    icon: const Icon(Icons.content_copy_rounded, color: CeoColors.navy),
                     tooltip: 'Copy',
                     onPressed: () {
                       Clipboard.setData(ClipboardData(text: code));
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
-                            content: Text('Invite code copied!')),
+                          behavior: SnackBarBehavior.floating,
+                          content: Text('Invite code copied to clipboard!')),
                       );
                     },
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 24),
             Row(
               children: [
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: () {
                       Share.share(
-                          'Join my company on RateBridge!\n'
-                          'Use invite code: $code');
+                          'Join our construction workspace on RateBridge!\n\n'
+                          'Register as a Field User and enter this invite code: $code');
                     },
-                    icon: const Icon(Icons.share, size: 16),
-                    label: const Text('Share'),
-                    style: CeoTheme.primaryButtonStyle(height: 44),
+                    icon: const Icon(Icons.share_rounded, size: 18),
+                    label: const Text('Share Code'),
+                    style: CeoTheme.primaryButtonStyle(height: 52),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: OutlinedButton.icon(
                     onPressed: () => _confirmRegenerate(ctx, vm),
-                    icon: const Icon(Icons.refresh, size: 16),
+                    icon: const Icon(Icons.refresh_rounded, size: 18),
                     label: const Text('Regenerate'),
-                    style: CeoTheme.destructiveButtonStyle(height: 44),
+                    style: CeoTheme.destructiveButtonStyle(height: 52),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            Text(
-              '⚠ Regenerating the code will invalidate the old one. '
-              'Existing team members are not affected.',
-              style: CeoTheme.mutedStyle(size: 11),
-              textAlign: TextAlign.center,
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                const Icon(Icons.info_outline_rounded, color: CeoColors.amber, size: 14),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Regenerating invalidates the current code. Existing members are not affected.',
+                    style: CeoTheme.mutedStyle(size: 11),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
           ],
         ),
       ),
@@ -504,7 +618,13 @@ class _CeoFieldUsersViewState extends State<CeoFieldUsersView>
     showDialog(
       context: ctx,
       builder: (dlg) => AlertDialog(
-        title: const Text('Regenerate invite code?'),
+        title: Row(
+          children: [
+            const Icon(Icons.warning_rounded, color: CeoColors.amber),
+            const SizedBox(width: 10),
+            const Text('New Code?'),
+          ],
+        ),
         content: const Text(
             'The old code will stop working immediately. '
             'New field users must use the new code to register.'),
@@ -512,7 +632,7 @@ class _CeoFieldUsersViewState extends State<CeoFieldUsersView>
           TextButton(
               onPressed: () => Navigator.pop(dlg),
               child: const Text('Cancel')),
-          ElevatedButton(
+          ElevatedButton.icon(
             style: ElevatedButton.styleFrom(
                 backgroundColor: CeoColors.darkAmber,
                 foregroundColor: Colors.white),
@@ -520,7 +640,8 @@ class _CeoFieldUsersViewState extends State<CeoFieldUsersView>
               Navigator.pop(dlg);
               vm.regenerateInviteCode();
             },
-            child: const Text('Regenerate'),
+            icon: const Icon(Icons.refresh_rounded, size: 18),
+            label: const Text('Regenerate'),
           ),
         ],
       ),

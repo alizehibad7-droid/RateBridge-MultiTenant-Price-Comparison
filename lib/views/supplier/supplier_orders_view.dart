@@ -87,10 +87,11 @@ class _SupplierOrdersViewState extends State<SupplierOrdersView>
   Widget _buildOrderList(SupplierViewModel viewModel, String tab) {
     final filteredOrders =
         viewModel.orders.where((o) {
-          final status = o.status.toLowerCase();
+          final status = o.status.toLowerCase().trim();
           switch (tab) {
             case 'Pending':
-              return status == 'pending';
+              // Inclusion of pending_approval to catch orders awaiting action
+              return status == 'pending' || status == 'pending_approval';
             case 'Accepted':
               return status == 'accepted' || status == 'inprogress';
             case 'Delivered':
@@ -179,7 +180,7 @@ class _SupplierOrdersViewState extends State<SupplierOrdersView>
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      'ID: #${order.orderId.substring(order.orderId.length - 6).toUpperCase()}',
+                      'ID: #${order.orderId.substring(order.orderId.length > 6 ? order.orderId.length - 6 : 0).toUpperCase()}',
                       style: AppTextStyles.label.copyWith(letterSpacing: 0.5),
                     ),
                     Text(

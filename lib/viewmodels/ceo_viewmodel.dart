@@ -703,7 +703,7 @@ class CeoViewModel extends ChangeNotifier {
       );
 
       await _notificationService.notifyPartnershipInvitation(
-        supplierId: supplierId,
+        recipientUserId: supplierId,
         companyName: company.name,
         requestId: requestId,
         companyId: company.id,
@@ -766,8 +766,8 @@ class CeoViewModel extends ChangeNotifier {
       if (reqData != null &&
           PartnershipRequestModel.fromMap(reqId, reqData).isSupplierInitiated) {
         await _notificationService.notifyPartnershipAccepted(
-          supplierId: reqData['supplierId'] as String,
-          companyName: _company?.name ?? reqData['companyName'] as String? ?? '',
+          recipientUserId: reqData['supplierId'] as String,
+          senderName: _company?.name ?? reqData['companyName'] as String? ?? '',
           companyId: reqData['companyId'] as String,
         );
       }
@@ -795,8 +795,8 @@ class CeoViewModel extends ChangeNotifier {
       if (reqData != null &&
           PartnershipRequestModel.fromMap(reqId, reqData).isSupplierInitiated) {
         await _notificationService.notifyPartnershipDeclined(
-          supplierId: reqData['supplierId'] as String,
-          companyName: _company?.name ?? reqData['companyName'] as String? ?? '',
+          recipientUserId: reqData['supplierId'] as String,
+          senderName: _company?.name ?? reqData['companyName'] as String? ?? '',
           companyId: reqData['companyId'] as String,
         );
       }
@@ -827,7 +827,7 @@ class CeoViewModel extends ChangeNotifier {
         supplierId: supplierId,
       );
       await _notificationService.notifyPartnershipRemoved(
-        supplierId: supplierId,
+        recipientUserId: supplierId,
         companyName: company.name,
         companyId: company.id,
       );

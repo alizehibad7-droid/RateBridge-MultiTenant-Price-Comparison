@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 import '../models/notification_model.dart';
@@ -60,12 +61,19 @@ class AppNotificationsScaffold extends StatelessWidget {
     return Scaffold(
       backgroundColor: backgroundColor ?? FieldColors.screenBackground,
       appBar: AppBar(
-        title: Text(title),
+        title: Row(
+          children: [
+            const Icon(Icons.notifications_active_rounded, size: 22),
+            const SizedBox(width: 10),
+            Text(title),
+          ],
+        ),
         actions: [
           if (vm.unreadCount > 0)
-            TextButton(
+            TextButton.icon(
               onPressed: () => _markAllRead(context),
-              child: const Text('Mark all read'),
+              icon: const Icon(Icons.done_all_rounded, size: 16),
+              label: const Text('Mark all read'),
             ),
         ],
       ),
@@ -80,26 +88,24 @@ class AppNotificationsScaffold extends StatelessWidget {
                   ? const Center(child: CircularProgressIndicator())
                   : vm.notifications.isEmpty
                       ? const _NotificationsEmpty()
-                      : ListView.separated(
-                          padding: const EdgeInsets.fromLTRB(
-                            FieldSpacing.lg,
-                            FieldSpacing.sm,
-                            FieldSpacing.lg,
-                            FieldSpacing.xxl,
+                      : RefreshIndicator(
+                          onRefresh: () async => _retryLoad(context),
+                          child: ListView.separated(
+                            padding: const EdgeInsets.all(16),
+                            itemCount: vm.notifications.length,
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(height: 12),
+                            itemBuilder: (context, index) {
+                              final notification = vm.notifications[index];
+                              return _NotificationTile(
+                                notification: notification,
+                                relativeTime: notificationRelativeTime(
+                                  notification.createdAt,
+                                ),
+                                onTap: () => _handleTap(context, notification),
+                              );
+                            },
                           ),
-                          itemCount: vm.notifications.length,
-                          separatorBuilder: (_, __) =>
-                              const SizedBox(height: FieldSpacing.sm),
-                          itemBuilder: (context, index) {
-                            final notification = vm.notifications[index];
-                            return _NotificationTile(
-                              notification: notification,
-                              relativeTime: notificationRelativeTime(
-                                notification.createdAt,
-                              ),
-                              onTap: () => _handleTap(context, notification),
-                            );
-                          },
                         ),
     );
   }
@@ -125,86 +131,107 @@ class _NotificationTile extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(FieldRadius.card),
+        borderRadius: BorderRadius.circular(12),
         child: Ink(
           decoration: BoxDecoration(
             color: isUnread
-                ? FieldColors.primaryNavy.withValues(alpha: 0.04)
-                : FieldColors.surfaceWhite,
-            borderRadius: BorderRadius.circular(FieldRadius.card),
+                ? Colors.white
+                : Colors.white.withValues(alpha: 0.7),
+            borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: isUnread
-                  ? FieldColors.primaryNavy.withValues(alpha: 0.12)
-                  : FieldColors.borderSubtle,
+                  ? iconConfig.color.withValues(alpha: 0.3)
+                  : Colors.grey.withValues(alpha: 0.1),
+              width: isUnread ? 1.5 : 1,
             ),
+            boxShadow: isUnread ? [
+              BoxShadow(
+                color: iconConfig.color.withValues(alpha: 0.05),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              )
+            ] : null,
           ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (isUnread)
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
                 Container(
-                  width: 3,
-                  margin: const EdgeInsets.symmetric(vertical: FieldSpacing.md),
+                  width: 44,
+                  height: 44,
                   decoration: BoxDecoration(
-                    color: FieldColors.primaryNavy.withValues(alpha: 0.5),
-                    borderRadius: BorderRadius.circular(FieldSpacing.xs / 2),
+                    color: iconConfig.color.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    iconConfig.icon,
+                    size: 20,
+                    color: iconConfig.color,
                   ),
                 ),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.all(FieldSpacing.md),
-                  child: Row(
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: iconConfig.color.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(FieldRadius.button),
-                        ),
-                        child: Icon(
-                          iconConfig.icon,
-                          size: 20,
-                          color: iconConfig.color,
-                        ),
-                      ),
-                      const SizedBox(width: FieldSpacing.md),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
                               notification.title,
-                              style: FieldTypography.titleMedium.copyWith(
-                                fontWeight:
-                                    isUnread ? FontWeight.w700 : FontWeight.w600,
+                              style: GoogleFonts.plusJakartaSans(
+                                fontWeight: isUnread ? FontWeight.w800 : FontWeight.w600,
+                                fontSize: 14,
+                                color: const Color(0xFF1E326E),
                               ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
-                            const SizedBox(height: FieldSpacing.xs),
-                            Text(
-                              notification.body,
-                              style: FieldTypography.bodyMedium,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: FieldSpacing.sm),
-                            Text(
-                              relativeTime,
-                              style: FieldTypography.labelSmall.copyWith(
-                                fontSize: 10,
+                          ),
+                          if (isUnread)
+                            Container(
+                              width: 8,
+                              height: 8,
+                              decoration: BoxDecoration(
+                                color: iconConfig.color,
+                                shape: BoxShape.circle,
                               ),
                             ),
-                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        notification.body,
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 13,
+                          color: isUnread ? const Color(0xFF1E326E).withValues(alpha: 0.8) : Colors.grey,
+                          height: 1.4,
                         ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          const Icon(Icons.access_time_rounded, size: 12, color: Colors.grey),
+                          const SizedBox(width: 4),
+                          Text(
+                            relativeTime,
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 11,
+                              color: Colors.grey,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -219,22 +246,40 @@ class _NotificationsEmpty extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(FieldSpacing.xl),
+        padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              Icons.notifications_none_outlined,
-              size: 40,
-              color: FieldColors.textMuted.withValues(alpha: 0.7),
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E326E).withValues(alpha: 0.05),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.notifications_off_rounded,
+                size: 64,
+                color: Colors.grey.withValues(alpha: 0.4),
+              ),
             ),
-            const SizedBox(height: FieldSpacing.md),
-            Text('No notifications yet', style: FieldTypography.titleMedium),
-            const SizedBox(height: FieldSpacing.sm),
+            const SizedBox(height: 24),
             Text(
-              'Updates about your orders and messages will appear here.',
+              'All caught up!',
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
+                color: const Color(0xFF1E326E),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'No new notifications at the moment. We\'ll let you know when something important happens.',
               textAlign: TextAlign.center,
-              style: FieldTypography.bodyMedium,
+              style: GoogleFonts.plusJakartaSans(
+                color: Colors.grey,
+                fontSize: 14,
+                height: 1.5,
+              ),
             ),
           ],
         ),
@@ -253,28 +298,35 @@ class _NotificationsError extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(FieldSpacing.lg),
+        padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             const Icon(
-              Icons.error_outline,
-              size: 48,
-              color: FieldColors.statusDanger,
+              Icons.error_outline_rounded,
+              size: 64,
+              color: Color(0xFFE25730),
             ),
-            const SizedBox(height: FieldSpacing.md),
+            const SizedBox(height: 16),
             Text(
               'Could not load notifications',
-              style: FieldTypography.titleMedium,
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+              ),
             ),
-            const SizedBox(height: FieldSpacing.sm),
+            const SizedBox(height: 8),
             Text(
               message,
               textAlign: TextAlign.center,
-              style: FieldTypography.bodyMedium,
+              style: GoogleFonts.plusJakartaSans(color: Colors.grey),
             ),
-            const SizedBox(height: FieldSpacing.lg),
-            FilledButton(onPressed: onRetry, child: const Text('Retry')),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('Try Again'),
+            ),
           ],
         ),
       ),

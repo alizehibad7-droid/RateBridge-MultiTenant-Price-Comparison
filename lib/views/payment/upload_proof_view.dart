@@ -3,12 +3,13 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../constants/app_colors.dart';
 import '../../theme/admin_theme.dart';
 import '../../viewmodels/auth_viewmodel.dart';
 import '../../models/payment_proof_model.dart';
-import '../../services/cloudinary_service.dart';
+import '../../models/subscription_model.dart';
+import '../../viewmodels/subscription_viewmodel.dart';
+import '../../viewmodels/supplier_viewmodel.dart';
 
 class UploadProofView extends StatefulWidget {
   final double amount;
@@ -32,21 +33,12 @@ class UploadProofView extends StatefulWidget {
 
 class _UploadProofViewState extends State<UploadProofView> {
   XFile? _pickedFile;
-  bool _isUploading = false;
-  String _statusMessage = '';
-  final _txController = TextEditingController();
 
   final Map<String, Map<String, String>> _accounts = {
     'easypaisa': {'name': 'RateBridge Official', 'number': '0300-1234567'},
     'jazzcash': {'name': 'RateBridge Official', 'number': '0345-7654321'},
     'bank': {'name': 'RateBridge Private Ltd', 'number': 'PK70BAHL000123456789', 'bank': 'Bank Al Habib'},
   };
-
-  @override
-  void dispose() {
-    _txController.dispose();
-    super.dispose();
-  }
 
   Future<void> _pickScreenshot() async {
     final picker = ImagePicker();
@@ -62,72 +54,53 @@ class _UploadProofViewState extends State<UploadProofView> {
 
   Future<void> _submitProof() async {
     if (_pickedFile == null) return;
-    if (_txController.text.trim().isEmpty) {
-      _showPopup(title: 'Required', message: 'Please enter the Transaction ID from your receipt.', isError: true);
-      return;
-    }
     
-    setState(() {
-      _isUploading = true;
-      _statusMessage = 'Uploading screenshot...';
-    });
+    final auth = context.read<AuthViewModel>();
+    final user = auth.user;
+    if (user == null) return;
 
-    try {
-      final auth = context.read<AuthViewModel>();
-      final user = auth.user;
-      
-      if (user == null) {
-        throw Exception('User session not found. Please log in again.');
-      }
-      
-      final uid = user.uid;
-      
-      // 1. Upload to Cloudinary
-      final uploadFolder = 'ratebridge/payments/$uid';
-      final bytes = await _pickedFile!.readAsBytes();
-      
-      final downloadUrl = await CloudinaryService.uploadImageBytes(
-        bytes: bytes.toList(),
-        folder: uploadFolder,
-        filename: 'proof_${DateTime.now().millisecondsSinceEpoch}.jpg',
+    bool success = false;
+    String? msg;
+    String? err;
+
+    if (widget.type == PaymentType.subscription) {
+      // CEO Subscription Flow
+      final subVM = context.read<SubscriptionViewModel>();
+      final planDef = kPlans.firstWhere(
+        (p) => p.planKey == widget.planKey, 
+        orElse: () => kPlans.first
       );
+      success = await subVM.submitPaymentProof(
+        ceoId: user.uid,
+        companyId: user.companyId,
+        ceoName: user.name,
+        plan: planDef,
+        method: widget.method,
+        amount: widget.amount,
+        screenshotFile: _pickedFile!,
+      );
+      msg = subVM.successMessage;
+      err = subVM.error;
+    } else {
+      // Supplier Commission Flow
+      final supplierVM = context.read<SupplierViewModel>();
+      success = await supplierVM.submitCommissionPayment(
+        amount: widget.amount,
+        method: widget.method,
+        screenshotFile: _pickedFile!,
+      );
+      msg = supplierVM.successMessage;
+      err = supplierVM.error;
+    }
 
-      if (downloadUrl == null) {
-        throw Exception('Failed to upload image to server. Please check your internet connection.');
-      }
-
-      // 2. Save Record to Firestore
-      setState(() => _statusMessage = 'Submitting for Admin Review...');
-      await FirebaseFirestore.instance.collection('payment_proofs').add({
-        'payerId': uid,
-        'payerName': user.name,
-        'payerRole': user.role, 
-        'amountExpected': widget.amount,
-        'amountDetected': widget.amount, 
-        'transactionIdDetected': _txController.text.trim(),
-        'method': widget.method,
-        'screenshotUrl': downloadUrl,
-        'status': 'pending', // Corrected status: pending
-        'type': widget.type.name,
-        'planKey': widget.planKey,
-        'relatedTransactions': widget.relatedTransactionIds,
-        'isAiVerified': false,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-
-      if (mounted) {
-        _showPopup(
-          title: '✅ Submitted', 
-          message: 'Your payment proof has been sent. Admin will review and approve it shortly.', 
-          isError: false
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        _showPopup(title: 'Upload Failed', message: e.toString(), isError: true);
-      }
-    } finally {
-      if (mounted) setState(() => _isUploading = false);
+    if (success && mounted) {
+      _showPopup(
+        title: '✅ Submitted', 
+        message: msg ?? 'Your payment proof has been sent. Admin will review and approve it shortly.', 
+        isError: false
+      );
+    } else if (mounted) {
+      _showPopup(title: 'Error', message: err ?? 'Failed to submit.', isError: true);
     }
   }
 
@@ -146,11 +119,16 @@ class _UploadProofViewState extends State<UploadProofView> {
         actions: [
           ElevatedButton(
             onPressed: () {
-              Navigator.pop(context);
+              Navigator.pop(context); // Pop Dialog
               if (!isError) {
-                // Return to dashboard/earnings
-                Navigator.pop(context);
-                Navigator.pop(context);
+                // Stack for Subscription: Base View -> PaymentMethodView -> UploadProofView
+                // Stack for Commission: Base View -> CommissionPaymentView -> PaymentMethodView -> UploadProofView
+                Navigator.pop(context); // Pop UploadProofView
+                Navigator.pop(context); // Pop PaymentMethodView
+                
+                if (widget.type == PaymentType.commission) {
+                  Navigator.pop(context); // Pop CommissionPaymentView
+                }
               }
             },
             style: ElevatedButton.styleFrom(backgroundColor: isError ? AppColors.error : AppColors.success),
@@ -164,6 +142,10 @@ class _UploadProofViewState extends State<UploadProofView> {
   @override
   Widget build(BuildContext context) {
     final acc = _accounts[widget.method]!;
+    final subLoading = context.watch<SubscriptionViewModel>().isLoading;
+    final supplierLoading = context.watch<SupplierViewModel>().isLoading;
+    final isLoading = subLoading || supplierLoading;
+
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(title: const Text('Confirm Payment')),
@@ -199,22 +181,12 @@ class _UploadProofViewState extends State<UploadProofView> {
               ),
             ),
             const SizedBox(height: 24),
-            const Text('Payment Details', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _txController,
-              decoration: InputDecoration(
-                labelText: 'Transaction ID / Reference #',
-                hintText: 'Enter the ID from your receipt',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                prefixIcon: const Icon(Icons.receipt_long),
-              ),
-            ),
-            const SizedBox(height: 24),
-            const Text('Upload Screenshot', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            const Text('Upload Payment Screenshot', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            const Text('Please upload a clear screenshot of your successful transaction.', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
             const SizedBox(height: 12),
             InkWell(
-              onTap: _isUploading ? null : _pickScreenshot,
+              onTap: isLoading ? null : _pickScreenshot,
               child: Container(
                 height: 250, width: double.infinity,
                 decoration: BoxDecoration(
@@ -233,8 +205,8 @@ class _UploadProofViewState extends State<UploadProofView> {
               ),
             ),
             const SizedBox(height: 40),
-            if (_isUploading)
-              Center(child: Column(children: [const CircularProgressIndicator(), const SizedBox(height: 16), Text(_statusMessage, style: const TextStyle(fontWeight: FontWeight.w500))]))
+            if (isLoading)
+              const Center(child: Column(children: [CircularProgressIndicator(), const SizedBox(height: 16), Text('Processing...', style: TextStyle(fontWeight: FontWeight.w500))]))
             else
               ElevatedButton(
                 onPressed: _pickedFile == null ? null : _submitProof,

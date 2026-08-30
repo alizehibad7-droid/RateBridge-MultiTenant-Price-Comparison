@@ -7,18 +7,26 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../models/company_model.dart';
 import '../models/user_model.dart';
 import '../models/category_model.dart';
+import '../models/payment_proof_model.dart';
+import '../models/subscription_model.dart';
+import '../models/transaction_model.dart';
+import '../services/notification_service.dart';
 import '../utils/invite_code_generator.dart';
+import '../constants/firestore_paths.dart';
 import 'auth_viewmodel.dart';
 
 // New Admin Models
 class PlatformTransaction {
   final String id;
-  final String type; // 'subscription' | 'order_payment'
+  final String type; // 'subscription' | 'order_payment' | 'commission'
   final String companyName;
   final String? supplierName;
   final double amount;
-  final String status; // 'pending' | 'confirmed' | 'failed'
+  final String status; // 'pending' | 'confirmed' | 'failed' | 'settled'
   final DateTime? date;
+  final String payerRole;
+  final String? screenshotUrl;
+  final String? rejectionReason;
 
   PlatformTransaction({
     required this.id,
@@ -28,11 +36,15 @@ class PlatformTransaction {
     required this.amount,
     required this.status,
     this.date,
+    this.payerRole = '',
+    this.screenshotUrl,
+    this.rejectionReason,
   });
 }
 
 class AdminViewModel extends ChangeNotifier {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final NotificationService? _notificationService;
 
   String? _uid;
   String? _adminName;
@@ -51,7 +63,21 @@ class AdminViewModel extends ChangeNotifier {
   List<PlatformTransaction> _transactions = [];
   List<PlatformTransaction> get transactions => _transactions;
 
-  AdminViewModel();
+  List<PaymentProofModel> _pendingPayments = [];
+  List<PaymentProofModel> get pendingPayments => _pendingPayments;
+
+  List<PaymentProofModel> _confirmedPayments = [];
+  List<PaymentProofModel> get confirmedPayments => _confirmedPayments;
+
+  StreamSubscription? _paymentQueueSub;
+
+  AdminViewModel([this._notificationService]);
+
+  @override
+  void dispose() {
+    _paymentQueueSub?.cancel();
+    super.dispose();
+  }
 
   void updateAuth(AuthViewModel auth) {
     if (auth.user != null && (auth.user!.role.toLowerCase() == 'admin' || auth.user!.role.toLowerCase() == 'administrator')) {
@@ -59,6 +85,9 @@ class AdminViewModel extends ChangeNotifier {
         _uid = auth.user!.uid;
         _adminName = auth.user!.name;
         loadDashboardData();
+        loadPaymentQueue();
+        loadCEOs();
+        loadSuppliers();
       }
     }
   }
@@ -118,10 +147,7 @@ class AdminViewModel extends ChangeNotifier {
     if (companyId == null || companyId.isEmpty) return 'unknown company';
     try {
       final doc = await _db.collection('companies').doc(companyId).get();
-      final name =
-          (doc.data()?['name'] ?? doc.data()?['companyName'] ?? '')
-              .toString()
-              .trim();
+      final name = (doc.data()?['name'] ?? doc.data()?['companyName'] ?? '').toString().trim();
       if (name.isNotEmpty) return name;
     } catch (e) {
       developer.log('Failed to load company name for $companyId: $e');
@@ -132,12 +158,7 @@ class AdminViewModel extends ChangeNotifier {
   Future<String> _supplierName(String uid) async {
     try {
       final supplierDoc = await _db.collection('suppliers').doc(uid).get();
-      final business =
-          (supplierDoc.data()?['businessName'] ??
-                  supplierDoc.data()?['name'] ??
-                  '')
-              .toString()
-              .trim();
+      final business = (supplierDoc.data()?['businessName'] ?? supplierDoc.data()?['name'] ?? '').toString().trim();
       if (business.isNotEmpty) return business;
     } catch (e) {
       developer.log('Failed to load supplier profile for $uid: $e');
@@ -173,6 +194,9 @@ class AdminViewModel extends ChangeNotifier {
           amount: (data['amount'] as num? ?? 0).toDouble(),
           status: data['status'] as String? ?? 'pending',
           date: (data['date'] as Timestamp?)?.toDate(),
+          payerRole: data['payerRole'] as String? ?? '',
+          screenshotUrl: data['screenshotUrl'] as String?,
+          rejectionReason: data['rejectionReason'] as String?,
         );
       }).toList();
     } catch (e) {
@@ -183,7 +207,144 @@ class AdminViewModel extends ChangeNotifier {
     }
   }
 
-  // --- Approvals ---
+  Future<void> loadPaymentQueue() async {
+    _paymentQueueSub?.cancel();
+    _isLoading = true;
+    notifyListeners();
+
+    _paymentQueueSub = _db.collection('payment_proofs')
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .listen((snap) {
+      final all = snap.docs.map((doc) => PaymentProofModel.fromMap(doc.id, doc.data())).toList();
+      _pendingPayments = all.where((p) => p.status == 'pending').toList();
+      _confirmedPayments = all.where((p) => p.status != 'pending' && p.status != 'rejected').toList();
+      _isLoading = false;
+      notifyListeners();
+    }, onError: (e) {
+      developer.log("Error watching payment queue: $e");
+      _isLoading = false;
+      notifyListeners();
+    });
+  }
+
+  Future<void> confirmPayment(PaymentProofModel payment) async {
+    if (payment.status == 'confirmed' || payment.status == 'settled') return;
+    _isLoading = true;
+    notifyListeners();
+    try {
+      final now = DateTime.now();
+      final batch = _db.batch();
+      final paymentRef = _db.collection('payment_proofs').doc(payment.id);
+      
+      final targetStatus = payment.type == 'commission' ? 'settled' : 'confirmed';
+      
+      batch.update(paymentRef, {
+        'status': targetStatus,
+        'confirmedAt': FieldValue.serverTimestamp(),
+        'confirmedBy': _uid ?? 'admin',
+      });
+
+      if (payment.type == 'subscription' && payment.planId != null) {
+        final plan = kPlans.firstWhere((p) => p.planKey == payment.planId, orElse: () => kPlans.first);
+        final expiry = plan.durationDays > 0 ? now.add(Duration(days: plan.durationDays)) : null;
+        final subRef = _db.collection('subscriptions').doc(payment.companyId);
+        batch.set(subRef, {
+          'plan': plan.planKey,
+          'status': 'active',
+          'startedAt': FieldValue.serverTimestamp(),
+          'expiresAt': expiry != null ? Timestamp.fromDate(expiry) : null,
+          'adminGranted': false,
+        }, SetOptions(merge: true));
+        final historyEntry = SubscriptionHistoryEntry(
+          plan: plan.planKey,
+          action: 'purchased',
+          date: now,
+          amountPaid: payment.amount.toInt(),
+          note: 'Confirmed by Admin',
+        );
+        batch.update(subRef, {
+          'history': FieldValue.arrayUnion([historyEntry.toMap()]),
+        });
+        final companyRef = _db.collection('companies').doc(payment.companyId);
+        batch.update(companyRef, {
+          'plan': plan.planKey,
+          'planExpiry': expiry != null ? Timestamp.fromDate(expiry) : null,
+          'aiEnabled': plan.aiUnlocked,
+          'status': 'active',
+        });
+      } 
+      else if (payment.type == 'commission') {
+        if (payment.relatedTransactions != null) {
+          for (var txId in payment.relatedTransactions!) {
+            batch.update(_db.collection(FirestorePaths.transactionsCol).doc(txId), {
+              'status': 'settled',
+              'settledAt': FieldValue.serverTimestamp(),
+              'settledBy': _uid ?? 'admin',
+              'paymentProofId': payment.id,
+            });
+          }
+        }
+      }
+      
+      await batch.commit();
+
+      // Send notifications AFTER successful batch commit to prevent path errors from blocking the DB update
+      if (_notificationService != null) {
+        if (payment.type == 'subscription') {
+          final plan = kPlans.firstWhere((p) => p.planKey == payment.planId, orElse: () => kPlans.first);
+          await _notificationService!.notifySubscriptionDecision(
+            ceoUid: payment.payerId,
+            companyId: payment.companyId,
+            title: 'Subscription Activated! ✅',
+            message: 'Your ${plan.name} subscription has been activated successfully.',
+            data: {'planId': plan.planKey, 'status': 'active'},
+          );
+        } else if (payment.type == 'commission') {
+          await _notificationService!.notifyPaymentStatus(
+            userId: payment.payerId,
+            companyId: payment.companyId,
+            title: 'Commission Payment Confirmed ✅',
+            message: 'Your commission payment of Rs ${payment.amount} has been settled.',
+            data: {'status': 'settled'},
+          );
+        }
+      }
+      
+      await _logAction(actionType: 'confirm_payment', targetType: 'payment_proof', targetId: payment.id, description: 'Confirmed ${payment.type} payment of Rs ${payment.amount} from ${payment.payerName}');
+    } catch (e) {
+      developer.log("Error confirming payment: $e");
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> rejectPayment(PaymentProofModel payment, String reason) async {
+    _isLoading = true;
+    notifyListeners();
+    try {
+      await _db.collection('payment_proofs').doc(payment.id).update({
+        'status': 'rejected',
+        'adminNotes': reason,
+      });
+      if (_notificationService != null) {
+        await _notificationService!.notifyPaymentStatus(
+          userId: payment.payerId,
+          companyId: payment.companyId,
+          title: 'Payment Rejected ❌',
+          message: 'Your payment proof for ${payment.type} was rejected. Reason: $reason',
+          data: {'status': 'rejected', 'reason': reason},
+        );
+      }
+      await _logAction(actionType: 'reject_payment', targetType: 'payment_proof', targetId: payment.id, description: 'Rejected ${payment.type} payment from ${payment.payerName}', reason: reason);
+    } catch (e) {
+      developer.log("Error rejecting payment: $e");
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
 
   Future<void> loadCEOs() async {
     _isLoading = true;
@@ -212,7 +373,7 @@ class AdminViewModel extends ChangeNotifier {
     try {
       final batch = _db.batch();
       if (companyId != null && companyId.isNotEmpty) {
-        String inviteCode = await _generateUniqueInviteCode();
+        String inviteCode = InviteCodeGenerator.generate();
         batch.update(_db.collection('companies').doc(companyId), {
           'status': 'active',
           'inviteCode': inviteCode,
@@ -221,17 +382,10 @@ class AdminViewModel extends ChangeNotifier {
       }
       batch.update(_db.collection('users').doc(ceoUid), {'status': 'active', 'approved': true});
       await batch.commit();
-
       final ceoName = await _userName(ceoUid);
-      final resolvedCompanyId = await _resolvedCompanyId(ceoUid, companyId);
-      final companyName = await _companyName(resolvedCompanyId);
-      await _logAction(
-        actionType: 'approve_ceo',
-        targetType: 'ceo',
-        targetId: ceoUid,
-        description: 'Approved CEO $ceoName for company $companyName',
-      );
-
+      final resolvedId = await _resolvedCompanyId(ceoUid, companyId);
+      final companyName = await _companyName(resolvedId);
+      await _logAction(actionType: 'approve_ceo', targetType: 'ceo', targetId: ceoUid, description: 'Approved CEO $ceoName for company $companyName');
       loadCEOs();
     } finally {
       _isLoading = false;
@@ -239,74 +393,42 @@ class AdminViewModel extends ChangeNotifier {
     }
   }
   
-  // Alias for backward compatibility if any
   Future<void> approveCEO(String? companyId, String ceoUid) => acceptCEO(companyId, ceoUid);
 
   Future<void> suspendCEO(String? companyId, String ceoUid) async {
-    final resolvedCompanyId = await _resolvedCompanyId(ceoUid, companyId);
+    final resolvedId = await _resolvedCompanyId(ceoUid, companyId);
     final ceoName = await _userName(ceoUid);
-    final companyName = await _companyName(resolvedCompanyId);
-
+    final companyName = await _companyName(resolvedId);
     await _db.collection('users').doc(ceoUid).update({'status': 'suspended'});
-    if (resolvedCompanyId.isNotEmpty) {
-      await _db.collection('companies').doc(resolvedCompanyId).update({'status': 'suspended'});
-    }
-
-    await _logAction(
-      actionType: 'ban_company',
-      targetType: 'company',
-      targetId: resolvedCompanyId.isNotEmpty ? resolvedCompanyId : ceoUid,
-      description: 'Banned company $companyName (CEO: $ceoName)',
-    );
-
+    if (resolvedId.isNotEmpty) await _db.collection('companies').doc(resolvedId).update({'status': 'suspended'});
+    await _logAction(actionType: 'ban_company', targetType: 'company', targetId: resolvedId.isNotEmpty ? resolvedId : ceoUid, description: 'Banned company $companyName (CEO: $ceoName)');
     loadCEOs();
   }
 
   Future<void> activateCEO(String? companyId, String ceoUid) async {
-    final resolvedCompanyId = await _resolvedCompanyId(ceoUid, companyId);
+    final resolvedId = await _resolvedCompanyId(ceoUid, companyId);
     final ceoName = await _userName(ceoUid);
-    final companyName = await _companyName(resolvedCompanyId);
-
+    final companyName = await _companyName(resolvedId);
     await _db.collection('users').doc(ceoUid).update({'status': 'active'});
-    if (resolvedCompanyId.isNotEmpty) {
-      await _db.collection('companies').doc(resolvedCompanyId).update({'status': 'active'});
-    }
-
-    await _logAction(
-      actionType: 'reactivate_company',
-      targetType: 'company',
-      targetId: resolvedCompanyId.isNotEmpty ? resolvedCompanyId : ceoUid,
-      description: 'Reactivated company $companyName (CEO: $ceoName)',
-    );
-
+    if (resolvedId.isNotEmpty) await _db.collection('companies').doc(resolvedId).update({'status': 'active'});
+    await _logAction(actionType: 'reactivate_company', targetType: 'company', targetId: resolvedId.isNotEmpty ? resolvedId : ceoUid, description: 'Reactivated company $companyName (CEO: $ceoName)');
     loadCEOs();
   }
 
   Future<void> rejectCEO(String? companyId, String ceoUid, String reason) async {
-    final resolvedCompanyId = await _resolvedCompanyId(ceoUid, companyId);
+    final resolvedId = await _resolvedCompanyId(ceoUid, companyId);
     final ceoName = await _userName(ceoUid);
-    final companyName = await _companyName(resolvedCompanyId);
-
-    await _db.collection('users').doc(ceoUid).update({
-      'status': 'rejected',
-      'rejectionReason': reason,
-    });
-    if (resolvedCompanyId.isNotEmpty) {
-      await _db.collection('companies').doc(resolvedCompanyId).update({
-        'status': 'rejected',
-        'rejectionReason': reason,
-      });
-    }
-
-    await _logAction(
-      actionType: 'reject_ceo',
-      targetType: 'ceo',
-      targetId: ceoUid,
-      description: 'Rejected CEO application for $ceoName ($companyName)',
-      reason: reason,
-    );
-
+    final companyName = await _companyName(resolvedId);
+    await _db.collection('users').doc(ceoUid).update({'status': 'rejected', 'rejectionReason': reason});
+    if (resolvedId.isNotEmpty) await _db.collection('companies').doc(resolvedId).update({'status': 'rejected', 'rejectionReason': reason});
+    await _logAction(actionType: 'reject_ceo', targetType: 'ceo', targetId: ceoUid, description: 'Rejected CEO application for $ceoName ($companyName)', reason: reason);
     loadCEOs();
+  }
+
+  Future<void> loadSuppliers() async {
+    final snap = await _db.collection('users').where('role', isEqualTo: 'Supplier').get();
+    _suppliersList = snap.docs.map((d) => {'user': UserModel.fromMap(d.data())}).toList();
+    notifyListeners();
   }
 
   Future<void> approveSupplier(String uid) async {
@@ -315,15 +437,8 @@ class AdminViewModel extends ChangeNotifier {
     try {
       await _db.collection('users').doc(uid).update({'status': 'active', 'approved': true});
       await _db.collection('suppliers').doc(uid).update({'status': 'Active', 'isVerified': true});
-
       final supplierName = await _supplierName(uid);
-      await _logAction(
-        actionType: 'approve_supplier',
-        targetType: 'supplier',
-        targetId: uid,
-        description: 'Approved supplier $supplierName',
-      );
-
+      await _logAction(actionType: 'approve_supplier', targetType: 'supplier', targetId: uid, description: 'Approved supplier $supplierName');
       loadSuppliers();
     } finally {
       _isLoading = false;
@@ -335,228 +450,68 @@ class AdminViewModel extends ChangeNotifier {
     final supplierName = await _supplierName(uid);
     await _db.collection('users').doc(uid).update({'status': 'suspended'});
     await _db.collection('suppliers').doc(uid).update({'status': 'Suspended'});
-
-    await _logAction(
-      actionType: 'ban_supplier',
-      targetType: 'supplier',
-      targetId: uid,
-      description: 'Banned supplier $supplierName',
-    );
-
+    await _logAction(actionType: 'ban_supplier', targetType: 'supplier', targetId: uid, description: 'Banned supplier $supplierName');
     loadSuppliers();
   }
 
   Future<void> reactivateSupplier(String uid) async {
     final supplierName = await _supplierName(uid);
-    await _db.collection('users').doc(uid).update({
-      'status': 'active',
-      'approved': true,
-    });
-    await _db.collection('suppliers').doc(uid).update({
-      'status': 'Active',
-      'isVerified': true,
-    });
-
-    await _logAction(
-      actionType: 'reactivate_supplier',
-      targetType: 'supplier',
-      targetId: uid,
-      description: 'Reactivated supplier $supplierName',
-    );
-
+    await _db.collection('users').doc(uid).update({'status': 'active', 'approved': true});
+    await _db.collection('suppliers').doc(uid).update({'status': 'Active', 'isVerified': true});
+    await _logAction(actionType: 'reactivate_supplier', targetType: 'supplier', targetId: uid, description: 'Reactivated supplier $supplierName');
     loadSuppliers();
   }
 
   Future<void> rejectSupplier(String uid, String reason) async {
     final supplierName = await _supplierName(uid);
-    await _db.collection('users').doc(uid).update({
-      'status': 'rejected',
-      'rejectionReason': reason,
-    });
+    await _db.collection('users').doc(uid).update({'status': 'rejected', 'rejectionReason': reason});
     await _db.collection('suppliers').doc(uid).update({'status': 'Rejected'});
-
-    await _logAction(
-      actionType: 'reject_supplier',
-      targetType: 'supplier',
-      targetId: uid,
-      description: 'Rejected supplier application for $supplierName',
-      reason: reason,
-    );
-
+    await _logAction(actionType: 'reject_supplier', targetType: 'supplier', targetId: uid, description: 'Rejected supplier application for $supplierName', reason: reason);
     loadSuppliers();
   }
 
   Future<void> deleteSupplierPermanently(String uid) async {
-    // In a real app, this might involve more cleanup
     await _db.collection('users').doc(uid).delete();
     await _db.collection('suppliers').doc(uid).delete();
-
-    await _logAction(
-      actionType: 'delete_supplier',
-      targetType: 'supplier',
-      targetId: uid,
-      description: 'Permanently deleted supplier account and data',
-    );
-
+    await _logAction(actionType: 'delete_supplier', targetType: 'supplier', targetId: uid, description: 'Permanently deleted supplier account and data');
     loadSuppliers();
   }
 
-  // --- Category & Transaction Management ---
-
-  Future<void> addCategory(
-    String name,
-    String unit,
-    List<String> brands,
-    List<String> grades, {
-    String iconKey = 'construction_outlined',
-  }) async {
+  Future<void> addCategory(String name, String unit, List<String> brands, List<String> grades, {String iconKey = 'construction_outlined'}) async {
     final docRef = await _db.collection('categories').add({
-      'name': name,
-      'unit': unit,
-      'brands': brands,
-      'grades': grades,
-      'icon': iconKey,
-      'active': true,
-      'activeMaterialsCount': 0,
-      'createdAt': FieldValue.serverTimestamp(),
+      'name': name, 'unit': unit, 'brands': brands, 'grades': grades, 'icon': iconKey, 'active': true, 'activeMaterialsCount': 0, 'createdAt': FieldValue.serverTimestamp(),
     });
-
-    await _logAction(
-      actionType: 'add_category',
-      targetType: 'category',
-      targetId: docRef.id,
-      description: 'Added new material category: $name',
-    );
+    await _logAction(actionType: 'add_category', targetType: 'category', targetId: docRef.id, description: 'Added new material category: $name');
   }
 
-  Future<void> editCategory(
-    String id,
-    String name,
-    String unit,
-    List<String> brands,
-    List<String> grades, {
-    bool? isActive,
-  }) async {
-    final updates = <String, dynamic>{
-      'name': name,
-      'unit': unit,
-      'brands': brands,
-      'grades': grades,
-    };
-    if (isActive != null) {
-      updates['active'] = isActive;
-    }
+  Future<void> editCategory(String id, String name, String unit, List<String> brands, List<String> grades, {bool? isActive}) async {
+    final updates = <String, dynamic>{'name': name, 'unit': unit, 'brands': brands, 'grades': grades};
+    if (isActive != null) updates['active'] = isActive;
     await _db.collection('categories').doc(id).update(updates);
-
-    await _logAction(
-      actionType: 'edit_category',
-      targetType: 'category',
-      targetId: id,
-      description: 'Updated category details for $name',
-    );
+    await _logAction(actionType: 'edit_category', targetType: 'category', targetId: id, description: 'Updated category details for $name');
   }
 
   Future<void> setCategoryActive(String id, bool active) async {
     await _db.collection('categories').doc(id).update({'active': active});
-
-    await _logAction(
-      actionType: active ? 'activate_category' : 'deactivate_category',
-      targetType: 'category',
-      targetId: id,
-      description: '${active ? "Activated" : "Deactivated"} category',
-    );
+    await _logAction(actionType: active ? 'activate_category' : 'deactivate_category', targetType: 'category', targetId: id, description: '${active ? "Activated" : "Deactivated"} category');
   }
 
   Future<void> deleteCategory(String id) async {
     await _db.collection('categories').doc(id).delete();
-
-    await _logAction(
-      actionType: 'delete_category',
-      targetType: 'category',
-      targetId: id,
-      description: 'Deleted category',
-    );
+    await _logAction(actionType: 'delete_category', targetType: 'category', targetId: id, description: 'Deleted category');
   }
 
-  Future<void> markTransaction(String transactionId, String status) async {
-    await _db.collection('transactions').doc(transactionId).update({
-      'status': status,
-      'reconciledAt': FieldValue.serverTimestamp(),
-    });
-
-    await _logAction(
-      actionType: 'mark_transaction',
-      targetType: 'transaction',
-      targetId: transactionId,
-      description: 'Marked payment-queue transaction $transactionId as $status',
-    );
-
-    loadDashboardData();
-  }
-
-  Future<void> settleSupplierCommissions({
-    required String supplierUid,
-    required String supplierName,
-    required double unsettledAmount,
-    required int orderCount,
-  }) async {
-    final snap = await _db
-        .collection('transactions')
-        .where('supplierUid', isEqualTo: supplierUid)
-        .where('status', isEqualTo: 'unsettled')
-        .get();
-
+  Future<void> settleSupplierCommissions({required String supplierUid, required String supplierName, required double unsettledAmount, required int orderCount}) async {
+    final snap = await _db.collection('transactions').where('supplierUid', isEqualTo: supplierUid).where('status', isEqualTo: 'unsettled').get();
     if (snap.docs.isEmpty) return;
-
     final batch = _db.batch();
-    for (final doc in snap.docs) {
-      batch.update(doc.reference, {
-        'status': 'settled',
-        'settledAt': FieldValue.serverTimestamp(),
-      });
-    }
+    for (final doc in snap.docs) { batch.update(doc.reference, {'status': 'settled', 'settledAt': FieldValue.serverTimestamp()}); }
     await batch.commit();
-
-    final ids = snap.docs.map((d) => d.id).join(', ');
-    final amountLabel = unsettledAmount.toStringAsFixed(0);
-    await _logAction(
-      actionType: 'settle_commission',
-      targetType: 'supplier',
-      targetId: supplierUid,
-      description:
-          'Marked $orderCount commission transaction(s) as settled for $supplierName (Rs $amountLabel)',
-      reason: 'Transaction IDs: $ids',
-    );
+    await _logAction(actionType: 'settle_commission', targetType: 'supplier', targetId: supplierUid, description: 'Marked $orderCount commission transaction(s) as settled for $supplierName (Rs ${unsettledAmount.toStringAsFixed(0)})');
   }
 
-  Future<void> loadSuppliers() async {
-    final snap = await _db.collection('users').where('role', isEqualTo: 'Supplier').get();
-    _suppliersList = snap.docs.map((d) => {'user': UserModel.fromMap(d.data())}).toList();
-    notifyListeners();
-  }
-
-  Future<String> _generateUniqueInviteCode() async {
-    for (var attempt = 0; attempt < 5; attempt++) {
-      final candidate = InviteCodeGenerator.generate();
-      final existing = await _db.collection('companies').where('inviteCode', isEqualTo: candidate).limit(1).get();
-      if (existing.docs.isEmpty) return candidate;
-    }
-    return InviteCodeGenerator.generate(length: 8);
-  }
-
-  // Dashboard Statistics
   Stream<int> watchActiveUsersCount() => _db.collection('users').where('status', isEqualTo: 'active').snapshots().map((s) => s.docs.length);
   Stream<int> watchSuspendedUsersCount() => _db.collection('users').where('status', isEqualTo: 'suspended').snapshots().map((s) => s.docs.length);
   Stream<int> watchPendingUsersCount() => _db.collection('users').where('status', isEqualTo: 'pending').snapshots().map((s) => s.docs.length);
-  
-  Stream<List<CategoryModel>> watchCategories() => _db
-      .collection('categories')
-      .snapshots()
-      .map(
-        (s) => s.docs
-            .map((d) => CategoryModel.fromDoc(d.id, d.data()))
-            .where((c) => c.name.isNotEmpty)
-            .toList()
-          ..sort((a, b) => a.name.compareTo(b.name)),
-      );
+  Stream<List<CategoryModel>> watchCategories() => _db.collection('categories').snapshots().map((s) => s.docs.map((d) => CategoryModel.fromDoc(d.id, d.data())).where((c) => c.name.isNotEmpty).toList()..sort((a, b) => a.name.compareTo(b.name)));
 }

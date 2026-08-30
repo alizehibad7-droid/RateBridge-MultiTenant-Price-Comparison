@@ -144,7 +144,7 @@ class UserModel {
     };
   }
 
-  factory UserModel.fromMap(Map<String, dynamic> map) {
+  factory UserModel.fromMap(Map<String, dynamic> map, [String? docId]) {
     DateTime parseDate(dynamic date) {
       if (date == null) return DateTime.now();
       if (date is Timestamp) return date.toDate();
@@ -160,8 +160,15 @@ class UserModel {
       tokens = [tokensData];
     }
 
+    // Comprehensive UID extraction
+    String? uidVal = map['uid'] ?? map['userId'] ?? map['id'];
+    if (uidVal == null || uidVal.toString().trim().isEmpty) {
+      uidVal = docId;
+    }
+    final uid = (uidVal ?? '').toString().trim();
+
     return UserModel(
-      uid: (map['uid'] ?? '') as String,
+      uid: uid,
       email: (map['email'] ?? '') as String,
       name: (map['name'] ?? '') as String,
       role: (map['role'] ?? '').toString().trim(),

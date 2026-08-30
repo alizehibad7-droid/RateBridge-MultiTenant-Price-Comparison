@@ -31,6 +31,7 @@ class AuthViewModel extends ChangeNotifier {
   bool isRegistered = false;
   String? pendingInviteCompanyId;
   String? pendingInviteCompanyName;
+  String? pendingInvitePlan;
   bool isValidatingInvite = false;
   String? inviteError;
 
@@ -152,6 +153,9 @@ class AuthViewModel extends ChangeNotifier {
         password: password,
       );
       final uid = cred.user!.uid;
+      
+      // Ensure session is recognized
+      await cred.user?.getIdToken(true);
 
       final companyRef = _firestore.collection('companies').doc();
       final companyId = companyRef.id;
@@ -262,7 +266,7 @@ class AuthViewModel extends ChangeNotifier {
     } catch (e) {
       await cred?.user?.delete();
       _status = AuthStatus.error;
-      _errorMessage = 'Registration failed. Please try again.';
+      _errorMessage = _mapAuthError(e);
     } finally {
       notifyListeners();
     }
@@ -293,12 +297,17 @@ class AuthViewModel extends ChangeNotifier {
     isRegistered = false;
     notifyListeners();
 
+    UserCredential? cred;
     try {
-      final cred = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+      cred = await FirebaseAuth.instance.createUserWithEmailAndPassword(
         email: email.trim(),
         password: password,
       );
       final uid = cred.user!.uid;
+      
+      // Ensure session is recognized
+      await cred.user?.getIdToken(true);
+
       final uploadFolder = 'ratebridge/suppliers/$uid';
 
       final cnicFrontUrl = await CloudinaryService.uploadImageBytes(
@@ -430,8 +439,9 @@ class AuthViewModel extends ChangeNotifier {
       _status = AuthStatus.error;
       _errorMessage = _mapAuthError(e);
     } catch (e) {
+      await cred?.user?.delete();
       _status = AuthStatus.error;
-      _errorMessage = 'Registration failed. Please try again.';
+      _errorMessage = _mapAuthError(e);
     } finally {
       notifyListeners();
     }
@@ -459,20 +469,23 @@ class AuthViewModel extends ChangeNotifier {
       if (query.docs.isEmpty) {
         pendingInviteCompanyId = null;
         pendingInviteCompanyName = null;
+        pendingInvitePlan = null;
         inviteError =
             'Invalid invite code. Confirm the code from your CEO and that the company is approved.';
         return false;
       }
 
       final doc = query.docs.first;
+      final data = doc.data();
       pendingInviteCompanyId = doc.id;
-      pendingInviteCompanyName =
-          doc.data()['name'] ?? doc.data()['companyName'];
+      pendingInviteCompanyName = data['name'] ?? data['companyName'];
+      pendingInvitePlan = data['plan'] ?? 'free';
       inviteError = null;
       return true;
     } on FirebaseException catch (e) {
       pendingInviteCompanyId = null;
       pendingInviteCompanyName = null;
+      pendingInvitePlan = null;
       if (e.code == 'permission-denied') {
         inviteError =
             'Could not verify code. Firestore access denied — deploy the latest security rules.';
@@ -486,6 +499,7 @@ class AuthViewModel extends ChangeNotifier {
     } catch (_) {
       pendingInviteCompanyId = null;
       pendingInviteCompanyName = null;
+      pendingInvitePlan = null;
       inviteError = 'Could not verify code. Check your connection.';
       return false;
     } finally {
@@ -498,6 +512,7 @@ class AuthViewModel extends ChangeNotifier {
     inviteError = null;
     pendingInviteCompanyId = null;
     pendingInviteCompanyName = null;
+    pendingInvitePlan = null;
     notifyListeners();
   }
 
@@ -516,28 +531,37 @@ class AuthViewModel extends ChangeNotifier {
     isRegistered = false;
     notifyListeners();
 
+    UserCredential? cred;
     try {
-      final valid = await validateInviteCode(inviteCode);
-      if (!valid || pendingInviteCompanyId == null) {
-        _status = AuthStatus.error;
-        _errorMessage = inviteError ?? 'Invalid invite code. Ask your CEO.';
-        return;
-      }
-
-      final companyId = pendingInviteCompanyId!;
-
-      // Count only active field users. Missing companies fail closed rather
-      // than allowing an unbounded registration.
-      await PlanLimitService.ensureFieldUserCapacity(_firestore, companyId);
-
-      final normalizedPhone = PakistanValidators.normalizePhone(phone);
-      final normalizedCnic = PakistanValidators.formatCnic(cnicNumber);
-
-      final cred = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+      // 1. Authenticate FIRST.
+      cred = await FirebaseAuth.instance.createUserWithEmailAndPassword(
         email: email.trim(),
         password: password,
       );
       final uid = cred.user!.uid;
+      
+      // Force refresh token to ensure Firestore rules recognize the new user session immediately
+      await cred.user?.getIdToken(true);
+
+      // 2. Use cached validation if available, else re-validate
+      if (pendingInviteCompanyId == null) {
+        final valid = await validateInviteCode(inviteCode);
+        if (!valid || pendingInviteCompanyId == null) {
+          throw AppException(inviteError ?? 'Invalid invite code. Ask your CEO.');
+        }
+      }
+
+      final companyId = pendingInviteCompanyId!;
+
+      // 3. Check team size limit (Authenticated context)
+      await PlanLimitService.ensureFieldUserCapacity(
+        _firestore, 
+        companyId, 
+        planKey: pendingInvitePlan,
+      );
+
+      final normalizedPhone = PakistanValidators.normalizePhone(phone);
+      final normalizedCnic = PakistanValidators.formatCnic(cnicNumber);
 
       final userData = UserModel(
         uid: uid,
@@ -555,8 +579,10 @@ class AuthViewModel extends ChangeNotifier {
         createdAt: DateTime.now(),
       );
 
+      // Create user profile in Firestore
       await _userRepo.createUserDoc(uid, userData);
 
+      // Link to company's field user subcollection
       await _firestore
           .collection('companies')
           .doc(companyId)
@@ -578,14 +604,16 @@ class AuthViewModel extends ChangeNotifier {
       _status = AuthStatus.authenticated;
       _startUserSubscription(uid);
     } on AppException catch (e) {
+      await cred?.user?.delete();
       _status = AuthStatus.error;
       _errorMessage = e.message;
     } on FirebaseAuthException catch (e) {
       _status = AuthStatus.error;
       _errorMessage = _mapAuthError(e);
     } catch (e) {
+      await cred?.user?.delete();
       _status = AuthStatus.error;
-      _errorMessage = 'Registration failed. Please try again.';
+      _errorMessage = _mapAuthError(e);
     } finally {
       notifyListeners();
     }
@@ -645,6 +673,7 @@ class AuthViewModel extends ChangeNotifier {
       isRegistered = false;
       pendingInviteCompanyId = null;
       pendingInviteCompanyName = null;
+      pendingInvitePlan = null;
       notifyListeners();
     } catch (e) {
       _status = AuthStatus.error;
@@ -698,7 +727,7 @@ class AuthViewModel extends ChangeNotifier {
     }
     if (e is FirebaseException && e.plugin == 'cloud_firestore') {
       if (e.code == 'permission-denied') {
-        return 'Could not load your profile. Ask an admin to verify your account exists in Firestore.';
+        return 'Firestore access denied. Please check your security rules or connectivity.';
       }
     }
     final message = e.toString();

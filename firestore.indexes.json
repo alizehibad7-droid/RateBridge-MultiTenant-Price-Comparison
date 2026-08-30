@@ -1,6 +1,14 @@
 {
   "indexes": [
     {
+      "collectionGroup": "payment_proofs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "status", "order": "ASCENDING"},
+        {"fieldPath": "createdAt", "order": "DESCENDING"}
+      ]
+    },
+    {
       "collectionGroup": "materials",
       "queryScope": "COLLECTION",
       "fields": [

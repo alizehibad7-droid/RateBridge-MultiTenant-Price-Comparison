@@ -110,21 +110,43 @@ class _AdminSubscriptionViewState extends State<AdminSubscriptionView> {
         title: 'Subscription Management',
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh_rounded),
+            tooltip: 'Refresh',
             onPressed: _loadCompanies,
           ),
         ],
       ),
       body: Column(
         children: [
-          Padding(
+          Container(
             padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.03),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
             child: TextField(
               controller: _searchController,
               onChanged: _onSearch,
+              style: GoogleFonts.plusJakartaSans(fontSize: 14),
               decoration: AdminTheme.inputDecoration(
-                hintText: 'Search company...',
-                prefixIcon: const Icon(Icons.search, color: AdminColors.textGrey),
+                hintText: 'Search by company name...',
+                prefixIcon: const Icon(Icons.search_rounded, color: AdminColors.navy, size: 22),
+                suffixIcon: _searchController.text.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.cancel_rounded, size: 20, color: AdminColors.textGrey),
+                        onPressed: () {
+                          _searchController.clear();
+                          _onSearch('');
+                          setState(() {});
+                        },
+                      )
+                    : null,
               ),
             ),
           ),
@@ -137,16 +159,17 @@ class _AdminSubscriptionViewState extends State<AdminSubscriptionView> {
                 .length;
             final freeCount = _companies.length - basicCount - premiumCount;
 
-            return AdminCard(
-              margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-              padding: const EdgeInsets.all(12),
+            return Container(
+              margin: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              decoration: AdminTheme.cardDecoration(),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  _summaryPill('Free', freeCount, AdminColors.textGrey),
-                  _summaryPill('Basic', basicCount, AdminColors.navy),
-                  _summaryPill('Premium', premiumCount, AdminColors.amber),
-                  _summaryPill('Total', _companies.length, AdminColors.green),
+                  _summaryItem(Icons.eco_rounded, 'Free', freeCount, AdminColors.textGrey),
+                  _summaryItem(Icons.star_outline_rounded, 'Basic', basicCount, AdminColors.navy),
+                  _summaryItem(Icons.workspace_premium_rounded, 'Premium', premiumCount, AdminColors.amber),
+                  _summaryItem(Icons.groups_rounded, 'Total', _companies.length, AdminColors.green),
                 ],
               ),
             );
@@ -156,18 +179,26 @@ class _AdminSubscriptionViewState extends State<AdminSubscriptionView> {
                 ? const Center(child: CircularProgressIndicator())
                 : _filtered.isEmpty
                     ? Center(
-                        child: Text(
-                          'No companies found',
-                          style: AdminTheme.mutedStyle(),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.business_rounded, size: 64, color: AdminColors.textGrey),
+                            const SizedBox(height: 16),
+                            Text(
+                              'No companies found',
+                              style: AdminTheme.titleStyle(size: 18).copyWith(color: AdminColors.textGrey),
+                            ),
+                          ],
                         ),
                       )
                     : RefreshIndicator(
                         onRefresh: _loadCompanies,
+                        color: AdminColors.amber,
                         child: ListView.separated(
                           padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
                           itemCount: _filtered.length,
                           separatorBuilder: (_, __) =>
-                              const SizedBox(height: 10),
+                              const SizedBox(height: 12),
                           itemBuilder: (context, i) {
                             final company = _filtered[i];
                             final companyId = company['id'] as String;
@@ -187,6 +218,32 @@ class _AdminSubscriptionViewState extends State<AdminSubscriptionView> {
     );
   }
 
+  Widget _summaryItem(IconData icon, String label, int count, Color color) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.1),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, color: color, size: 18),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          '$count',
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
+            color: AdminColors.navy,
+          ),
+        ),
+        Text(label, style: AdminTheme.mutedStyle(size: 10).copyWith(fontWeight: FontWeight.w600)),
+      ],
+    );
+  }
+
   Widget _companySubscriptionCard(
     BuildContext context,
     Map<String, dynamic> company,
@@ -200,24 +257,31 @@ class _AdminSubscriptionViewState extends State<AdminSubscriptionView> {
     final expiresAt = sub?.expiresAt;
 
     return AdminCard(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
-              CircleAvatar(
-                radius: 20,
-                backgroundColor: AdminColors.navy.withValues(alpha: 0.1),
-                child: Text(
-                  name.isNotEmpty ? name[0].toUpperCase() : 'C',
-                  style: GoogleFonts.plusJakartaSans(
-                    color: AdminColors.navy,
-                    fontWeight: FontWeight.w700,
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: AdminColors.navy.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Center(
+                  child: Text(
+                    name.isNotEmpty ? name[0].toUpperCase() : 'C',
+                    style: GoogleFonts.plusJakartaSans(
+                      color: AdminColors.navy,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 20,
+                    ),
                   ),
                 ),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -225,12 +289,18 @@ class _AdminSubscriptionViewState extends State<AdminSubscriptionView> {
                     Text(
                       name,
                       style: GoogleFonts.plusJakartaSans(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
                         color: AdminColors.navy,
                       ),
                     ),
-                    Text(city, style: AdminTheme.mutedStyle(size: 12)),
+                    Row(
+                      children: [
+                        const Icon(Icons.location_on_outlined, size: 12, color: AdminColors.textGrey),
+                        const SizedBox(width: 4),
+                        Text(city, style: AdminTheme.mutedStyle(size: 12)),
+                      ],
+                    ),
                   ],
                 ),
               ),
@@ -239,14 +309,20 @@ class _AdminSubscriptionViewState extends State<AdminSubscriptionView> {
                 children: [
                   _planBadge(currentPlan),
                   if (adminGranted) ...[
-                    const SizedBox(height: 3),
-                    Text(
-                      'Admin Grant',
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 10,
-                        color: AdminColors.navy,
-                        fontWeight: FontWeight.w600,
-                      ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        const Icon(Icons.admin_panel_settings_rounded, size: 12, color: AdminColors.navy),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Admin Grant',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 10,
+                            color: AdminColors.navy,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ],
@@ -254,70 +330,96 @@ class _AdminSubscriptionViewState extends State<AdminSubscriptionView> {
             ],
           ),
           if (expiresAt != null) ...[
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                const Icon(Icons.calendar_today_outlined,
-                    size: 12, color: AdminColors.textGrey),
-                const SizedBox(width: 4),
-                Text(
-                  'Expires: ${AppFormatters.date(expiresAt)}  ·  ${sub?.daysRemaining ?? 0} days left',
-                  style: AdminTheme.mutedStyle(size: 11),
-                ),
-              ],
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: AdminColors.screenBg,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.event_available_rounded,
+                      size: 14, color: AdminColors.textGrey),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Expires ${AppFormatters.date(expiresAt)}',
+                    style: AdminTheme.mutedStyle(size: 12).copyWith(fontWeight: FontWeight.w600),
+                  ),
+                  const Spacer(),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: AdminColors.amber.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      '${sub?.daysRemaining ?? 0} days left',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 10,
+                        color: AdminColors.darkAmber,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
           const Divider(height: 1),
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
           Row(
             children: [
+              const Icon(Icons.bolt_rounded, size: 16, color: AdminColors.amber),
+              const SizedBox(width: 6),
               Text(
-                'Grant:',
+                'Grant Plan:',
                 style: GoogleFonts.plusJakartaSans(
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.w700,
                   fontSize: 13,
                   color: AdminColors.navy,
                 ),
               ),
               const SizedBox(width: 10),
-              ...kPlans
-                  .where((p) => p.id != PlanId.free)
-                  .map((plan) => Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: OutlinedButton(
-                          onPressed: currentPlan == plan.planKey
-                              ? null
-                              : () => _showGrantDialog(
-                                    context,
-                                    company,
-                                    companyId,
-                                    plan,
+              Expanded(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: kPlans
+                        .where((p) => p.id != PlanId.free)
+                        .map((plan) => Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: OutlinedButton(
+                                onPressed: currentPlan == plan.planKey
+                                    ? null
+                                    : () => _showGrantDialog(
+                                          context,
+                                          company,
+                                          companyId,
+                                          plan,
+                                        ),
+                                style: AdminTheme.secondaryButtonStyle(height: 36).copyWith(
+                                  padding: const WidgetStatePropertyAll(
+                                    EdgeInsets.symmetric(horizontal: 12, vertical: 0),
                                   ),
-                          style: AdminTheme.secondaryButtonStyle(height: 36)
-                              .copyWith(
-                            padding: const WidgetStatePropertyAll(
-                              EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            ),
-                            minimumSize:
-                                const WidgetStatePropertyAll(Size(0, 36)),
-                          ),
-                          child: Text(plan.name,
-                              style: const TextStyle(fontSize: 12)),
-                        ),
-                      )),
-              const Spacer(),
+                                  minimumSize: const WidgetStatePropertyAll(Size(0, 32)),
+                                  shape: WidgetStatePropertyAll(RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
+                                ),
+                                child: Text(plan.name,
+                                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                              ),
+                            ))
+                        .toList(),
+                  ),
+                ),
+              ),
               if (currentPlan != 'free')
-                TextButton(
+                IconButton(
                   onPressed: () =>
                       _revokeSubscription(context, companyId, name),
-                  child: Text(
-                    'Revoke',
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 12,
-                      color: AdminColors.red,
-                    ),
-                  ),
+                  icon: const Icon(Icons.remove_circle_outline_rounded, color: AdminColors.red, size: 20),
+                  tooltip: 'Revoke Subscription',
                 ),
             ],
           ),
@@ -338,30 +440,42 @@ class _AdminSubscriptionViewState extends State<AdminSubscriptionView> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Grant ${plan.name} to $companyName'),
+        title: Row(
+          children: [
+            const Icon(Icons.verified_user_rounded, color: AdminColors.navy),
+            const SizedBox(width: 10),
+            Expanded(child: Text('Grant ${plan.name}')),
+          ],
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'This will activate ${plan.name} for ${plan.durationDays} days at no charge (admin override).',
-              style: AdminTheme.mutedStyle(),
+              'Company: $companyName',
+              style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, color: AdminColors.navy),
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 8),
+            Text(
+              'This will manually activate the ${plan.name} plan for ${plan.durationDays} days as an administrative override.',
+              style: AdminTheme.mutedStyle(size: 13),
+            ),
+            const SizedBox(height: 20),
             TextField(
               controller: noteController,
-              maxLines: 2,
+              maxLines: 3,
+              style: GoogleFonts.plusJakartaSans(fontSize: 14),
               decoration: AdminTheme.inputDecoration(
-                labelText: 'Admin note (optional)',
-                hintText: 'Reason for granting...',
+                labelText: 'Reason for manual grant',
+                hintText: 'e.g. Promotional offer, support resolution...',
               ),
             ),
           ],
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ElevatedButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('CANCEL')),
+          ElevatedButton.icon(
             onPressed: () async {
               Navigator.pop(ctx);
               final vm = context.read<SubscriptionViewModel>();
@@ -372,15 +486,19 @@ class _AdminSubscriptionViewState extends State<AdminSubscriptionView> {
               );
               if (ctx.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                  content: Text(vm.successMessage ?? '${plan.name} granted.'),
+                  behavior: SnackBarBehavior.floating,
+                  content: Text(vm.successMessage ?? '${plan.name} plan successfully granted.'),
                   backgroundColor: AdminColors.green,
                 ));
                 vm.clearMessages();
               }
               await _loadCompanies();
             },
-            style: AdminTheme.primaryButtonStyle(height: 44),
-            child: Text('Grant ${plan.name}'),
+            icon: const Icon(Icons.check_rounded, size: 18),
+            label: Text('GRANT ${plan.name.toUpperCase()}'),
+            style: AdminTheme.primaryButtonStyle(height: 44).copyWith(
+              minimumSize: WidgetStateProperty.all(const Size(160, 44)),
+            ),
           ),
         ],
       ),
@@ -392,14 +510,23 @@ class _AdminSubscriptionViewState extends State<AdminSubscriptionView> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Revoke subscription for $companyName?'),
-        content: const Text(
-            'This will immediately revert the company to the Free plan.'),
+        title: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded, color: AdminColors.red),
+            const SizedBox(width: 10),
+            const Text('Revoke Subscription?'),
+          ],
+        ),
+        content: Text(
+            'Are you sure you want to revoke paid access for $companyName? '
+            'This will immediately revert the workspace to the Free plan limitations.'),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          OutlinedButton(
-            style: AdminTheme.destructiveButtonStyle(height: 44),
+              onPressed: () => Navigator.pop(ctx), child: const Text('CANCEL')),
+          OutlinedButton.icon(
+            style: AdminTheme.destructiveButtonStyle(height: 44).copyWith(
+              minimumSize: WidgetStateProperty.all(const Size(140, 44)),
+            ),
             onPressed: () async {
               Navigator.pop(ctx);
               await _firestore.collection('subscriptions').doc(companyId).set({
@@ -414,7 +541,7 @@ class _AdminSubscriptionViewState extends State<AdminSubscriptionView> {
                     'action': 'admin_revoked',
                     'date': Timestamp.now(),
                     'amountPaid': 0,
-                    'note': 'Revoked by admin',
+                    'note': 'Revoked by administrator',
                   }
                 ]),
               }, SetOptions(merge: true));
@@ -429,13 +556,15 @@ class _AdminSubscriptionViewState extends State<AdminSubscriptionView> {
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
-                    content: Text('Subscription revoked.'),
+                    behavior: SnackBarBehavior.floating,
+                    content: Text('Subscription has been revoked.'),
                     backgroundColor: AdminColors.amber,
                   ),
                 );
               }
             },
-            child: const Text('Revoke'),
+            icon: const Icon(Icons.remove_circle_outline_rounded, size: 18),
+            label: const Text('CONFIRM REVOKE'),
           ),
         ],
       ),
@@ -459,26 +588,10 @@ class _AdminSubscriptionViewState extends State<AdminSubscriptionView> {
         style: GoogleFonts.plusJakartaSans(
           color: colors.fg,
           fontSize: 10,
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.5,
         ),
       ),
-    );
-  }
-
-  Widget _summaryPill(String label, int count, Color color) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          '$count',
-          style: GoogleFonts.plusJakartaSans(
-            fontSize: 20,
-            fontWeight: FontWeight.w700,
-            color: color,
-          ),
-        ),
-        Text(label, style: AdminTheme.mutedStyle(size: 11)),
-      ],
     );
   }
 }

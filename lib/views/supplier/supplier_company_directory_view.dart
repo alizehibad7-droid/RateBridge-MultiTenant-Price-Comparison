@@ -538,8 +538,16 @@ class _DirectoryActionButton extends StatelessWidget {
                               req.requestId,
                               controller.text.trim(),
                             );
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Invitation declined.')),
+                              );
+                            }
                           },
-                          child: const Text('Confirm Decline'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: FieldColors.statusDanger,
+                          ),
+                          child: const Text('Decline Invitation'),
                         ),
                       ],
                     ),
@@ -548,6 +556,7 @@ class _DirectoryActionButton extends StatelessWidget {
               },
               style: OutlinedButton.styleFrom(
                 foregroundColor: FieldColors.statusDanger,
+                side: const BorderSide(color: FieldColors.statusDanger),
               ),
               child: const Text('Decline'),
             ),

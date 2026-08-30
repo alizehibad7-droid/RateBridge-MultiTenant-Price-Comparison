@@ -4,12 +4,14 @@ import 'dart:io';
 import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:image_picker/image_picker.dart';
 import '../models/rfq_model.dart';
 import '../models/rfq_bid_model.dart';
 import '../models/material_model.dart';
 import '../models/order_model.dart';
 import '../models/rating_model.dart';
 import '../models/transaction_model.dart';
+import '../models/payment_proof_model.dart';
 import '../constants/app_constants.dart';
 import '../constants/firestore_paths.dart';
 import '../models/company_model.dart';
@@ -73,7 +75,10 @@ class SupplierViewModel extends ChangeNotifier {
   List<OrderModel> _orders = [];
   List<RatingModel> _ratings = [];
   List<TransactionModel> _transactions = [];
-  List<TransactionModel> _unsettledTransactions = [];
+  List<TransactionModel> _allCommissions = [];
+  List<PaymentProofModel> _confirmedCommissionPayments = [];
+  List<PaymentProofModel> _pendingCommissionPayments = [];
+  
   List<CompanyModel> _companies = [];
   List<CompanyModel> _companyDirectory = [];
   List<CompanyModel> _allCompanyDirectory = [];
@@ -86,14 +91,12 @@ class SupplierViewModel extends ChangeNotifier {
   bool _commissionRestricted = false;
   String? _commissionRestrictionReason;
   List<InvitationModel> _invitations = [];
-  List<Map<String, dynamic>> _monthlyChart = [];
   List<MonthlyEarning> _monthlyEarnings = [];
   UserModel? _profile;
   String _status = 'pending';
 
   StreamSubscription? _statusSubscription;
-  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>?
-  _partnershipRequestsSub;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _partnershipRequestsSub;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _linkedCompaniesSub;
   List<PartnershipRequestModel> _allPartnershipRequests = [];
   final Map<String, PartnershipRequestModel> _latestPartnershipByCompanyId = {};
@@ -104,8 +107,8 @@ class SupplierViewModel extends ChangeNotifier {
   StreamSubscription? _companiesSubscription;
   StreamSubscription? _materialsSubscription;
   StreamSubscription? _ordersSubscription;
-  StreamSubscription? _earningsSubscription;
-  StreamSubscription? _unsettledSubscription;
+  StreamSubscription? _commissionsSub;
+  StreamSubscription? _paymentsSub;
   StreamSubscription? _invitationsSubscription;
   StreamSubscription? _ratingsSubscription;
   StreamSubscription? _supplierRestrictionSub;
@@ -118,13 +121,35 @@ class SupplierViewModel extends ChangeNotifier {
   bool _earningsInitialized = false;
   bool _ratingsInitialized = false;
 
-  // Dashboard Aggregates
-  double totalEarnings = 0;
-  double netEarnings = 0;
-  double pendingEarnings = 0;
-  double completedPayouts = 0;
+  // --- Commission Ledger Getters ---
+  double get totalCommissionGenerated => _allCommissions.fold(0.0, (sum, tx) => sum + tx.commissionAmount);
+  double get totalCommissionPaid => _confirmedCommissionPayments.fold(0.0, (sum, p) => sum + p.amount);
+  double get commissionOwed {
+    final owed = totalCommissionGenerated - totalCommissionPaid;
+    return owed < 0.01 ? 0 : owed;
+  }
+  double get pendingCommissionApproval => _pendingCommissionPayments.fold(0.0, (sum, p) => sum + p.amount);
 
-  // Getters
+  // --- Stats and Aggregates ---
+  double get totalEarnings => _orders.where((o) => o.status == 'confirmed').fold(0.0, (sum, o) => sum + o.totalAmount);
+  double get netEarnings => totalEarnings * (1 - AppConstants.commissionRate);
+  
+  double grossSalesForMonth(String month) {
+    final start = DateTime.parse('$month-01');
+    final end = DateTime(start.month == 12 ? start.year + 1 : start.year, start.month == 12 ? 1 : start.month + 1, 1);
+    return _orders.where((o) {
+      final s = o.status.toLowerCase().trim();
+      if (s != 'confirmed') return false;
+      final date = o.confirmedAt ?? o.createdAt;
+      return !date.isBefore(start) && date.isBefore(end);
+    }).fold(0.0, (sum, o) => sum + o.totalAmount);
+  }
+
+  double netEarningsForMonth(String month) {
+    return grossSalesForMonth(month) * (1 - AppConstants.commissionRate);
+  }
+
+  // --- Getters ---
   String? get supplierUid => _supplierUid;
   String? get selectedCompanyId => _selectedCompanyId;
   String? get rejectionReason => _rejectionReason;
@@ -132,30 +157,14 @@ class SupplierViewModel extends ChangeNotifier {
   String? get successMessage => _successMessage;
   bool get isLoading => _isLoading;
   bool get partnershipListsReady => _partnershipListsReady;
-  List<PartnershipRequestModel> get incomingPartnershipRequests =>
-      List<PartnershipRequestModel>.unmodifiable(_incomingPartnershipRequests);
-  List<PartnershipRequestModel> get outgoingPartnershipRequests =>
-      List<PartnershipRequestModel>.unmodifiable(_outgoingPartnershipRequests);
-  List<PartnershipRequestModel> get allPartnershipRequests =>
-      List<PartnershipRequestModel>.unmodifiable(_allPartnershipRequests);
-  List<PartnershipRequestModel> get pendingCeoInvitations =>
-      _allPartnershipRequests
-          .where((r) => r.isCeoInitiated && r.status == 'pending')
-          .toList(growable: false);
-  List<PartnershipRequestModel> get pendingSupplierSentRequests =>
-      _allPartnershipRequests
-          .where((r) => r.isSupplierInitiated && r.status == 'pending')
-          .toList(growable: false);
-  List<PartnershipRequestModel> get pastPartnershipRequests =>
-      _allPartnershipRequests
-          .where((r) => r.status == 'rejected' || r.status == 'removed')
-          .take(10)
-          .toList(growable: false);
-  int get pendingPartnershipRequestsCount =>
-      _allPartnershipRequests.where((r) => r.status == 'pending').length;
-  bool get hasAnyPartnershipRequests => _allPartnershipRequests.isNotEmpty;
-  List<CompanyModel> get activePartnerCompanies =>
-      List<CompanyModel>.unmodifiable(_companies);
+  List<PartnershipRequestModel> get incomingPartnershipRequests => List<PartnershipRequestModel>.unmodifiable(_incomingPartnershipRequests);
+  List<PartnershipRequestModel> get outgoingPartnershipRequests => List<PartnershipRequestModel>.unmodifiable(_outgoingPartnershipRequests);
+  List<PartnershipRequestModel> get allPartnershipRequests => List<PartnershipRequestModel>.unmodifiable(_allPartnershipRequests);
+  List<PartnershipRequestModel> get pendingCeoInvitations => _allPartnershipRequests.where((r) => r.isCeoInitiated && r.status == 'pending').toList();
+  List<PartnershipRequestModel> get pendingSupplierSentRequests => _allPartnershipRequests.where((r) => r.isSupplierInitiated && r.status == 'pending').toList();
+  List<PartnershipRequestModel> get pastPartnershipRequests => _allPartnershipRequests.where((r) => r.status == 'rejected' || r.status == 'removed').take(10).toList();
+  int get pendingPartnershipRequestsCount => _allPartnershipRequests.where((r) => r.status == 'pending').length;
+  List<CompanyModel> get activePartnerCompanies => List<CompanyModel>.unmodifiable(_companies);
   bool get partnershipHubDataLoaded => _partnershipHubDataLoaded;
   bool get isDashboardLoading => _isDashboardLoading;
   bool get companiesLoaded => _companiesLoaded;
@@ -165,40 +174,35 @@ class SupplierViewModel extends ChangeNotifier {
   List<OrderModel> get orders => _orders;
   List<RatingModel> get ratings => _ratings;
   List<TransactionModel> get transactions => _transactions;
-  List<TransactionModel> get unsettledTransactions => _unsettledTransactions;
   List<CompanyModel> get companies => _companies;
   List<CompanyModel> get companyDirectory => _companyDirectory;
   List<InvitationModel> get invitations => _invitations;
-  List<Map<String, dynamic>> get monthlyChart => _monthlyChart;
   List<MonthlyEarning> get monthlyEarnings => _monthlyEarnings;
   UserModel? get profile => _profile;
   bool get isCommissionRestricted => _commissionRestricted;
   String? get commissionRestrictionReason => _commissionRestrictionReason;
   String get status => _status;
+  List<PaymentProofModel> get paymentHistory => [..._confirmedCommissionPayments, ..._pendingCommissionPayments]..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
   int get totalMaterialsCount => _materials.length;
-
-  int get pendingOrdersCount =>
-      _orders.where((o) {
-        return o.status.toLowerCase() == 'pending';
-      }).length;
-
-  int get activeOrdersCount =>
-      _orders.where((o) {
-        final status = o.status.toLowerCase();
-        return status == 'accepted' || status == 'inprogress';
-      }).length;
-
-  int get inProgressOrdersCount => activeOrdersCount;
-
+  int get pendingOrdersCount => _orders.where((o) {
+    final s = o.status.toLowerCase().trim();
+    return s == 'pending' || s == 'pending_approval';
+  }).length;
+  int get activeOrdersCount => _orders.where((o) {
+    final s = o.status.toLowerCase().trim();
+    return s == 'accepted' || s == 'inprogress';
+  }).length;
   int get ratingsCount => _ratings.length;
-
+  double get averageRating {
+    if (_ratings.isEmpty) return 0.0;
+    return _ratings.fold<double>(0, (acc, r) => acc + r.rating) / _ratings.length;
+  }
+  
   List<OrderModel> get recentOrders {
-    final sorted = List<OrderModel>.from(_orders)
-      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    final sorted = List<OrderModel>.from(_orders)..sort((a, b) => b.createdAt.compareTo(a.createdAt));
     return sorted.take(5).toList();
   }
-
   List<MaterialModel> get recentMaterials {
     final sorted = List<MaterialModel>.from(_materials)..sort((a, b) {
       final aDate = a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
@@ -208,50 +212,8 @@ class SupplierViewModel extends ChangeNotifier {
     return sorted.take(3).toList();
   }
 
-  double get monthlyEarningsTotal {
-    final settledFromTx = _transactions
-        .where((t) {
-          if (!t.isSettled) return false;
-          if (_selectedCompanyId == null) return true;
-          return t.companyId == _selectedCompanyId;
-        })
-        .fold(0.0, (sum, t) => sum + t.supplierEarning);
-
-    final txOrderIds =
-        _transactions.where((t) => t.isSettled).map((t) => t.orderId).toSet();
-    final now = DateTime.now();
-    final fromConfirmed = _orders
-        .where((o) {
-          if (o.status.toLowerCase() != 'confirmed') return false;
-          if (_selectedCompanyId != null && o.companyId != _selectedCompanyId) {
-            return false;
-          }
-          if (txOrderIds.contains(o.orderId)) return false;
-          final d = o.confirmedAt ?? o.createdAt;
-          return d.year == now.year && d.month == now.month;
-        })
-        .fold(0.0, (sum, o) {
-          if (o.supplierEarning > 0) return sum + o.supplierEarning;
-          return sum + (o.totalAmount * (1 - AppConstants.commissionRate));
-        });
-
-    return settledFromTx + fromConfirmed;
-  }
-
-  int get completedThisMonth =>
-      _orders
-          .where(
-            (o) =>
-                o.status == 'confirmed' &&
-                o.createdAt.month == DateTime.now().month,
-          )
-          .length;
-
-  double get averageRating {
-    if (_ratings.isEmpty) return 0.0;
-    final sum = _ratings.fold<double>(0, (acc, r) => acc + r.rating);
-    return sum / _ratings.length;
-  }
+  double get monthlyEarningsTotal => netEarningsForMonth(monthKey());
+  int get completedThisMonth => _orders.where((o) => o.status == 'confirmed' && o.createdAt.month == DateTime.now().month).length;
 
   void updateAuth(AuthViewModel auth) {
     final newUid = auth.user?.uid;
@@ -281,6 +243,45 @@ class SupplierViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> _ensureAuthAndLoad() async {
+    final uid = _supplierUid;
+    if (uid == null) return;
+    ensurePartnershipStatusWatch();
+    loadLinkedCompanies();
+    loadInvitations();
+    loadNotificationPreferences();
+    _ensureSupplierRestrictionWatch();
+    _startEarningsStreams();
+    watchStatus();
+  }
+
+  void _startEarningsStreams() {
+    final uid = _supplierUid;
+    if (uid == null) return;
+
+    _commissionsSub?.cancel();
+    _commissionsSub = _db.collection(FirestorePaths.transactionsCol)
+        .where('supplierUid', isEqualTo: uid)
+        .snapshots().listen((snap) {
+          _allCommissions = snap.docs.map((d) => TransactionModel.fromMap(d.id, d.data())).toList();
+          _earningsInitialized = true;
+          _checkDashboardReady();
+          notifyListeners();
+        }, onError: (e) => _onDashboardStreamError('earnings', e));
+
+    _paymentsSub?.cancel();
+    _paymentsSub = _db.collection('payment_proofs')
+        .where('payerId', isEqualTo: uid)
+        .where('type', isEqualTo: 'commission')
+        .snapshots().listen((snap) {
+          final all = snap.docs.map((d) => PaymentProofModel.fromMap(d.id, d.data())).toList();
+          // Include 'settled' status so commissionOwed decreases when Admin marks as settled
+          _confirmedCommissionPayments = all.where((p) => p.status == 'confirmed' || p.status == 'approved' || p.status == 'settled').toList();
+          _pendingCommissionPayments = all.where((p) => p.status == 'pending').toList();
+          notifyListeners();
+        });
+  }
+
   Future<void> retryInitialLoad() async {
     if (_supplierUid == null) return;
     _error = null;
@@ -290,69 +291,38 @@ class SupplierViewModel extends ChangeNotifier {
     await _ensureAuthAndLoad();
   }
 
-  Future<void> _ensureAuthAndLoad() async {
-    final uid = _supplierUid;
-    if (uid == null) return;
-    ensurePartnershipStatusWatch();
-    loadLinkedCompanies();
-    loadInvitations();
-    loadNotificationPreferences();
-    _ensureSupplierRestrictionWatch();
-  }
-
   void _ensureSupplierRestrictionWatch() {
     final uid = _supplierUid;
     if (uid == null) return;
     _supplierRestrictionSub?.cancel();
-    _supplierRestrictionSub = _db.collection('suppliers').doc(uid).snapshots().listen(
-      (snap) {
+    _supplierRestrictionSub = _db.collection('suppliers').doc(uid).snapshots().listen((snap) {
         final data = snap.data();
         _commissionRestricted = data?['commissionRestricted'] == true;
-        _commissionRestrictionReason =
-            data?['commissionRestrictionReason'] as String?;
+        _commissionRestrictionReason = data?['commissionRestrictionReason'] as String?;
         notifyListeners();
-      },
-      onError: (_) {},
-    );
+      }, onError: (_) {});
   }
 
+  // --- Notification Prefs ---
   static const Map<String, bool> defaultNotificationPrefs = {
-    'pushEnabled': true,
-    'newOrders': true,
-    'orderUpdates': true,
-    'chatMessages': true,
-    'ratings': true,
-    'earnings': true,
+    'pushEnabled': true, 'newOrders': true, 'orderUpdates': true,
+    'chatMessages': true, 'ratings': true, 'earnings': true,
   };
-
-  Map<String, bool> _notificationPrefs = Map<String, bool>.from(
-    defaultNotificationPrefs,
-  );
+  Map<String, bool> _notificationPrefs = Map<String, bool>.from(defaultNotificationPrefs);
   bool _notificationPrefsLoaded = false;
   bool _notificationPrefsSaving = false;
-
   bool get notificationPrefsLoaded => _notificationPrefsLoaded;
   bool get notificationPrefsSaving => _notificationPrefsSaving;
-  Map<String, bool> get notificationPrefs =>
-      Map<String, bool>.unmodifiable(_notificationPrefs);
-
-  Map<String, bool> _parseNotificationPrefs(dynamic raw) {
-    if (raw is! Map) {
-      return Map<String, bool>.from(defaultNotificationPrefs);
-    }
-    return {
-      for (final entry in defaultNotificationPrefs.entries)
-        entry.key: raw[entry.key] == true,
-    };
-  }
+  Map<String, bool> get notificationPrefs => Map<String, bool>.unmodifiable(_notificationPrefs);
 
   Future<void> loadNotificationPreferences() async {
     if (_supplierUid == null) return;
     try {
       final snap = await _db.collection('users').doc(_supplierUid!).get();
-      _notificationPrefs = _parseNotificationPrefs(
-        snap.data()?['notificationPreferences'],
-      );
+      final raw = snap.data()?['notificationPreferences'];
+      if (raw is Map) {
+        _notificationPrefs = { for (final e in defaultNotificationPrefs.entries) e.key: raw[e.key] == true };
+      }
       _notificationPrefsLoaded = true;
     } catch (e) {
       _error ??= e.toString();
@@ -366,30 +336,13 @@ class SupplierViewModel extends ChangeNotifier {
     _notificationPrefsSaving = true;
     notifyListeners();
     try {
-      await _userRepo.updateUserDoc(_supplierUid!, {
-        'notificationPreferences': prefs,
-      });
+      await _userRepo.updateUserDoc(_supplierUid!, {'notificationPreferences': prefs});
       _notificationPrefs = Map<String, bool>.from(prefs);
       return null;
-    } catch (e) {
-      return e.toString();
-    } finally {
+    } catch (e) { return e.toString(); } finally {
       _notificationPrefsSaving = false;
       notifyListeners();
     }
-  }
-
-  void _cancelSubscriptions() {
-    _statusSubscription?.cancel();
-    _companiesSubscription?.cancel();
-    _materialsSubscription?.cancel();
-    _ordersSubscription?.cancel();
-    _earningsSubscription?.cancel();
-    _unsettledSubscription?.cancel();
-    _invitationsSubscription?.cancel();
-    _ratingsSubscription?.cancel();
-    _supplierRestrictionSub?.cancel();
-    _stopPartnershipStatusWatch();
   }
 
   void ensurePartnershipStatusWatch() {
@@ -397,181 +350,85 @@ class SupplierViewModel extends ChangeNotifier {
     if (supplierId == null || supplierId.isEmpty) return;
     if (_partnershipRequestsSub != null) return;
 
-    _partnershipRequestsSub = _db
-        .collection(FirestorePaths.partnershipRequestsCol)
-        .where('supplierId', isEqualTo: supplierId)
-        .snapshots()
-        .listen(
-          (snap) {
-            final all =
-                snap.docs
-                    .map(
-                      (doc) =>
-                          PartnershipRequestModel.fromMap(doc.id, doc.data()),
-                    )
-                    .toList();
-
+    _partnershipRequestsSub = _db.collection(FirestorePaths.partnershipRequestsCol)
+        .where('supplierId', isEqualTo: supplierId).snapshots().listen((snap) {
+            final all = snap.docs.map((doc) => PartnershipRequestModel.fromMap(doc.id, doc.data())).toList();
             _latestPartnershipByCompanyId.clear();
             final grouped = <String, List<PartnershipRequestModel>>{};
-            for (final req in all) {
-              grouped.putIfAbsent(req.companyId, () => []).add(req);
-            }
+            for (final req in all) { grouped.putIfAbsent(req.companyId, () => []).add(req); }
             for (final entry in grouped.entries) {
               entry.value.sort((a, b) => b.createdAt.compareTo(a.createdAt));
               _latestPartnershipByCompanyId[entry.key] = entry.value.first;
             }
-
             _allPartnershipRequests = _sortPartnershipRequestsNewest(all);
-            _incomingPartnershipRequests = _sortPartnershipRequestsNewest(
-              all.where((r) => r.initiatedBy == 'ceo'),
-            );
-            _outgoingPartnershipRequests = _sortPartnershipRequestsNewest(
-              all.where((r) => r.initiatedBy == 'supplier'),
-            );
+            _incomingPartnershipRequests = _sortPartnershipRequestsNewest(all.where((r) => r.initiatedBy == 'ceo'));
+            _outgoingPartnershipRequests = _sortPartnershipRequestsNewest(all.where((r) => r.initiatedBy == 'supplier'));
             _partnershipListsReady = true;
             notifyListeners();
-          },
-          onError: (_) {
+          }, onError: (_) {
             _partnershipListsReady = true;
             _error = 'Failed to load partnership requests.';
             notifyListeners();
-          },
-        );
+          });
 
-    _linkedCompaniesSub = _db
-        .collection(FirestorePaths.suppliersCol)
-        .doc(supplierId)
-        .collection('companies')
-        .snapshots()
-        .listen(
-          (snap) {
-            _activePartnerCompanyIds
-              ..clear()
-              ..addAll(
-                snap.docs
-                    .where((doc) {
-                      final status =
-                          (doc.data()['status'] as String?)?.toLowerCase() ??
-                          'active';
+    _linkedCompaniesSub = _db.collection(FirestorePaths.suppliersCol).doc(supplierId).collection('companies').snapshots().listen((snap) {
+            _activePartnerCompanyIds..clear()..addAll(snap.docs.where((doc) {
+                      final status = (doc.data()['status'] as String?)?.toLowerCase() ?? 'active';
                       return status == 'active' || status == 'approved';
-                    })
-                    .map((doc) => doc.id),
-              );
+                    }).map((doc) => doc.id));
             notifyListeners();
-          },
-          onError: (_) {
-            notifyListeners();
-          },
-        );
+          }, onError: (_) => notifyListeners());
   }
 
-  void _stopPartnershipStatusWatch() {
-    _partnershipRequestsSub?.cancel();
-    _linkedCompaniesSub?.cancel();
-    _partnershipRequestsSub = null;
-    _linkedCompaniesSub = null;
-    _allPartnershipRequests = [];
-    _latestPartnershipByCompanyId.clear();
-    _activePartnerCompanyIds.clear();
-    _incomingPartnershipRequests = [];
-    _outgoingPartnershipRequests = [];
-    _partnershipListsReady = false;
+  List<PartnershipRequestModel> _sortPartnershipRequestsNewest(Iterable<PartnershipRequestModel> requests) {
+    return List<PartnershipRequestModel>.from(requests)..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   }
 
-  List<PartnershipRequestModel> _sortPartnershipRequestsNewest(
-    Iterable<PartnershipRequestModel> requests,
-  ) {
-    return List<PartnershipRequestModel>.from(requests)
-      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-  }
-
-  String? partnershipRejectionReasonFor(String companyId) {
-    if (companyId.isEmpty) return null;
-    final request = _latestPartnershipByCompanyId[companyId];
-    if (request?.status == 'rejected') {
-      return request!.rejectionReason;
-    }
-    return null;
-  }
-
+  String? partnershipRejectionReasonFor(String companyId) => _latestPartnershipByCompanyId[companyId]?.status == 'rejected' ? _latestPartnershipByCompanyId[companyId]!.rejectionReason : null;
   String partnershipStatusFor(String companyId) {
     if (companyId.isEmpty) return 'Not Requested';
-    if (_activePartnerCompanyIds.contains(companyId)) {
-      return 'Already Partners';
-    }
-
+    if (_activePartnerCompanyIds.contains(companyId)) return 'Already Partners';
     final request = _latestPartnershipByCompanyId[companyId];
     if (request == null) return 'Not Requested';
-
     switch (request.status) {
-      case 'pending':
-        return 'Request Pending';
-      case 'accepted':
-        return 'Already Partners';
-      case 'rejected':
-        return 'Request Rejected';
-      case 'removed':
-        return 'Not Requested';
-      default:
-        return 'Not Requested';
+      case 'pending': return 'Request Pending';
+      case 'accepted': return 'Already Partners';
+      case 'rejected': return 'Request Rejected';
+      case 'removed': return 'Not Requested';
+      default: return 'Not Requested';
     }
   }
 
   String directoryActionFor(String companyId) {
-    if (_activePartnerCompanyIds.contains(companyId)) {
-      return 'Partners ✓';
-    }
+    if (_activePartnerCompanyIds.contains(companyId)) return 'Partners ✓';
     final request = _latestPartnershipByCompanyId[companyId];
-    if (request?.status == 'pending') {
-      return request!.isCeoInitiated ? 'Respond' : 'Pending';
-    }
-    if ((request?.status == 'rejected' || request?.status == 'removed') &&
-        canReapplyToCompany(companyId)) {
-      return 'Request Again';
-    }
+    if (request?.status == 'pending') return request!.isCeoInitiated ? 'Respond' : 'Pending';
+    if ((request?.status == 'rejected' || request?.status == 'removed') && canReapplyToCompany(companyId)) return 'Request Again';
     return 'Send Request';
   }
 
   bool canReapplyToCompany(String companyId) {
     final request = _latestPartnershipByCompanyId[companyId];
     if (request == null) return true;
-    if (request.status != 'rejected' && request.status != 'removed') {
-      return false;
-    }
+    if (request.status != 'rejected' && request.status != 'removed') return false;
     final closedAt = request.respondedAt ?? request.createdAt;
     return DateTime.now().difference(closedAt).inDays >= 7;
   }
 
   String pastRequestStatusLabel(PartnershipRequestModel request) {
     if (request.status == 'removed') return 'Removed';
-    if (request.status == 'rejected') {
-      if (request.isSupplierInitiated) return 'Declined by Them';
-      return 'You Declined';
-    }
+    if (request.status == 'rejected') return request.isSupplierInitiated ? 'Declined by Them' : 'You Declined';
     return request.status;
   }
 
   PartnerCompanyStats partnerStatsFor(String companyId) {
-    final orders =
-        _allSupplierOrders.where((o) => o.companyId == companyId).toList();
-    final txs =
-        _allSupplierTransactions
-            .where((t) => t.companyId == companyId)
-            .toList();
+    final orders = _allSupplierOrders.where((o) => o.companyId == companyId).toList();
+    final txs = _allSupplierTransactions.where((t) => t.companyId == companyId).toList();
     final orderIds = orders.map((o) => o.orderId).toSet();
-    final companyRatings =
-        _allSupplierRatings.where((r) => orderIds.contains(r.orderId)).toList();
+    final companyRatings = _allSupplierRatings.where((r) => orderIds.contains(r.orderId)).toList();
     final earnings = txs.fold<double>(0, (sum, tx) => sum + tx.supplierEarning);
-    final avgRating =
-        companyRatings.isEmpty
-            ? 0.0
-            : companyRatings.fold<double>(0, (sum, r) => sum + r.rating) /
-                companyRatings.length;
-    return PartnerCompanyStats(
-      totalOrders: orders.length,
-      avgRating: avgRating,
-      totalEarnings: earnings,
-    );
+    final avgRating = companyRatings.isEmpty ? 0.0 : companyRatings.fold<double>(0, (sum, r) => sum + r.rating) / companyRatings.length;
+    return PartnerCompanyStats(totalOrders: orders.length, avgRating: avgRating, totalEarnings: earnings);
   }
 
   Future<void> loadPartnershipHubData() async {
@@ -579,13 +436,7 @@ class SupplierViewModel extends ChangeNotifier {
     _partnershipHubDataLoaded = false;
     notifyListeners();
     try {
-      await Future.wait([
-        loadLinkedCompanies(),
-        loadCompanyDirectory(),
-        _loadAllSupplierOrders(),
-        _loadAllSupplierTransactions(),
-        _loadAllSupplierRatings(),
-      ]);
+      await Future.wait([loadLinkedCompanies(), loadCompanyDirectory(), _loadAllSupplierOrders(), _loadAllSupplierTransactions(), _loadAllSupplierRatings()]);
     } finally {
       _partnershipHubDataLoaded = true;
       notifyListeners();
@@ -594,39 +445,20 @@ class SupplierViewModel extends ChangeNotifier {
 
   Future<void> _loadAllSupplierOrders() async {
     if (_supplierUid == null) return;
-    final snap =
-        await _db
-            .collection('orders')
-            .where('supplierId', isEqualTo: _supplierUid)
-            .get();
-    _allSupplierOrders =
-        snap.docs.map((doc) => OrderModel.fromMap(doc.id, doc.data())).toList();
+    final snap = await _db.collection('orders').where('supplierId', isEqualTo: _supplierUid).get();
+    _allSupplierOrders = snap.docs.map((doc) => OrderModel.fromMap(doc.id, doc.data())).toList();
   }
 
   Future<void> _loadAllSupplierTransactions() async {
     if (_supplierUid == null) return;
-    final snap =
-        await _db
-            .collection('transactions')
-            .where('supplierId', isEqualTo: _supplierUid)
-            .get();
-    _allSupplierTransactions =
-        snap.docs
-            .map((doc) => TransactionModel.fromMap(doc.id, doc.data()))
-            .toList();
+    final snap = await _db.collection('transactions').where('supplierId', isEqualTo: _supplierUid).get();
+    _allSupplierTransactions = snap.docs.map((doc) => TransactionModel.fromMap(doc.id, doc.data())).toList();
   }
 
   Future<void> _loadAllSupplierRatings() async {
     if (_supplierUid == null) return;
-    final snap =
-        await _db
-            .collection('ratings')
-            .where('supplierUid', isEqualTo: _supplierUid)
-            .get();
-    _allSupplierRatings =
-        snap.docs
-            .map((doc) => RatingModel.fromMap(doc.id, doc.data()))
-            .toList();
+    final snap = await _db.collection('ratings').where('supplierUid', isEqualTo: _supplierUid).get();
+    _allSupplierRatings = snap.docs.map((doc) => RatingModel.fromMap(doc.id, doc.data())).toList();
   }
 
   void filterCompanyDirectoryByCity(String? city) {
@@ -637,48 +469,21 @@ class SupplierViewModel extends ChangeNotifier {
   void _applyCompanyDirectoryFilters() {
     var list = List<CompanyModel>.from(_allCompanyDirectory);
     final city = _directoryCityFilter;
-    if (city != null && city != 'All' && city.isNotEmpty) {
-      list = list.where((c) => c.city == city).toList();
-    }
+    if (city != null && city != 'All' && city.isNotEmpty) list = list.where((c) => c.city == city).toList();
     final q = _directorySearchQuery;
-    if (q.isNotEmpty) {
-      list =
-          list
-              .where(
-                (c) =>
-                    c.name.toLowerCase().contains(q) ||
-                    c.city.toLowerCase().contains(q),
-              )
-              .toList();
-    }
+    if (q.isNotEmpty) list = list.where((c) => c.name.toLowerCase().contains(q) || c.city.toLowerCase().contains(q)).toList();
     _companyDirectory = list;
     notifyListeners();
   }
 
   List<String> interestCategoriesFor(CompanyModel company) {
     final categories = <String>{};
-    if (company.companyType != null && company.companyType!.isNotEmpty) {
-      categories.add(company.companyType!);
-    }
+    if (company.companyType != null && company.companyType!.isNotEmpty) categories.add(company.companyType!);
     return categories.take(3).toList();
   }
 
-  void _resetDashboardLoadingFlags() {
-    _isDashboardLoading = true;
-    _materialsInitialized = false;
-    _ordersInitialized = false;
-    _earningsInitialized = false;
-    _ratingsInitialized = false;
-  }
-
   void _onDashboardStreamError(String section, Object error) {
-    final message = error.toString();
-    if (message.contains('permission-denied')) {
-      _error =
-          'Firestore access denied. Sign out and back in, or ask an admin to deploy security rules.';
-    } else {
-      _error = 'Some dashboard data could not be loaded ($section).';
-    }
+    _error = 'Some data failed to load ($section).';
     if (section == 'materials') _materialsInitialized = true;
     if (section == 'orders') _ordersInitialized = true;
     if (section == 'earnings') _earningsInitialized = true;
@@ -686,588 +491,182 @@ class SupplierViewModel extends ChangeNotifier {
     _checkDashboardReady();
     notifyListeners();
   }
-
-  void _clearDashboardStreamError(String section) {
-    final current = _error;
-    if (current == null) return;
-    if (current.contains('($section)') ||
-        current.startsWith('$section:') ||
-        current.contains(section)) {
-      _error = null;
-    }
-  }
-
-  void _finishDashboardLoadingSoon() {
-    Future.delayed(const Duration(milliseconds: 1500), () {
-      if (!_isDashboardLoading) return;
-      _materialsInitialized = true;
-      _ordersInitialized = true;
-      _earningsInitialized = true;
-      _ratingsInitialized = true;
+  void _checkDashboardReady() {
+    if (_materialsInitialized && _ordersInitialized && _earningsInitialized && _ratingsInitialized) {
       _isDashboardLoading = false;
       notifyListeners();
-    });
-  }
-
-  void _finishCompaniesLoadingSoon() {
-    Future.delayed(const Duration(milliseconds: 1500), () {
-      if (_companiesLoaded) return;
-      _companiesLoaded = true;
-      notifyListeners();
-    });
-  }
-
-  void _checkDashboardReady() {
-    if (_materialsInitialized &&
-        _ordersInitialized &&
-        _earningsInitialized &&
-        _ratingsInitialized) {
-      if (_isDashboardLoading) {
-        _isDashboardLoading = false;
-        notifyListeners();
-      }
     }
   }
 
   void watchStatus() {
     if (_supplierUid == null) return;
     _statusSubscription?.cancel();
-    _statusSubscription = _userRepo
-        .watchUserDoc(_supplierUid!)
-        .listen(
-          (user) {
+    _statusSubscription = _userRepo.watchUserDoc(_supplierUid!).listen((user) {
             _status = user.status ?? 'pending';
             _rejectionReason = user.rejectionReason;
             notifyListeners();
-          },
-          onError: (_) {
-            // Non-blocking — dashboard still renders.
-          },
-        );
-  }
-
-  Future<List<CompanyModel>> _resolveCompaniesFallback() async {
-    final uid = _supplierUid;
-    if (uid == null) return [];
-
-    final found = <CompanyModel>[];
-    final seen = <String>{};
-
-    void add(CompanyModel? company) {
-      if (company != null && seen.add(company.id)) {
-        found.add(company);
-      }
-    }
-
-    final profileCompanyId = _profile?.companyId ?? '';
-    if (profileCompanyId.isNotEmpty) {
-      add(await _companyRepo.getCompanyById(profileCompanyId));
-    }
-
-    final companiesSnap = await _db.collection('companies').get();
-    for (final companyDoc in companiesSnap.docs) {
-      final link =
-          await _db
-              .collection('companies')
-              .doc(companyDoc.id)
-              .collection('suppliers')
-              .doc(uid)
-              .get();
-      if (!link.exists) continue;
-
-      final status =
-          (link.data()?['status'] as String?)?.toLowerCase() ?? 'active';
-      if (status != 'active' && status != 'approved') continue;
-
-      add(await _companyRepo.getCompanyById(companyDoc.id));
-
-      await _db
-          .collection('suppliers')
-          .doc(uid)
-          .collection('companies')
-          .doc(companyDoc.id)
-          .set({
-            'id': companyDoc.id,
-            'status': 'active',
-            'joinedAt':
-                link.data()?['joinedAt'] ?? FieldValue.serverTimestamp(),
-          }, SetOptions(merge: true));
-    }
-
-    return found;
+          }, onError: (_) {});
   }
 
   Future<void> loadLinkedCompanies() async {
-    if (_supplierUid == null) {
-      _companiesLoaded = true;
-      notifyListeners();
-      return;
-    }
+    if (_supplierUid == null) { _companiesLoaded = true; notifyListeners(); return; }
     _companiesSubscription?.cancel();
     _companiesLoadFailed = false;
-    _finishCompaniesLoadingSoon();
-    _companiesSubscription = _db
-        .collection('suppliers')
-        .doc(_supplierUid)
-        .collection('companies')
-        .where('status', isEqualTo: 'active')
-        .snapshots()
-        .listen(
-          (snap) async {
-            var companyList = <CompanyModel>[];
+    _companiesSubscription = _db.collection('suppliers').doc(_supplierUid).collection('companies').where('status', isEqualTo: 'active').snapshots().listen((snap) async {
+            var list = <CompanyModel>[];
             for (var doc in snap.docs) {
-              try {
-                final c = await _companyRepo.getCompanyById(doc.id);
-                if (c != null) companyList.add(c);
-              } catch (_) {
-                // Skip companies we cannot read.
-              }
+              try { final c = await _companyRepo.getCompanyById(doc.id); if (c != null) list.add(c); } catch (_) {}
             }
-            if (companyList.isEmpty) {
-              try {
-                companyList = await _resolveCompaniesFallback();
-              } catch (e) {
-                _error ??= e.toString();
-              }
-            }
-            _companies = companyList;
+            _companies = list;
             _companiesLoaded = true;
             _companiesLoadFailed = false;
-            if (_selectedCompanyId == null && _companies.isNotEmpty) {
-              switchCompany(_companies.first.id);
-            }
+            if (_selectedCompanyId == null && _companies.isNotEmpty) switchCompany(_companies.first.id);
             notifyListeners();
-          },
-          onError: (e) async {
-            try {
-              final fallback = await _resolveCompaniesFallback();
-              _companies = fallback;
-              _companiesLoaded = true;
-              _companiesLoadFailed = fallback.isEmpty;
-              _error = fallback.isEmpty ? e.toString() : null;
-              if (_selectedCompanyId == null && _companies.isNotEmpty) {
-                switchCompany(_companies.first.id);
-              }
-            } catch (_) {
-              _companiesLoaded = true;
-              _companiesLoadFailed = true;
-              _error = e.toString();
-            }
+          }, onError: (e) {
+            _companiesLoaded = true; _companiesLoadFailed = true; _error = e.toString();
             notifyListeners();
-          },
-        );
+          });
   }
 
   void switchCompany(String companyId) {
     if (_selectedCompanyId == companyId) return;
     _selectedCompanyId = companyId;
     _error = null;
-    _resetDashboardLoadingFlags();
-    _finishDashboardLoadingSoon();
+    _isDashboardLoading = true;
     loadMaterials(companyId);
     loadOrders(companyId, null);
     loadEarnings(monthKey());
-    if (_supplierUid != null) {
-      loadRatings(_supplierUid!, companyId);
-    }
+    if (_supplierUid != null) loadRatings(_supplierUid!, companyId);
+    _finishDashboardLoadingSoon();
     notifyListeners();
   }
 
-  // --- Invitations ---
+  void _finishDashboardLoadingSoon() => Future.delayed(const Duration(milliseconds: 1000), () {
+    _materialsInitialized = _ordersInitialized = _earningsInitialized = _ratingsInitialized = true;
+    _isDashboardLoading = false;
+    notifyListeners();
+  });
 
   void loadInvitations() {
     if (_supplierUid == null) return;
     _invitationsSubscription?.cancel();
-    _invitationsSubscription = _db
-        .collection('invitations')
-        .where('supplierUid', isEqualTo: _supplierUid)
-        .snapshots()
-        .listen(
-          (snap) {
-            _invitations =
-                snap.docs
-                    .map((d) => InvitationModel.fromMap(d.id, d.data()))
-                    .toList();
+    _invitationsSubscription = _db.collection('invitations').where('supplierUid', isEqualTo: _supplierUid).snapshots().listen((snap) {
+            _invitations = snap.docs.map((d) => InvitationModel.fromMap(d.id, d.data())).toList();
             notifyListeners();
-          },
-          onError: (e) {
-            _error ??= e.toString();
-            notifyListeners();
-          },
-        );
+          });
   }
 
   Future<void> acceptInvitation(String inviteId, String companyId) async {
-    _isLoading = true;
-    _error = null;
-    _successMessage = null;
-    notifyListeners();
+    _isLoading = true; notifyListeners();
     try {
-      await _cloudFunctions.callFunction('onInviteAccepted', {
-        'token': inviteId,
-        'companyId': companyId,
-        'supplierUid': _supplierUid,
-      });
+      await _cloudFunctions.callFunction('onInviteAccepted', {'token': inviteId, 'companyId': companyId, 'supplierUid': _supplierUid});
       _selectedCompanyId = companyId;
-    } on AppException catch (e) {
-      _error = e.message;
-    } catch (_) {
-      _error = 'Failed to accept invitation. Please try again.';
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
+    } catch (e) { _error = e.toString(); } finally { _isLoading = false; notifyListeners(); }
   }
 
-  Future<void> rejectInvitation(String inviteId) async {
-    await _db.collection('invitations').doc(inviteId).update({
-      'status': 'rejected',
-    });
-  }
+  Future<void> rejectInvitation(String inviteId) async => await _db.collection('invitations').doc(inviteId).update({'status': 'rejected'});
 
-  // --- Materials ---
-
-  Future<void> addMaterial(
-    MaterialModel material,
-    File? imageFile,
-    String companyId,
-  ) async {
-    _isLoading = true;
-    notifyListeners();
+  Future<void> addMaterial(MaterialModel material, File? imageFile, String companyId) async {
+    _isLoading = true; notifyListeners();
     try {
       String? imageUrl;
-      if (imageFile != null) {
-        imageUrl = await CloudinaryService.uploadImage(
-          filePath: imageFile.path,
-          folder: 'ratebridge/materials',
-        );
-        if (imageUrl == null) {
-          _error = 'Image upload failed. Please try again.';
-          return;
-        }
-      }
-      final newMat = material.copyWith(
-        profileImageUrl: imageUrl,
-        supplierId: _supplierUid,
-      );
-
+      if (imageFile != null) imageUrl = await CloudinaryService.uploadImage(filePath: imageFile.path, folder: 'ratebridge/materials');
+      final newMat = material.copyWith(profileImageUrl: imageUrl, supplierId: _supplierUid);
       final batch = _db.batch();
-      final companyMatRef = _db
-          .collection('companies')
-          .doc(companyId)
-          .collection('materials')
-          .doc(newMat.id);
-      batch.set(companyMatRef, newMat.toMap());
-
-      final globalMatRef = _db.collection('materials').doc(newMat.id);
-      batch.set(globalMatRef, newMat.toMap());
-
+      batch.set(_db.collection('companies').doc(companyId).collection('materials').doc(newMat.id), newMat.toMap());
+      batch.set(_db.collection('materials').doc(newMat.id), newMat.toMap());
       await batch.commit();
-      await _materialRepo.recordInitialMaterialPrice(
-        materialId: newMat.id,
-        price: newMat.pricePerUnit,
-        supplierUid: _supplierUid,
-      );
-    } catch (e) {
-      _error = e.toString();
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
+      await _materialRepo.recordInitialMaterialPrice(materialId: newMat.id, price: newMat.pricePerUnit, supplierUid: _supplierUid);
+    } catch (e) { _error = e.toString(); } finally { _isLoading = false; notifyListeners(); }
   }
 
-  Future<void> updateMaterial(
-    String matId,
-    Map<String, dynamic> data,
-    File? imageFile,
-    String companyId,
-  ) async {
-    _isLoading = true;
-    notifyListeners();
+  Future<void> updateMaterial(String matId, Map<String, dynamic> data, File? imageFile, String companyId) async {
+    _isLoading = true; notifyListeners();
     try {
-      if (imageFile != null) {
-        final imageUrl = await CloudinaryService.uploadImage(
-          filePath: imageFile.path,
-          folder: 'ratebridge/materials',
-        );
-        if (imageUrl == null) {
-          _error = 'Image upload failed. Please try again.';
-          return;
-        }
-        data['profileImageUrl'] = imageUrl;
-      }
-
+      if (imageFile != null) data['profileImageUrl'] = await CloudinaryService.uploadImage(filePath: imageFile.path, folder: 'ratebridge/materials');
       if (data.containsKey('pricePerUnit')) {
         final doc = await _db.collection('materials').doc(matId).get();
-        final oldPrice =
-            (doc.data()?['pricePerUnit'] as num?)?.toDouble() ?? 0.0;
-        final newPrice = (data['pricePerUnit'] as num).toDouble();
-        if (oldPrice != newPrice) {
-          await _materialRepo.archiveMaterialPriceChange(
-            materialId: matId,
-            previousPrice: oldPrice,
-            newPrice: newPrice,
-            supplierUid: _supplierUid,
-          );
-        }
+        final old = (doc.data()?['pricePerUnit'] as num?)?.toDouble() ?? 0.0;
+        final newVal = (data['pricePerUnit'] as num).toDouble();
+        if (old != newVal) await _materialRepo.archiveMaterialPriceChange(materialId: matId, previousPrice: old, newPrice: newVal, supplierUid: _supplierUid);
       }
-
       await _db.collection('materials').doc(matId).update(data);
-      await _db
-          .collection('companies')
-          .doc(companyId)
-          .collection('materials')
-          .doc(matId)
-          .update(data);
-    } catch (e) {
-      _error = e.toString();
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
+      await _db.collection('companies').doc(companyId).collection('materials').doc(matId).update(data);
+    } catch (e) { _error = e.toString(); } finally { _isLoading = false; notifyListeners(); }
   }
 
   Future<void> deleteMaterial(String matId, String companyId) async {
-    _isLoading = true;
-    notifyListeners();
+    _isLoading = true; notifyListeners();
     try {
       await _materialRepo.removeMaterial(matId);
-      await _db
-          .collection('companies')
-          .doc(companyId)
-          .collection('materials')
-          .doc(matId)
-          .delete();
-    } catch (e) {
-      _error = e.toString();
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
+      await _db.collection('companies').doc(companyId).collection('materials').doc(matId).delete();
+    } catch (e) { _error = e.toString(); } finally { _isLoading = false; notifyListeners(); }
   }
 
   Future<void> loadMaterials(String companyId) async {
-    if (_supplierUid == null) {
-      _materialsInitialized = true;
-      _checkDashboardReady();
-      notifyListeners();
-      return;
-    }
+    if (_supplierUid == null) { _materialsInitialized = true; _checkDashboardReady(); notifyListeners(); return; }
     _materialsSubscription?.cancel();
-    _materialsSubscription = _db
-        .collection('companies')
-        .doc(companyId)
-        .collection('materials')
-        .where('supplierId', isEqualTo: _supplierUid)
-        .snapshots()
-        .listen((snap) {
-          _materials =
-              snap.docs.map((d) {
-                final data = Map<String, dynamic>.from(d.data());
-                data.putIfAbsent('id', () => d.id);
-                return MaterialModel.fromMap(data);
-              }).toList();
-          _clearDashboardStreamError('materials');
-          _materialsInitialized = true;
-          _checkDashboardReady();
-          notifyListeners();
-        }, onError: (e) => _onDashboardStreamError('materials', e));
+    _materialsSubscription = _db.collection('companies').doc(companyId).collection('materials').where('supplierId', isEqualTo: _supplierUid).snapshots().listen((snap) {
+          _materials = snap.docs.map((d) {
+            final data = Map<String, dynamic>.from(d.data())..putIfAbsent('id', () => d.id);
+            return MaterialModel.fromMap(data);
+          }).toList();
+          _materialsInitialized = true; _checkDashboardReady(); notifyListeners();
+        });
   }
 
-  // --- Orders ---
-
   Future<void> loadOrders(String companyId, String? statusFilter) async {
-    if (_supplierUid == null) {
-      _ordersInitialized = true;
-      _checkDashboardReady();
-      notifyListeners();
-      return;
-    }
+    if (_supplierUid == null) { _ordersInitialized = true; _checkDashboardReady(); notifyListeners(); return; }
     _ordersSubscription?.cancel();
-    _ordersSubscription = _orderRepo.getOrdersForSupplier(_supplierUid!).listen(
-      (data) {
+    _ordersSubscription = _orderRepo.getOrdersForSupplier(_supplierUid!).listen((data) {
         _orders = data.where((o) => o.companyId == companyId).toList();
-        _clearDashboardStreamError('orders');
-        _ordersInitialized = true;
-        _checkDashboardReady();
-        notifyListeners();
-      },
-      onError: (e) => _onDashboardStreamError('orders', e),
-    );
+        _ordersInitialized = true; _checkDashboardReady(); notifyListeners();
+      });
   }
 
   Future<void> acceptOrder(String orderId, String companyId) async {
-    _isLoading = true;
-    notifyListeners();
+    _isLoading = true; notifyListeners();
     try {
-      final order = _orders.firstWhere(
-        (o) => o.orderId == orderId,
-        orElse: () => throw StateError('Order not found'),
-      );
       await _orderRepo.updateStatus(orderId, companyId, 'accepted');
-      await _notificationService.notifyOrderAccepted(
-        fieldUserUid: order.fieldUserUid,
-        orderId: orderId,
-        companyId: companyId,
-        materialName: order.materialName,
-        supplierName: order.supplierName,
-      );
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
+      final order = _orders.firstWhere((o) => o.orderId == orderId);
+      await _notificationService.notifyOrderAccepted(fieldUserUid: order.fieldUserUid, orderId: orderId, companyId: companyId, materialName: order.materialName, supplierName: order.supplierName);
+    } catch (_) {} finally { _isLoading = false; notifyListeners(); }
   }
 
-  Future<void> rejectOrder(
-    String orderId,
-    String companyId,
-    String reason,
-  ) async {
-    _isLoading = true;
-    notifyListeners();
+  Future<void> rejectOrder(String orderId, String companyId, String reason) async {
+    _isLoading = true; notifyListeners();
     try {
-      final order = _orders.firstWhere(
-        (o) => o.orderId == orderId,
-        orElse: () => throw StateError('Order not found'),
-      );
-      await _orderRepo.updateStatus(
-        orderId,
-        companyId,
-        'rejected',
-        reason: reason,
-      );
-      await _notificationService.notifyOrderRejected(
-        fieldUserUid: order.fieldUserUid,
-        orderId: orderId,
-        companyId: companyId,
-        materialName: order.materialName,
-        supplierName: order.supplierName,
-        reason: reason,
-      );
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
+      await _orderRepo.updateStatus(orderId, companyId, 'rejected', reason: reason);
+      final order = _orders.firstWhere((o) => o.orderId == orderId);
+      await _notificationService.notifyOrderRejected(fieldUserUid: order.fieldUserUid, orderId: orderId, companyId: companyId, materialName: order.materialName, supplierName: order.supplierName, reason: reason);
+    } catch (_) {} finally { _isLoading = false; notifyListeners(); }
   }
 
   Future<void> markDelivered(String orderId, String companyId) async {
-    _isLoading = true;
-    notifyListeners();
+    _isLoading = true; notifyListeners();
     try {
-      final order = _orders.firstWhere(
-        (o) => o.orderId == orderId,
-        orElse: () => throw StateError('Order not found'),
-      );
-      await _orderRepo.updateStatus(
-        orderId,
-        companyId,
-        'delivered',
-        deliveredAt: DateTime.now(),
-      );
-      await _notificationService.notifyOrderDelivered(
-        fieldUserUid: order.fieldUserUid,
-        orderId: orderId,
-        companyId: companyId,
-        materialName: order.materialName,
-        supplierName: order.supplierName,
-      );
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
+      await _orderRepo.updateStatus(orderId, companyId, 'delivered', deliveredAt: DateTime.now());
+      final order = _orders.firstWhere((o) => o.orderId == orderId);
+      await _notificationService.notifyOrderDelivered(fieldUserUid: order.fieldUserUid, orderId: orderId, companyId: companyId, materialName: order.materialName, supplierName: order.supplierName);
+    } catch (_) {} finally { _isLoading = false; notifyListeners(); }
   }
-
-  // --- Onboarding ---
-
-  Future<void> completeCompanyOnboarding(
-    String companyId,
-    Map<String, dynamic> details,
-  ) async {
-    _isLoading = true;
-    notifyListeners();
-    try {
-      await _db
-          .collection('suppliers')
-          .doc(_supplierUid)
-          .collection('companies')
-          .doc(companyId)
-          .update({...details, 'onboardingComplete': true});
-    } catch (e) {
-      _error = e.toString();
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
-  }
-
-  // --- Profile & Earnings ---
 
   Future<void> loadEarnings(String month) async {
-    if (_supplierUid == null) {
-      _earningsInitialized = true;
-      _checkDashboardReady();
-      notifyListeners();
-      return;
-    }
-    _earningsSubscription?.cancel();
-    _unsettledSubscription?.cancel();
+    final start = DateTime.parse('$month-01');
+    final end = DateTime(start.month == 12 ? start.year + 1 : start.year, start.month == 12 ? 1 : start.month + 1, 1);
+    _transactions = _allCommissions.where((tx) => !tx.createdAt.isBefore(start) && tx.createdAt.isBefore(end)).toList()..sort((a, b) => b.createdAt.compareTo(a.createdAt));
     try {
-      _unsettledSubscription = _transactionRepo
-          .watchSupplierUnsettledTransactions(_supplierUid!)
-          .listen((txs) {
-            _unsettledTransactions = txs;
-            notifyListeners();
-          }, onError: (e) => _onDashboardStreamError('earnings', e));
-
-      _earningsSubscription = _transactionRepo
-          .watchSupplierEarnings(_supplierUid!, month)
-          .listen((txs) {
-            _transactions = txs;
-            totalEarnings = txs.fold(0.0, (sum, tx) => sum + tx.totalAmount);
-            netEarnings = txs.fold(0.0, (sum, tx) => sum + tx.supplierEarning);
-            _clearDashboardStreamError('earnings');
-            _earningsInitialized = true;
-            _checkDashboardReady();
-            notifyListeners();
-          }, onError: (e) => _onDashboardStreamError('earnings', e));
-      try {
-        final summary = await _transactionRepo.getMonthlyEarningsSummary(
-          _supplierUid!,
-          6,
-        );
-        _monthlyEarnings = summary.reversed.toList();
-        _monthlyChart =
-            summary.map((e) => {'month': e.month, 'amount': e.net}).toList();
-        notifyListeners();
-      } catch (_) {
-        // Monthly chart is optional; live transaction stream drives card totals.
-      }
-    } catch (e) {
-      _onDashboardStreamError('earnings', e);
-    }
+        final summary = await _transactionRepo.getMonthlyEarningsSummary(_supplierUid!, 6);
+        _monthlyEarnings = summary;
+    } catch (_) {}
+    notifyListeners();
   }
 
-  Future<void> changeMonth(String month) async {
-    await loadEarnings(month);
-  }
+  Future<void> changeMonth(String month) => loadEarnings(month);
 
   Future<void> loadProfile() async {
     if (_supplierUid == null) return;
-    if (_profile != null && _profile!.uid == _supplierUid) {
-      notifyListeners();
-      return;
-    }
-    final cached = _userRepo.cachedUser;
-    if (cached != null && cached.uid == _supplierUid) {
-      _profile = cached;
-      notifyListeners();
-      return;
-    }
-    try {
-      _profile = await _userRepo.getUserDoc(_supplierUid!);
-    } catch (e) {
-      _error ??= e.toString();
-    }
+    _profile = await _userRepo.getUserDoc(_supplierUid!);
     notifyListeners();
   }
 
@@ -1279,124 +678,51 @@ class SupplierViewModel extends ChangeNotifier {
   }
 
   Future<void> submitAppeal(String message, File? file, String? phone) async {
-    _isLoading = true;
-    notifyListeners();
+    _isLoading = true; notifyListeners();
     try {
       String? imageUrl;
-      if (file != null) {
-        imageUrl = await _storageService.uploadFile(
-          file: file,
-          path: 'appeals/$_supplierUid',
-        );
-      }
-      await _db.collection('appeals').add({
-        'supplierUid': _supplierUid,
-        'message': message,
-        'phone': phone,
-        'imageUrl': imageUrl,
-        'createdAt': FieldValue.serverTimestamp(),
-        'status': 'pending',
-      });
+      if (file != null) imageUrl = await _storageService.uploadFile(file: file, path: 'appeals/$_supplierUid');
+      await _db.collection('appeals').add({'supplierUid': _supplierUid, 'message': message, 'phone': phone, 'imageUrl': imageUrl, 'createdAt': FieldValue.serverTimestamp(), 'status': 'pending'});
       _appealSubmitted = true;
-    } catch (e) {
-      _error = e.toString();
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
+    } catch (e) { _error = e.toString(); } finally { _isLoading = false; notifyListeners(); }
   }
 
   Future<void> loadCompanyDirectory() async {
     ensurePartnershipStatusWatch();
-    _isLoading = true;
-    notifyListeners();
+    _isLoading = true; notifyListeners();
     try {
       final all = await _companyRepo.getAllCompanies();
-      _allCompanyDirectory =
-          all.where((c) => c.status.toLowerCase() == 'active').toList();
+      _allCompanyDirectory = all.where((c) => c.status.toLowerCase() == 'active').toList();
       _applyCompanyDirectoryFilters();
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
+    } finally { _isLoading = false; notifyListeners(); }
   }
 
   Future<void> searchCompanies(String query) async {
-    if (_allCompanyDirectory.isEmpty) {
-      await loadCompanyDirectory();
-    }
+    if (_allCompanyDirectory.isEmpty) await loadCompanyDirectory();
     _directorySearchQuery = query.trim().toLowerCase();
     _applyCompanyDirectoryFilters();
   }
 
-  Future<bool> sendPartnershipRequest(
-    String companyId, {
-    String? message,
-  }) async {
+  Future<bool> sendPartnershipRequest(String companyId, {String? message}) async {
     if (_supplierUid == null) return false;
-    _isLoading = true;
-    _error = null;
-    notifyListeners();
+    _isLoading = true; notifyListeners();
     try {
       final company = await _companyRepo.getCompanyById(companyId);
-      if (company == null) {
-        _error = 'Company not found.';
-        return false;
-      }
-      await _partnershipRepo.createRequest(
-        companyId: companyId,
-        companyName: company.name,
-        supplierId: _supplierUid!,
-        supplierName: _profile?.name ?? _profile?.email ?? 'Supplier',
-        initiatedBy: 'supplier',
-        message: message,
-        supplierEmail: _profile?.email,
-        supplierCity: _profile?.city,
-        supplierCategories: const [],
-        supplierRating: 0,
-      );
+      if (company == null) return false;
+      await _partnershipRepo.createRequest(companyId: companyId, companyName: company.name, supplierId: _supplierUid!, supplierName: _profile?.name ?? 'Supplier', initiatedBy: 'supplier', message: message, supplierEmail: _profile?.email, supplierCity: _profile?.city, supplierCategories: [], supplierRating: averageRating);
       return true;
-    } on AppException catch (e) {
-      _error = e.message;
-      return false;
-    } catch (_) {
-      _error = 'Failed to send partnership request. Please try again.';
-      return false;
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
-  }
-
-  Stream<List<PartnershipRequestModel>> watchIncomingPartnershipRequests() {
-    ensurePartnershipStatusWatch();
-    return Stream.value(
-      List<PartnershipRequestModel>.from(_incomingPartnershipRequests),
-    );
-  }
-
-  Stream<List<PartnershipRequestModel>> watchOutgoingPartnershipRequests() {
-    ensurePartnershipStatusWatch();
-    return Stream.value(
-      List<PartnershipRequestModel>.from(_outgoingPartnershipRequests),
-    );
+    } catch (e) { _error = e.toString(); return false; } finally { _isLoading = false; notifyListeners(); }
   }
 
   Future<String?> acceptPartnershipRequest(String requestId) async {
-    _isLoading = true;
-    _error = null;
-    notifyListeners();
+    _isLoading = true; notifyListeners();
     try {
-      final reqDoc =
-          await _db
-              .collection(FirestorePaths.partnershipRequestsCol)
-              .doc(requestId)
-              .get();
-      final companyName = reqDoc.data()?['companyName'] as String? ?? 'Company';
+      final req = _allPartnershipRequests.cast<PartnershipRequestModel?>().firstWhere(
+        (r) => r?.requestId == requestId,
+        orElse: () => null,
+      );
       await _partnershipRepo.acceptRequest(requestId);
-      await loadLinkedCompanies();
-      await _loadAllSupplierOrders();
-      return companyName;
+      return req?.companyName;
     } catch (e) {
       _error = e.toString();
       return null;
@@ -1407,9 +733,7 @@ class SupplierViewModel extends ChangeNotifier {
   }
 
   Future<bool> rejectPartnershipRequest(String requestId, String reason) async {
-    _isLoading = true;
-    _error = null;
-    notifyListeners();
+    _isLoading = true; notifyListeners();
     try {
       await _partnershipRepo.rejectRequest(requestId, reason);
       return true;
@@ -1422,208 +746,99 @@ class SupplierViewModel extends ChangeNotifier {
     }
   }
 
-  Future<bool> withdrawPartnershipRequest(String requestId) async {
-    _isLoading = true;
-    _error = null;
-    notifyListeners();
-    try {
-      await _partnershipRepo.withdrawRequest(requestId);
-      return true;
-    } on AppException catch (e) {
-      _error = e.message;
-      return false;
-    } catch (e) {
-      _error = e.toString();
-      return false;
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
+  Future<void> withdrawPartnershipRequest(String requestId) async {
+    _isLoading = true; notifyListeners();
+    try { await _partnershipRepo.withdrawRequest(requestId); } finally { _isLoading = false; notifyListeners(); }
   }
 
   Future<String?> removePartnership(String companyId) async {
     if (_supplierUid == null) return null;
-    _isLoading = true;
-    _error = null;
-    notifyListeners();
+    _isLoading = true; notifyListeners();
     try {
       final company = await _companyRepo.getCompanyById(companyId);
-      await _partnershipRepo.removePartnership(
-        companyId: companyId,
-        supplierId: _supplierUid!,
-      );
-      if (_selectedCompanyId == companyId) {
-        _selectedCompanyId = null;
-      }
-      await loadLinkedCompanies();
-      return company?.name ?? 'Company';
-    } catch (e) {
-      _error = e.toString();
-      return null;
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
+      await _partnershipRepo.removePartnership(companyId: companyId, supplierId: _supplierUid!);
+      return company?.name;
+    } finally { _isLoading = false; notifyListeners(); }
   }
 
-  void openCompanyContext(String companyId) {
-    switchCompany(companyId);
-  }
-
-  @Deprecated('Use sendPartnershipRequest')
-  Future<void> sendJoinRequest(String companyId, String message) async {
-    await sendPartnershipRequest(companyId, message: message);
-  }
+  void openCompanyContext(String companyId) => switchCompany(companyId);
 
   Future<void> loadRatings(String supplierUid, String companyId) async {
     _ratingsSubscription?.cancel();
-    _ratingsSubscription = _db
-        .collection('ratings')
-        .where('supplierUid', isEqualTo: supplierUid)
-        .snapshots()
-        .listen((snap) {
-          _ratings =
-              snap.docs
-                  .map((d) => RatingModel.fromMap(d.id, d.data()))
-                  .toList();
-          _clearDashboardStreamError('ratings');
-          _ratingsInitialized = true;
-          _checkDashboardReady();
-          notifyListeners();
-        }, onError: (e) => _onDashboardStreamError('ratings', e));
+    _ratingsSubscription = _db.collection('ratings').where('supplierUid', isEqualTo: supplierUid).snapshots().listen((snap) {
+          _ratings = snap.docs.map((d) => RatingModel.fromMap(d.id, d.data())).toList();
+          _ratingsInitialized = true; _checkDashboardReady(); notifyListeners();
+        });
   }
 
-  String? companyNameFor(String companyId) {
-    try {
-      return _companies.firstWhere((c) => c.id == companyId).name;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  void filterRatingsByMaterial(String name) {
-    if (name == 'All') {
-      loadRatings(_supplierUid!, _selectedCompanyId!);
-    } else {
-      _ratings = _ratings.where((r) => r.materialName == name).toList();
-      notifyListeners();
-    }
-  }
+  String? companyNameFor(String companyId) => _companies.cast<CompanyModel?>().firstWhere((c) => c?.id == companyId, orElse: () => null)?.name;
 
   Future<void> loadDashboard() async {
     if (_supplierUid == null || _selectedCompanyId == null) return;
-    _error = null;
-    _resetDashboardLoadingFlags();
-    notifyListeners();
-    _finishDashboardLoadingSoon();
-    loadMaterials(_selectedCompanyId!);
-    loadOrders(_selectedCompanyId!, null);
-    loadEarnings(monthKey());
-    loadRatings(_supplierUid!, _selectedCompanyId!);
+    _isDashboardLoading = true; notifyListeners();
+    await Future.wait([loadMaterials(_selectedCompanyId!), loadOrders(_selectedCompanyId!, null), loadEarnings(monthKey()), loadRatings(_supplierUid!, _selectedCompanyId!)]);
+    _isDashboardLoading = false; notifyListeners();
   }
 
-  @override
-  void dispose() {
-    _cancelSubscriptions();
-    super.dispose();
-  }
-
-  // --- RFQ / Bulk Quotes ---
-  Stream<List<RfqModel>> streamOpenRfqsForSupplier() {
-    if (_supplierUid == null) {
-      return Stream.value(const []);
-    }
-
-    return _db.collection('suppliers').doc(_supplierUid).snapshots().asyncExpand(
-      (supplierSnap) {
-        final supplier = supplierSnap.data();
-        final status = supplier?['status']?.toString().toLowerCase() ?? '';
-        if (supplier == null || (status != 'active' && status != 'approved')) {
-          return Stream.value(const <RfqModel>[]);
-        }
-        if (supplier['commissionRestricted'] == true) {
-          return Stream.value(const <RfqModel>[]);
-        }
-
-        List<String> strings(Object? value) =>
-            value is List
-                ? value
-                    .map((item) => item.toString().trim().toLowerCase())
-                    .toList()
-                : const [];
-
-        final declared = strings(supplier['declaredCategories']);
-        final categories =
-            declared.isNotEmpty ? declared : strings(supplier['categories']);
-        final coverage = strings(supplier['deliveryCoverageAreas']);
-        final supplierCity =
-            supplier['city']?.toString().trim().toLowerCase() ?? '';
-        if (categories.isEmpty || (coverage.isEmpty && supplierCity.isEmpty)) {
-          return Stream.value(const <RfqModel>[]);
-        }
-
-        return _db
-            .collection('rfqs')
-            .where('status', isEqualTo: 'open')
-            .snapshots()
-            .map((snap) {
-              final matches =
-                  snap.docs
-                      .map((doc) => RfqModel.fromMap(doc.id, doc.data()))
-                      .where((rfq) {
-                        final category = rfq.category.trim().toLowerCase();
-                        final city = rfq.city.trim().toLowerCase();
-                        return categories.contains(category) &&
-                            (coverage.contains(city) || supplierCity == city);
-                      })
-                      .toList();
-              matches.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-              return matches;
-            });
-      },
-    );
-  }
-
-  Future<void> submitRfqBid({
-    required String rfqId,
-    required double bidPrice,
-    required String deliveryTime,
-    String? note,
-  }) async {
-    if (_supplierUid == null) return;
-    _isLoading = true;
-    _error = null;
-    _successMessage = null;
-    notifyListeners();
-
+  Future<bool> submitCommissionPayment({required double amount, required String method, required XFile screenshotFile}) async {
+    if (_supplierUid == null) return false;
+    if (amount <= 0 || amount > commissionOwed + 0.01) { _error = "Invalid amount"; notifyListeners(); return false; }
+    _isLoading = true; notifyListeners();
     try {
-      final result = await _cloudFunctions.callFunction('submitRfqBid', {
-        'rfqId': rfqId,
-        'bidPrice': bidPrice,
-        'estimatedDeliveryTime': deliveryTime,
-        'note': note,
-      });
-      final updated = result is Map && result['updated'] == true;
-      _successMessage =
-          updated ? 'Bid updated successfully.' : 'Bid submitted successfully.';
-    } catch (e) {
-      _error = e is AppException ? e.message : 'Failed to submit bid: $e';
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
+      final url = await CloudinaryService.uploadImageBytes(bytes: await screenshotFile.readAsBytes(), folder: 'commission_proofs/$_supplierUid', filename: 'comm_${DateTime.now().millisecondsSinceEpoch}.jpg');
+      if (url == null) throw Exception("Upload failed");
+
+      // Collect IDs of unsettled transactions to link them for source-of-truth updates
+      final unsettledTxIds = _allCommissions
+          .where((tx) => tx.status.toLowerCase() == 'unsettled' || tx.status.toLowerCase() == 'pending')
+          .map((tx) => tx.txId)
+          .toList();
+
+      final proof = PaymentProofModel(
+        id: '', 
+        payerId: _supplierUid!, 
+        companyId: '', 
+        payerName: _profile?.name ?? 'Supplier', 
+        payerRole: 'Supplier', 
+        amount: amount, 
+        method: method, 
+        screenshotUrl: url, 
+        status: 'pending', 
+        type: 'commission', 
+        createdAt: DateTime.now(),
+        relatedTransactions: unsettledTxIds,
+      );
+      
+      await _db.collection('payment_proofs').add(proof.toMap());
+      _successMessage = 'Payment submitted.';
+      return true;
+    } catch (e) { _error = e.toString(); return false; } finally { _isLoading = false; notifyListeners(); }
+  }
+
+  Stream<List<RfqModel>> streamOpenRfqsForSupplier() {
+    if (_supplierUid == null) return Stream.value([]);
+    return _db.collection('rfqs').where('status', isEqualTo: 'open').snapshots().map((snap) => snap.docs.map((doc) => RfqModel.fromMap(doc.id, doc.data())).toList());
+  }
+
+  Future<void> submitRfqBid({required String rfqId, required double bidPrice, required String deliveryTime, String? note}) async {
+    if (_supplierUid == null) return;
+    _isLoading = true; notifyListeners();
+    try {
+      await _cloudFunctions.callFunction('submitRfqBid', {'rfqId': rfqId, 'bidPrice': bidPrice, 'estimatedDeliveryTime': deliveryTime, 'note': note});
+      _successMessage = 'Bid submitted.';
+    } catch (e) { _error = e.toString(); } finally { _isLoading = false; notifyListeners(); }
   }
 
   Future<RfqBidModel?> getMyBid(String rfqId) async {
     if (_supplierUid == null) return null;
-    final doc =
-        await _db
-            .collection('rfqs')
-            .doc(rfqId)
-            .collection('bids')
-            .doc(_supplierUid)
-            .get();
-    if (!doc.exists) return null;
-    return RfqBidModel.fromMap(doc.id, doc.data()!);
+    final doc = await _db.collection('rfqs').doc(rfqId).collection('bids').doc(_supplierUid).get();
+    return doc.exists ? RfqBidModel.fromMap(doc.id, doc.data()!) : null;
+  }
+
+  void _cancelSubscriptions() {
+    _statusSubscription?.cancel(); _partnershipRequestsSub?.cancel(); _linkedCompaniesSub?.cancel();
+    _companiesSubscription?.cancel(); _materialsSubscription?.cancel(); _ordersSubscription?.cancel();
+    _commissionsSub?.cancel(); _paymentsSub?.cancel(); _invitationsSubscription?.cancel();
+    _ratingsSubscription?.cancel(); _supplierRestrictionSub?.cancel();
   }
 }

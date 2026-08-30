@@ -40,7 +40,12 @@ class FirestoreService {
   Future<UserModel?> getUser(String uid) async {
     final doc = await _db.collection('users').doc(uid).get();
     if (doc.exists && doc.data() != null) {
-      return UserModel.fromMap(_requireDocData(doc));
+      final data = _requireDocData(doc);
+      // Ensure uid is set from document ID if missing in data
+      if (data['uid'] == null || (data['uid'] as String).isEmpty) {
+        data['uid'] = doc.id;
+      }
+      return UserModel.fromMap(data);
     }
     return null;
   }
@@ -85,7 +90,7 @@ class FirestoreService {
         .map(
           (snap) =>
               snap.docs
-                  .map((doc) => SupplierModel.fromMap(doc.data()))
+                  .map((doc) => SupplierModel.fromMap(doc.data() as Map<String, dynamic>))
                   .toList(),
         );
   }
@@ -109,7 +114,7 @@ class FirestoreService {
         .map(
           (snap) =>
               snap.docs
-                  .map((doc) => MaterialModel.fromMap(doc.data()))
+                  .map((doc) => MaterialModel.fromMap(doc.data() as Map<String, dynamic>))
                   .toList(),
         );
   }
@@ -123,7 +128,7 @@ class FirestoreService {
         .asyncExpand((suppliersSnap) {
           final supplierIds =
               suppliersSnap.docs
-                  .where((doc) => _isActiveSupplierLink(doc.data()))
+                  .where((doc) => _isActiveSupplierLink(doc.data() as Map<String, dynamic>))
                   .map((doc) => doc.id)
                   .where((id) => !SeedDataGuard.isSeedId(id))
                   .toList();
@@ -244,7 +249,7 @@ class FirestoreService {
             .collection('materials')
             .where(FieldPath.documentId, whereIn: ids)
             .get();
-    return snap.docs.map((doc) => MaterialModel.fromMap(doc.data())).toList();
+    return snap.docs.map((doc) => MaterialModel.fromMap(doc.data() as Map<String, dynamic>)).toList();
   }
 
   Future<List<MaterialModel>> searchMaterials(String query) async {
@@ -254,7 +259,7 @@ class FirestoreService {
             .where('name', isGreaterThanOrEqualTo: query)
             .where('name', isLessThanOrEqualTo: '$query\uf8ff')
             .get();
-    return snap.docs.map((doc) => MaterialModel.fromMap(doc.data())).toList();
+    return snap.docs.map((doc) => MaterialModel.fromMap(doc.data() as Map<String, dynamic>)).toList();
   }
 
   Stream<List<MaterialModel>> streamCategoryMaterials(
@@ -272,7 +277,7 @@ class FirestoreService {
           .asyncExpand((suppliersSnap) {
             final supplierIds =
                 suppliersSnap.docs
-                    .where((doc) => _isActiveSupplierLink(doc.data()))
+                    .where((doc) => _isActiveSupplierLink(doc.data() as Map<String, dynamic>))
                     .map((doc) => doc.id)
                     .where((id) => !SeedDataGuard.isSeedId(id))
                     .toList();
@@ -362,7 +367,7 @@ class FirestoreService {
             .collection('materials')
             .where('name', isEqualTo: materialName)
             .get();
-    final materials = snap.docs.map((doc) => MaterialModel.fromMap(doc.data())).toList();
+    final materials = snap.docs.map((doc) => MaterialModel.fromMap(doc.data() as Map<String, dynamic>)).toList();
     if (materials.isEmpty) return materials;
 
     final supplierIds = materials
@@ -387,7 +392,7 @@ class FirestoreService {
 
     if (suppliersSnap.docs.isNotEmpty) {
       return suppliersSnap.docs
-          .where((doc) => _isActiveSupplierLink(doc.data()))
+          .where((doc) => _isActiveSupplierLink(doc.data() as Map<String, dynamic>))
           .map((doc) => doc.id)
           .where((id) => !SeedDataGuard.isSeedId(id))
           .toList();
@@ -419,7 +424,7 @@ class FirestoreService {
     final visible = <String>[];
     for (final id in supplierIds) {
       final doc = await _db.collection('suppliers').doc(id).get();
-      if (!_isCommissionRestricted(doc.data())) {
+      if (!_isCommissionRestricted(doc.data() as Map<String, dynamic>?)) {
         visible.add(id);
       }
     }
@@ -553,17 +558,17 @@ class FirestoreService {
             .get();
     if (!link.exists) return [];
     final linkData = link.data();
-    if (linkData == null || !_isActiveSupplierLink(linkData)) return [];
+    if (linkData == null || !_isActiveSupplierLink(linkData as Map<String, dynamic>)) return [];
 
     final supplierDoc = await _db.collection('suppliers').doc(supplierId).get();
-    if (_isCommissionRestricted(supplierDoc.data())) return [];
+    if (_isCommissionRestricted(supplierDoc.data() as Map<String, dynamic>?)) return [];
 
     final snap =
         await _db
             .collection('materials')
             .where('supplierId', isEqualTo: supplierId)
             .get();
-    return snap.docs.map((doc) => MaterialModel.fromMap(doc.data())).toList();
+    return snap.docs.map((doc) => MaterialModel.fromMap(doc.data() as Map<String, dynamic>)).toList();
   }
 
   /// Average rating from the ratings collection, matching supplier_viewmodel logic.
@@ -590,7 +595,7 @@ class FirestoreService {
       );
     }
     final ratings = snap.docs.map(
-      (doc) => RatingModel.fromMap(doc.id, doc.data()),
+      (doc) => RatingModel.fromMap(doc.id, doc.data() as Map<String, dynamic>),
     );
     final sum = ratings.fold<double>(0, (acc, r) => acc + r.rating);
     return (average: sum / snap.docs.length, count: snap.docs.length);
@@ -625,7 +630,7 @@ class FirestoreService {
     final snap = await _db.collection('categories').get();
     final categories =
         snap.docs
-            .map((doc) => CategoryModel.fromDoc(doc.id, doc.data()))
+            .map((doc) => CategoryModel.fromDoc(doc.id, doc.data() as Map<String, dynamic>))
             .where((c) => c.id.isNotEmpty && c.name.isNotEmpty && c.isActive)
             .toList();
     categories.sort((a, b) => a.name.compareTo(b.name));
@@ -641,7 +646,7 @@ class FirestoreService {
         .map(
           (snap) =>
               snap.docs
-                  .map((doc) => OrderModel.fromMap(doc.id, doc.data()))
+                  .map((doc) => OrderModel.fromMap(doc.id, doc.data() as Map<String, dynamic>))
                   .toList(),
         );
   }
@@ -654,7 +659,7 @@ class FirestoreService {
         .map(
           (snap) =>
               snap.docs
-                  .map((doc) => OrderModel.fromMap(doc.id, doc.data()))
+                  .map((doc) => OrderModel.fromMap(doc.id, doc.data() as Map<String, dynamic>))
                   .toList(),
         );
   }
@@ -672,7 +677,7 @@ class FirestoreService {
         .map(
           (snap) =>
               snap.docs
-                  .map((doc) => ChatMessageModel.fromMap(doc.data()))
+                  .map((doc) => ChatMessageModel.fromMap(doc.data() as Map<String, dynamic>))
                   .where(
                     (msg) =>
                         msg.content.isNotEmpty &&
@@ -697,7 +702,7 @@ class FirestoreService {
         .map(
           (snap) =>
               snap.docs
-                  .map((doc) => ChatThreadModel.fromMap(doc.id, doc.data()))
+                  .map((doc) => ChatThreadModel.fromMap(doc.id, doc.data() as Map<String, dynamic>))
                   .toList(),
         );
   }
@@ -715,7 +720,7 @@ class FirestoreService {
         .map(
           (snap) =>
               snap.docs
-                  .map((doc) => ChatThreadModel.fromMap(doc.id, doc.data()))
+                  .map((doc) => ChatThreadModel.fromMap(doc.id, doc.data() as Map<String, dynamic>))
                   .toList(),
         );
   }
@@ -738,7 +743,7 @@ class FirestoreService {
               snap.docs
                   .map(
                     (doc) => ChatMessageModel.fromMap({
-                      ...doc.data(),
+                      ...doc.data() as Map<String, dynamic>,
                       'id': doc.id,
                       'chatId': chatId,
                     }),
@@ -843,7 +848,7 @@ class FirestoreService {
         .map(
           (snap) =>
               snap.docs
-                  .map((doc) => RatingModel.fromMap(doc.id, doc.data()))
+                  .map((doc) => RatingModel.fromMap(doc.id, doc.data() as Map<String, dynamic>))
                   .toList(),
         );
   }
@@ -896,7 +901,7 @@ class FirestoreService {
         .map(
           (snap) =>
               snap.docs
-                  .map((doc) => PriceHistoryModel.fromMap(doc.id, doc.data()))
+                  .map((doc) => PriceHistoryModel.fromMap(doc.id, doc.data() as Map<String, dynamic>))
                   .toList(),
         );
   }
@@ -916,7 +921,7 @@ class FirestoreService {
     if (snap.docs.isNotEmpty) {
       return InvitationModel.fromMap(
         snap.docs.first.id,
-        snap.docs.first.data(),
+        snap.docs.first.data() as Map<String, dynamic>,
       );
     }
     return null;
@@ -935,7 +940,7 @@ class FirestoreService {
         .map(
           (snap) =>
               snap.docs
-                  .map((doc) => JoinRequestModel.fromMap(doc.id, doc.data()))
+                  .map((doc) => JoinRequestModel.fromMap(doc.id, doc.data() as Map<String, dynamic>))
                   .toList(),
         );
   }
@@ -954,7 +959,7 @@ class FirestoreService {
         .map(
           (snap) =>
               snap.docs
-                  .map((doc) => NotificationModel.fromMap(doc.id, doc.data()))
+                  .map((doc) => NotificationModel.fromMap(doc.id, doc.data() as Map<String, dynamic>))
                   .toList(),
         );
   }
@@ -1174,7 +1179,7 @@ class FirestoreService {
         .map(
           (snap) =>
               snap.docs
-                  .map((doc) => RfqModel.fromMap(doc.id, doc.data()))
+                  .map((doc) => RfqModel.fromMap(doc.id, doc.data() as Map<String, dynamic>))
                   .toList(),
         );
   }
@@ -1193,7 +1198,7 @@ class FirestoreService {
         .map(
           (snap) =>
               snap.docs
-                  .map((doc) => RfqModel.fromMap(doc.id, doc.data()))
+                  .map((doc) => RfqModel.fromMap(doc.id, doc.data() as Map<String, dynamic>))
                   .toList(),
         );
   }
@@ -1203,7 +1208,7 @@ class FirestoreService {
       (snap) {
         final bids =
             snap.docs
-                .map((doc) => RfqBidModel.fromMap(doc.id, doc.data()))
+                .map((doc) => RfqBidModel.fromMap(doc.id, doc.data() as Map<String, dynamic>))
                 .toList();
         bids.sort((a, b) => a.bidPrice.compareTo(b.bidPrice));
         return bids;
@@ -1214,7 +1219,7 @@ class FirestoreService {
   Stream<RfqModel?> streamRfq(String rfqId) {
     return _db.collection('rfqs').doc(rfqId).snapshots().map((doc) {
       final data = doc.data();
-      return doc.exists && data != null ? RfqModel.fromMap(doc.id, data) : null;
+      return doc.exists && data != null ? RfqModel.fromMap(doc.id, data as Map<String, dynamic>) : null;
     });
   }
 
@@ -1363,7 +1368,7 @@ class FirestoreService {
                   .map(
                     (doc) => AuditLogModel.fromMap(
                       doc.id,
-                      doc.data(),
+                      doc.data() as Map<String, dynamic>,
                     ),
                   )
                   .toList()

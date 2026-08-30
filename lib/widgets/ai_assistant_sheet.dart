@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../theme/field_theme.dart';
 import '../services/ai_context_service.dart';
-import '../services/gemini_service.dart';
 
 class _ChatMsg {
   final String text;
@@ -53,7 +52,6 @@ class _AiAssistantSheetState extends State<AiAssistantSheet> {
 
   Future<void> _send(String question) async {
     if (question.trim().isEmpty || _isResponding) return;
-    final ctx = context.read<AiContextService>();
 
     setState(() {
       _messages.add(_ChatMsg(question.trim(), true));
@@ -62,40 +60,17 @@ class _AiAssistantSheetState extends State<AiAssistantSheet> {
     });
     _scrollToBottom();
 
-    try {
-      final response = await context
-          .read<GeminiService>()
-          .askAssistant(
-            question.trim(),
-            ctx.currentScreenName,
-            ctx.currentScreenData,
-          )
-          .timeout(const Duration(seconds: 45));
+    // AI Service Removed
+    await Future.delayed(const Duration(seconds: 1));
 
-      if (!mounted) return;
-      final reply = (response).toString().trim();
-      setState(() {
-        _messages.add(_ChatMsg(
-          reply.isEmpty
-              ? "Sorry, I couldn't process that. Please try again."
-              : reply,
-          false,
-        ));
-        _isResponding = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      final errorText = e.toString().trim();
-      setState(() {
-        _messages.add(_ChatMsg(
-          errorText.isEmpty || errorText.contains('TypeError')
-              ? "Sorry, I couldn't process that. Please try again."
-              : errorText,
-          false,
-        ));
-        _isResponding = false;
-      });
-    }
+    if (!mounted) return;
+    setState(() {
+      _messages.add(_ChatMsg(
+        "AI Assistant is currently unavailable.",
+        false,
+      ));
+      _isResponding = false;
+    });
     _scrollToBottom();
   }
 

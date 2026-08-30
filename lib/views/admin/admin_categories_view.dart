@@ -21,7 +21,7 @@ class _AdminCategoriesViewState extends State<AdminCategoriesView> {
 
     return Scaffold(
       backgroundColor: AdminColors.screenBg,
-      appBar: const AdminAppBar(title: 'Manage Categories'),
+      appBar: const AdminAppBar(title: 'Taxonomy Management'),
       body: StreamBuilder<List<CategoryModel>>(
         stream: adminVM.watchCategories(),
         builder: (context, snapshot) {
@@ -31,36 +31,53 @@ class _AdminCategoriesViewState extends State<AdminCategoriesView> {
           final categories = snapshot.data ?? [];
 
           if (categories.isEmpty) {
-            return _buildEmptyState();
+            return _buildEmptyState(context, adminVM);
           }
 
           return Column(
             children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
-                child: Text(
-                  'Categories are pre-loaded for Pakistan construction materials. '
-                  'Toggle active status, update brands/grades, or add a custom category when needed.',
-                  style: AdminTheme.mutedStyle(size: 13).copyWith(height: 1.4),
+              Container(
+                padding: const EdgeInsets.all(16),
+                margin: const EdgeInsets.fromLTRB(24, 16, 24, 8),
+                decoration: BoxDecoration(
+                  color: AdminColors.navy.withValues(alpha: 0.05),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AdminColors.navy.withValues(alpha: 0.1)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.info_outline_rounded, color: AdminColors.navy, size: 20),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Manage pre-loaded Pakistan construction material categories. Toggle visibility or update specifications.',
+                        style: AdminTheme.mutedStyle(size: 12).copyWith(color: AdminColors.navy, fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                  ],
                 ),
               ),
               Expanded(
                 child: ListView.builder(
-                  padding: const EdgeInsets.all(24),
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                   itemCount: categories.length,
                   itemBuilder: (context, idx) =>
-                      _buildCategoryRow(categories[idx], adminVM),
+                      _buildCategoryRow(context, categories[idx], adminVM),
                 ),
               ),
-              SafeArea(
-                top: false,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
-                  child: OutlinedButton.icon(
-                    onPressed: () => _showCategoryFormDialog(null, adminVM),
-                    icon: const Icon(Icons.add, size: 18),
-                    label: const Text('Add custom category (edge case)'),
-                    style: AdminTheme.secondaryButtonStyle(),
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, -2))],
+                ),
+                child: SafeArea(
+                  top: false,
+                  child: ElevatedButton.icon(
+                    onPressed: () => _showCategoryFormDialog(context, null, adminVM),
+                    icon: const Icon(Icons.add_circle_outline_rounded, size: 20),
+                    label: const Text('ADD CUSTOM CATEGORY'),
+                    style: AdminTheme.primaryButtonStyle(),
                   ),
                 ),
               ),
@@ -71,12 +88,12 @@ class _AdminCategoriesViewState extends State<AdminCategoriesView> {
     );
   }
 
-  Widget _buildCategoryRow(CategoryModel category, AdminViewModel adminVM) {
+  Widget _buildCategoryRow(BuildContext context, CategoryModel category, AdminViewModel adminVM) {
     final icon = category.icon;
 
     return AdminCard(
       margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         children: [
           Container(
@@ -101,29 +118,47 @@ class _AdminCategoriesViewState extends State<AdminCategoriesView> {
                   ),
                 ),
                 const SizedBox(height: 4),
-                Text(
-                  'Unit: ${category.unit}  ·  '
-                  '${category.brands.length} brands  ·  '
-                  '${category.grades.length} grades',
-                  style: AdminTheme.mutedStyle(size: 11),
+                Row(
+                  children: [
+                    const Icon(Icons.scale_rounded, size: 12, color: AdminColors.textGrey),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Unit: ${category.unit}',
+                      style: AdminTheme.mutedStyle(size: 11),
+                    ),
+                    const SizedBox(width: 12),
+                    const Icon(Icons.inventory_2_outlined, size: 12, color: AdminColors.textGrey),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${category.brands.length} Brands',
+                      style: AdminTheme.mutedStyle(size: 11),
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
-          Switch(
-            value: category.isActive,
-            activeThumbColor: AdminColors.amber,
-            activeTrackColor: AdminColors.amber.withValues(alpha: 0.4),
-            onChanged: (value) =>
-                adminVM.setCategoryActive(category.id, value),
+          Column(
+            children: [
+              Switch.adaptive(
+                value: category.isActive,
+                activeColor: AdminColors.amber,
+                onChanged: (value) =>
+                    adminVM.setCategoryActive(category.id, value),
+              ),
+              Text(category.isActive ? 'ACTIVE' : 'INACTIVE', 
+                   style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, 
+                   color: category.isActive ? AdminColors.green : AdminColors.textGrey)),
+            ],
           ),
+          const SizedBox(width: 8),
           IconButton(
-            tooltip: 'Edit category',
-            onPressed: () => _showCategoryFormDialog(category, adminVM),
+            tooltip: 'Edit Specifications',
+            onPressed: () => _showCategoryFormDialog(context, category, adminVM),
             icon: const Icon(
-              Icons.edit_outlined,
-              color: AdminColors.textGrey,
-              size: 20,
+              Icons.settings_suggest_rounded,
+              color: AdminColors.navy,
+              size: 22,
             ),
           ),
         ],
@@ -131,32 +166,41 @@ class _AdminCategoriesViewState extends State<AdminCategoriesView> {
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildEmptyState(BuildContext context, AdminViewModel adminVM) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.category_outlined,
-              size: 64,
-              color: AdminColors.textGrey.withValues(alpha: 0.35),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'No categories in Firestore yet.',
-              style: GoogleFonts.plusJakartaSans(
-                color: AdminColors.textGrey,
-                fontWeight: FontWeight.w600,
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: AdminColors.navy.withValues(alpha: 0.05),
+                shape: BoxShape.circle,
               ),
+              child: const Icon(
+                Icons.category_rounded,
+                size: 64,
+                color: AdminColors.textGrey,
+              ),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'No categories found',
+              style: AdminTheme.titleStyle(size: 20),
             ),
             const SizedBox(height: 8),
             Text(
-              'Sign in once — the app auto-seeds 12 Pakistan construction '
-              'categories on first launch. Pull to refresh after login.',
+              'The app auto-seeds construction categories on first launch. Pull to refresh or add a custom one.',
               textAlign: TextAlign.center,
-              style: AdminTheme.mutedStyle(size: 12),
+              style: AdminTheme.mutedStyle(),
+            ),
+            const SizedBox(height: 32),
+            ElevatedButton.icon(
+              onPressed: () => _showCategoryFormDialog(context, null, adminVM),
+              icon: const Icon(Icons.add),
+              label: const Text('Add First Category'),
             ),
           ],
         ),
@@ -164,7 +208,7 @@ class _AdminCategoriesViewState extends State<AdminCategoriesView> {
     );
   }
 
-  void _showCategoryFormDialog(CategoryModel? existing, AdminViewModel adminVM) {
+  void _showCategoryFormDialog(BuildContext context, CategoryModel? existing, AdminViewModel adminVM) {
     final isNew = existing == null;
     final nameController =
         TextEditingController(text: existing?.name ?? '');
@@ -180,45 +224,69 @@ class _AdminCategoriesViewState extends State<AdminCategoriesView> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(isNew ? 'Add Custom Category' : 'Edit ${existing.name}'),
+        title: Row(
+          children: [
+            Icon(isNew ? Icons.add_business_rounded : Icons.edit_note_rounded, color: AdminColors.navy),
+            const SizedBox(width: 10),
+            Text(isNew ? 'New Category' : 'Edit Category'),
+          ],
+        ),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Text('GENERAL INFO', style: AdminTheme.sectionHeaderStyle()),
+              const SizedBox(height: 12),
               if (isNew)
                 TextField(
                   controller: nameController,
                   decoration: AdminTheme.inputDecoration(
-                    labelText: 'Category name',
+                    labelText: 'Category Name',
+                    prefixIcon: const Icon(Icons.label_outline_rounded),
                   ),
                 )
               else
-                InputDecorator(
-                  decoration: AdminTheme.inputDecoration(
-                    labelText: 'Category name',
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: AdminColors.screenBg,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: AdminColors.border),
                   ),
-                  child: Text(
-                    existing.name,
-                    style: GoogleFonts.plusJakartaSans(
-                      fontWeight: FontWeight.w600,
-                      color: AdminColors.navy,
-                    ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.lock_outline_rounded, size: 18, color: AdminColors.textGrey),
+                      const SizedBox(width: 12),
+                      Text(
+                        existing.name,
+                        style: GoogleFonts.plusJakartaSans(
+                          fontWeight: FontWeight.w700,
+                          color: AdminColors.navy,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               const SizedBox(height: 16),
               TextField(
                 controller: unitController,
                 decoration: AdminTheme.inputDecoration(
-                  labelText: 'Unit of measure',
+                  labelText: 'Unit of Measure',
                   hintText: 'e.g. bag, ton, cft',
+                  prefixIcon: const Icon(Icons.straighten_rounded),
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 24),
+              Text('SPECIFICATIONS', style: AdminTheme.sectionHeaderStyle()),
+              const SizedBox(height: 12),
               TextField(
                 controller: brandsController,
                 decoration: AdminTheme.inputDecoration(
-                  labelText: 'Brands (comma separated)',
-                  hintText: 'DG Khan, Lucky, Bestway',
+                  labelText: 'Available Brands',
+                  hintText: 'Separate with commas',
+                  prefixIcon: const Icon(Icons.branding_watermark_outlined),
                 ),
                 maxLines: 2,
               ),
@@ -226,8 +294,9 @@ class _AdminCategoriesViewState extends State<AdminCategoriesView> {
               TextField(
                 controller: gradesController,
                 decoration: AdminTheme.inputDecoration(
-                  labelText: 'Grades / types (comma separated)',
-                  hintText: 'OPC, PPC, SRC — leave empty if not applicable',
+                  labelText: 'Grades or Types',
+                  hintText: 'Leave empty if not applicable',
+                  prefixIcon: const Icon(Icons.grade_outlined),
                 ),
                 maxLines: 2,
               ),
@@ -237,9 +306,9 @@ class _AdminCategoriesViewState extends State<AdminCategoriesView> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: const Text('CANCEL'),
           ),
-          ElevatedButton(
+          ElevatedButton.icon(
             onPressed: () {
               final brands = brandsController.text
                   .split(',')
@@ -270,8 +339,11 @@ class _AdminCategoriesViewState extends State<AdminCategoriesView> {
               }
               Navigator.pop(context);
             },
-            style: AdminTheme.primaryButtonStyle(height: 44),
-            child: Text(isNew ? 'Add' : 'Save'),
+            icon: const Icon(Icons.save_rounded, size: 18),
+            label: Text(isNew ? 'CREATE' : 'SAVE CHANGES'),
+            style: AdminTheme.primaryButtonStyle(height: 44).copyWith(
+              minimumSize: WidgetStateProperty.all(const Size(140, 44)),
+            ),
           ),
         ],
       ),

@@ -1,13 +1,12 @@
-// MVVM: ViewModel — business logic only
 import 'package:flutter/material.dart';
-import '../services/gemini_service.dart';
 import '../models/supplier_compare_model.dart';
 import '../models/price_history_model.dart';
+import '../services/cloud_function_service.dart';
 
 class AiViewModel extends ChangeNotifier {
-  final GeminiService _geminiService;
+  final CloudFunctionService _cloudFunctions;
 
-  AiViewModel(this._geminiService);
+  AiViewModel(this._cloudFunctions);
 
   String? _result;
   bool _isLoading = false;
@@ -17,18 +16,12 @@ class AiViewModel extends ChangeNotifier {
   bool get isLoading => _isLoading;
   bool get isAnalyzing => _isLoading;
   String? get error => _error;
-  String get statusFeedback => _error ?? _result ?? "Enter forecasting parameters above to run AI modeling.";
+  String get statusFeedback => _error ?? _result ?? "AI Engine ready for analysis.";
 
   void _setLoading() {
     _isLoading = true;
     _result = null;
     _error = null;
-    notifyListeners();
-  }
-
-  void _setResult(String result) {
-    _result = result;
-    _isLoading = false;
     notifyListeners();
   }
 
@@ -45,16 +38,17 @@ class AiViewModel extends ChangeNotifier {
   }
 
   Future<void> runMarketAnalysis(String scenario) async {
-    if (scenario.isEmpty) {
-      _setError("Please enter a scenario for analysis.");
-      return;
-    }
     _setLoading();
     try {
-      final result = await _geminiService.getMarketAnalysis(scenario);
-      _setResult(result);
+      final response = await _cloudFunctions.callFunction('generateAiText', {
+        'prompt': "Analyze the following construction material market scenario and provide a forecast: $scenario"
+      });
+      _result = response['text'];
     } catch (e) {
-      _setError("AI Predictive Engine unavailable. Please check your connection.");
+      _setError("Market analysis failed: $e");
+    } finally {
+      _isLoading = false;
+      notifyListeners();
     }
   }
 
@@ -65,12 +59,15 @@ class AiViewModel extends ChangeNotifier {
   }) async {
     _setLoading();
     try {
-      // For demonstration, simulating a complex predictive sourcing response.
-      // In production, this would call GeminiService with data-rich prompts.
-      await Future.delayed(const Duration(seconds: 2));
-      _setResult("Predictive modelling for $city complete. \n\nExpected Trend: High Volatility (Steel +4.5% in 3 weeks). \nFuel adjustment charges are projected to impact logistics from Hub to Karachi sites. \n\nRecommendation: Procure 60% of structural steel requirements within the next 7 days to hedge against imminent price hikes.");
+      final response = await _cloudFunctions.callFunction('generateAiText', {
+        'prompt': "Evaluate construction bid in $city. Materials: ${materialsNeeded.join(', ')}. Price details: $bidPrice. Is this bid competitive?"
+      });
+      _result = response['text'];
     } catch (e) {
-      _setError("AI Predictive Engine unavailable. Please check your connection.");
+      _setError("Bid analysis failed: $e");
+    } finally {
+      _isLoading = false;
+      notifyListeners();
     }
   }
 
@@ -81,10 +78,16 @@ class AiViewModel extends ChangeNotifier {
   ) async {
     _setLoading();
     try {
-      final result = await _geminiService.getSupplierRecommendation(suppliers, query, locale: locale);
-      _setResult(result);
-    } catch(e) {
-      _setError('AI recommendation unavailable. Please try again.');
+      final supplierData = suppliers.map((s) => "${s.businessName} (Rating: ${s.rating}, Price: ${s.price})").join(", ");
+      final response = await _cloudFunctions.callFunction('generateAiText', {
+        'prompt': "Based on these suppliers: [$supplierData], recommend the best fit for: $query. Language: $locale"
+      });
+      _result = response['text'];
+    } catch (e) {
+      _setError('AI recommendation failed: $e');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
     }
   }
 
@@ -93,16 +96,18 @@ class AiViewModel extends ChangeNotifier {
     String materialName,
     String locale,
   ) async {
-    if (history.length < 3) {
-      _setError('Need at least 3 months of price data for AI insight.');
-      return;
-    }
     _setLoading();
     try {
-      final result = await _geminiService.getPriceTrendInsight(history, materialName, locale: locale);
-      _setResult(result);
-    } catch(e) {
-      _setError('AI insight unavailable. Please try again.');
+      final prices = history.map((h) => "${h.timestamp}: ${h.price}").join(", ");
+      final response = await _cloudFunctions.callFunction('generateAiText', {
+        'prompt': "Analyze price trends for $materialName based on this history: [$prices]. Language: $locale"
+      });
+      _result = response['text'];
+    } catch (e) {
+      _setError('AI insight failed: $e');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
     }
   }
 }

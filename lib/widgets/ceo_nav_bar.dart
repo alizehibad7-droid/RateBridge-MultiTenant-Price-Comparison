@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../theme/admin_theme.dart'; // Using shared AdminColors for consistency
 
 class CeoNavBar extends StatelessWidget {
   final int currentIndex;
@@ -34,36 +36,41 @@ class CeoNavBar extends StatelessWidget {
           if (i == currentIndex) return;
           context.go(_routes[i]);
         },
+        type: BottomNavigationBarType.fixed,
+        selectedItemColor: AdminColors.navy,
+        unselectedItemColor: AdminColors.textGrey,
+        selectedLabelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 11),
+        unselectedLabelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w500, fontSize: 11),
         items: const [
           BottomNavigationBarItem(
-            icon: Icon(Icons.home_outlined),
-            activeIcon: Icon(Icons.home_rounded),
+            icon: Icon(Icons.dashboard_outlined),
+            activeIcon: Icon(Icons.dashboard_rounded),
             label: 'Dashboard',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.store_outlined),
-            activeIcon: Icon(Icons.store_rounded),
-            label: 'Suppliers',
+            icon: Icon(Icons.storefront_outlined),
+            activeIcon: Icon(Icons.storefront_rounded),
+            label: 'Partners',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.person_add_outlined),
-            activeIcon: Icon(Icons.person_add_rounded),
-            label: 'Invite',
+            icon: Icon(Icons.person_add_alt_1_outlined),
+            activeIcon: Icon(Icons.person_add_alt_1_rounded),
+            label: 'Marketplace',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.group_outlined),
-            activeIcon: Icon(Icons.group_rounded),
-            label: 'Field Users',
+            icon: Icon(Icons.groups_outlined),
+            activeIcon: Icon(Icons.groups_rounded),
+            label: 'Team',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.receipt_outlined),
+            icon: Icon(Icons.receipt_long_outlined),
             activeIcon: Icon(Icons.receipt_long_rounded),
             label: 'Orders',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.person_outline),
-            activeIcon: Icon(Icons.person_rounded),
-            label: 'Profile',
+            icon: Icon(Icons.account_circle_outlined),
+            activeIcon: Icon(Icons.account_circle_rounded),
+            label: 'Account',
           ),
         ],
       ),

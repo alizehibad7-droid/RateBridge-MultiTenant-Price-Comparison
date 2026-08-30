@@ -5,18 +5,14 @@ import '../../models/price_history_model.dart';
 import '../../models/subscription_model.dart';
 import '../../repositories/company_repository.dart';
 import '../../repositories/material_repository.dart';
-import '../../services/gemini_service.dart';
 
-/// Price history charts and AI-generated trend insights for field users.
+/// Price history charts for field users.
 class FieldTrendsViewModel extends ChangeNotifier {
   final MaterialRepository _materialRepo;
-  final GeminiService _geminiService;
   final CompanyRepository _companyRepo;
 
   bool _isLoading = false;
-  bool _isAiLoading = false;
   String? _errorMessage;
-  String? _aiInsight;
   List<PriceHistoryModel> _history = [];
   String _trendDirection = 'stable';
   String? _materialName;
@@ -24,28 +20,26 @@ class FieldTrendsViewModel extends ChangeNotifier {
 
   FieldTrendsViewModel(
     this._materialRepo,
-    this._geminiService,
     this._companyRepo,
   );
 
   bool get isLoading => _isLoading;
-  bool get isAiLoading => _isAiLoading;
   String? get errorMessage => _errorMessage;
-  String? get aiInsight => _aiInsight;
   List<PriceHistoryModel> get history => _history;
   String get trendDirection => _trendDirection;
   String? get materialName => _materialName;
   String? get supplierName => _supplierName;
 
-  bool get showAiCard => _aiInsight != null && _aiInsight!.isNotEmpty;
+  bool get showAiCard => false;
+  bool get isAiLoading => false;
+  String? get aiInsight => null;
 
   int get distinctMonthCount => _history
       .map((h) => '${h.timestamp.year}-${h.timestamp.month.toString().padLeft(2, '0')}')
       .toSet()
       .length;
 
-  bool get hasEnoughDataForAi =>
-      distinctMonthCount >= AppConstants.priceHistoryMinForAI;
+  bool get hasEnoughDataForAi => false;
 
   List<PriceHistoryModel> get chartPoints {
     final monthly = _monthlyAverages(_history);
@@ -86,8 +80,6 @@ class FieldTrendsViewModel extends ChangeNotifier {
       loadTrends(companyId, materialId, supplierUid);
 
   /// Loads supplier-specific history via [materialId] + [supplierUid].
-  /// When [supplierUid] is `_` or `all`, [materialId] is treated as material
-  /// name and company-wide history is merged (legacy aggregate route).
   Future<void> loadTrends(
     String companyId,
     String materialId,
@@ -96,8 +88,6 @@ class FieldTrendsViewModel extends ChangeNotifier {
     _isLoading = true;
     _errorMessage = null;
     _history = [];
-    _aiInsight = null;
-    _isAiLoading = false;
     _trendDirection = 'stable';
     _materialName = null;
     _supplierName = null;
@@ -158,40 +148,10 @@ class FieldTrendsViewModel extends ChangeNotifier {
       }
 
       _computeTrendDirection();
-
-      if (hasEnoughDataForAi && _materialName != null) {
-        await _loadAiInsight(_materialName!);
-      }
     } catch (e) {
       _errorMessage = e.toString();
     } finally {
       _isLoading = false;
-      notifyListeners();
-    }
-  }
-
-  Future<void> _loadAiInsight(String materialName) async {
-    _isAiLoading = true;
-    _aiInsight = null;
-    notifyListeners();
-
-    try {
-      final result = await _geminiService.getPriceTrendInsight(
-        _history,
-        materialName,
-        locale: 'en',
-      );
-      final trimmed = result.trim();
-      if (trimmed.isNotEmpty &&
-          !trimmed.toLowerCase().contains('temporarily unavailable') &&
-          !trimmed.toLowerCase().contains('rate limit') &&
-          !trimmed.toLowerCase().contains('insufficient price history')) {
-        _aiInsight = trimmed;
-      }
-    } catch (_) {
-      _aiInsight = null;
-    } finally {
-      _isAiLoading = false;
       notifyListeners();
     }
   }

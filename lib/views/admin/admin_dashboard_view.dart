@@ -55,6 +55,7 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
       backgroundColor: AdminColors.screenBg,
       appBar: AdminAppBar(
         title: 'RateBridge Admin',
+        showNotificationIcon: true,
         bottom: isLoading
             ? const PreferredSize(
                 preferredSize: Size.fromHeight(2),
@@ -87,11 +88,16 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
         child: BottomNavigationBar(
           currentIndex: _currentIndex,
           onTap: _onTabTapped,
+          type: BottomNavigationBarType.fixed,
+          selectedItemColor: AdminColors.navy,
+          unselectedItemColor: AdminColors.textGrey,
+          selectedLabelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 11),
+          unselectedLabelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w500, fontSize: 11),
           items: const [
             BottomNavigationBarItem(
-              icon: Icon(Icons.grid_view_outlined),
-              activeIcon: Icon(Icons.grid_view_rounded),
-              label: 'Home',
+              icon: Icon(Icons.dashboard_outlined),
+              activeIcon: Icon(Icons.dashboard_rounded),
+              label: 'Dashboard',
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.storefront_outlined),
@@ -104,13 +110,13 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
               label: 'Finance',
             ),
             BottomNavigationBarItem(
-              icon: Icon(Icons.business_outlined),
-              activeIcon: Icon(Icons.business_rounded),
+              icon: Icon(Icons.business_center_outlined),
+              activeIcon: Icon(Icons.business_center_rounded),
               label: 'CEOs',
             ),
             BottomNavigationBarItem(
-              icon: Icon(Icons.person_outline_rounded),
-              activeIcon: Icon(Icons.person_rounded),
+              icon: Icon(Icons.account_circle_outlined),
+              activeIcon: Icon(Icons.account_circle_rounded),
               label: 'Profile',
             ),
           ],
@@ -137,7 +143,13 @@ class _AdminHomeOverview extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const AdminSectionLabel('Command Center'),
+                Row(
+                  children: [
+                    const Icon(Icons.admin_panel_settings_rounded, color: AdminColors.navy, size: 20),
+                    const SizedBox(width: 8),
+                    const AdminSectionLabel('Command Center'),
+                  ],
+                ),
                 const SizedBox(height: 8),
                 Text(
                   'Operational Pulse',
@@ -163,7 +175,7 @@ class _AdminHomeOverview extends StatelessWidget {
                         return _buildStatCard(
                           'Pending Approval',
                           '$count',
-                          Icons.how_to_reg_outlined,
+                          Icons.pending_actions_rounded,
                           AdminColors.amber,
                           isBadge: count > 0,
                         );
@@ -176,7 +188,7 @@ class _AdminHomeOverview extends StatelessWidget {
                         return _buildStatCard(
                           'Active Users',
                           '$count',
-                          Icons.people_outline,
+                          Icons.supervised_user_circle_rounded,
                           AdminColors.navy,
                         );
                       },
@@ -188,7 +200,7 @@ class _AdminHomeOverview extends StatelessWidget {
                         return _buildStatCard(
                           'Suspended',
                           '$count',
-                          Icons.block_flipped,
+                          Icons.person_off_rounded,
                           AdminColors.red,
                         );
                       },
@@ -196,7 +208,7 @@ class _AdminHomeOverview extends StatelessWidget {
                     _buildStatCard(
                       'Revenue',
                       'Active',
-                      Icons.payments_outlined,
+                      Icons.insights_rounded,
                       AdminColors.green,
                     ),
                   ],
@@ -211,7 +223,13 @@ class _AdminHomeOverview extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const AdminSectionLabel('Quick Actions'),
+                Row(
+                  children: [
+                    const Icon(Icons.bolt_rounded, color: AdminColors.navy, size: 20),
+                    const SizedBox(width: 8),
+                    const AdminSectionLabel('Quick Actions'),
+                  ],
+                ),
                 const SizedBox(height: 16),
                 GridView.count(
                   crossAxisCount: 3,
@@ -222,32 +240,32 @@ class _AdminHomeOverview extends StatelessWidget {
                   children: [
                     _buildActionCard(
                       'Review\nCEOs',
-                      Icons.person_add_alt_1_outlined,
+                      Icons.manage_accounts_rounded,
                       () => onAction(3),
                     ),
                     _buildActionCard(
                       'Review\nSuppliers',
-                      Icons.store_outlined,
+                      Icons.inventory_2_rounded,
                       () => onAction(1),
                     ),
                     _buildActionCard(
                       'Finance',
-                      Icons.account_balance_wallet_outlined,
+                      Icons.account_balance_rounded,
                       () => onAction(2),
                     ),
                     _buildActionCard(
                       'Dispute\nCenter',
-                      Icons.gavel_outlined,
+                      Icons.gavel_rounded,
                       () => context.push(RouteNames.adminDisputes),
                     ),
                     _buildActionCard(
                       'Admin\nProfile',
-                      Icons.person_outline,
+                      Icons.badge_rounded,
                       () => onAction(4),
                     ),
                     _buildActionCard(
                       'Manage\nTaxonomy',
-                      Icons.category_outlined,
+                      Icons.category_rounded,
                       () {
                         Navigator.push(
                           context,
@@ -284,7 +302,14 @@ class _AdminHomeOverview extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Icon(icon, color: color, size: 20),
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, color: color, size: 20),
+              ),
               if (isBadge)
                 Container(
                   width: 8,
@@ -320,7 +345,7 @@ class _AdminHomeOverview extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, color: AdminColors.navy, size: 22),
+            Icon(icon, color: AdminColors.navy, size: 24),
             const SizedBox(height: 8),
             Text(
               title,
@@ -356,17 +381,17 @@ class _AdminProfileViewState extends State<_AdminProfileView> {
         child: Wrap(
           children: [
             ListTile(
-              leading: const Icon(Icons.camera_alt),
+              leading: const Icon(Icons.camera_alt_rounded),
               title: const Text('Camera'),
               onTap: () => Navigator.pop(context, ImageSource.camera),
             ),
             ListTile(
-              leading: const Icon(Icons.photo_library),
+              leading: const Icon(Icons.photo_library_rounded),
               title: const Text('Gallery'),
               onTap: () => Navigator.pop(context, ImageSource.gallery),
             ),
             ListTile(
-              leading: const Icon(Icons.close),
+              leading: const Icon(Icons.close_rounded),
               title: const Text('Cancel'),
               onTap: () => Navigator.pop(context),
             ),
@@ -441,14 +466,14 @@ class _AdminProfileViewState extends State<_AdminProfileView> {
                   alignment: Alignment.center,
                   children: [
                     CircleAvatar(
-                      radius: 40,
+                      radius: 44,
                       backgroundColor: AdminColors.navy,
                       backgroundImage: user?.profileImageUrl != null
                           ? NetworkImage(user!.profileImageUrl!)
                           : null,
                       child: user?.profileImageUrl == null
                           ? const Icon(
-                              Icons.admin_panel_settings,
+                              Icons.admin_panel_settings_rounded,
                               size: 40,
                               color: Colors.white,
                             )
@@ -456,7 +481,7 @@ class _AdminProfileViewState extends State<_AdminProfileView> {
                     ),
                     if (_isUploadingImage)
                       const CircleAvatar(
-                        radius: 40,
+                        radius: 44,
                         backgroundColor: Colors.black26,
                         child: CircularProgressIndicator(
                           color: Colors.white,
@@ -467,13 +492,13 @@ class _AdminProfileViewState extends State<_AdminProfileView> {
                       bottom: 0,
                       right: 0,
                       child: Container(
-                        padding: const EdgeInsets.all(4),
+                        padding: const EdgeInsets.all(6),
                         decoration: const BoxDecoration(
                           color: AdminColors.amber,
                           shape: BoxShape.circle,
                         ),
                         child: const Icon(
-                          Icons.camera_alt,
+                          Icons.camera_alt_rounded,
                           size: 14,
                           color: AdminColors.navy,
                         ),
@@ -495,23 +520,35 @@ class _AdminProfileViewState extends State<_AdminProfileView> {
         const SizedBox(height: 32),
 
         // B. Admin Account Information
-        const AdminSectionLabel('Account Information'),
+        Row(
+          children: [
+            const Icon(Icons.person_outline_rounded, color: AdminColors.navy, size: 20),
+            const SizedBox(width: 8),
+            const AdminSectionLabel('Account Information'),
+          ],
+        ),
         const SizedBox(height: 12),
         Container(
           padding: const EdgeInsets.all(16),
           decoration: AdminTheme.cardDecoration(),
           child: Column(
             children: [
-              _buildInfoRow('Email', user?.email ?? 'N/A'),
-              _buildInfoRow('Role', user?.role ?? 'Administrator'),
-              _buildInfoRow('Status', (user?.status ?? 'active').toUpperCase()),
+              _buildInfoRow(Icons.email_outlined, 'Email', user?.email ?? 'N/A'),
+              _buildInfoRow(Icons.badge_outlined, 'Role', user?.role ?? 'Administrator'),
+              _buildInfoRow(Icons.info_outline_rounded, 'Status', (user?.status ?? 'active').toUpperCase()),
             ],
           ),
         ),
         const SizedBox(height: 24),
 
         // C. Admin Management Shortcuts
-        const AdminSectionLabel('Platform Management'),
+        Row(
+          children: [
+            const Icon(Icons.layers_outlined, color: AdminColors.navy, size: 20),
+            const SizedBox(width: 8),
+            const AdminSectionLabel('Platform Management'),
+          ],
+        ),
         const SizedBox(height: 12),
         GridView.count(
           crossAxisCount: 2,
@@ -525,14 +562,14 @@ class _AdminProfileViewState extends State<_AdminProfileView> {
               context,
               'Finance',
               'Payments & Ledger',
-              Icons.account_balance_wallet_outlined,
+              Icons.payments_rounded,
               () => widget.onAction(2),
             ),
             _buildShortcutItem(
               context,
               'Taxonomy',
               'Categories',
-              Icons.category_outlined,
+              Icons.grid_view_rounded,
               () => Navigator.push(
                 context,
                 MaterialPageRoute(
@@ -545,7 +582,13 @@ class _AdminProfileViewState extends State<_AdminProfileView> {
         const SizedBox(height: 24),
 
         // H. Admin Preferences
-        const AdminSectionLabel('Preferences'),
+        Row(
+          children: [
+            const Icon(Icons.settings_outlined, color: AdminColors.navy, size: 20),
+            const SizedBox(width: 8),
+            const AdminSectionLabel('Preferences'),
+          ],
+        ),
         const SizedBox(height: 12),
         Container(
           decoration: AdminTheme.cardDecoration(),
@@ -553,30 +596,37 @@ class _AdminProfileViewState extends State<_AdminProfileView> {
             children: [
               ListTile(
                 leading: const Icon(
-                  Icons.notifications_none,
+                  Icons.notifications_active_outlined,
                   color: AdminColors.navy,
                 ),
                 title: const Text('Notifications'),
-                trailing: const Icon(Icons.chevron_right),
+                trailing: const Icon(Icons.chevron_right_rounded),
                 onTap: () => context.push(RouteNames.adminNotifications),
               ),
-              const Divider(height: 1),
+              const Divider(height: 1, indent: 56),
               ListTile(
-                leading: const Icon(Icons.language, color: AdminColors.navy),
+                leading: const Icon(Icons.translate_rounded, color: AdminColors.navy),
                 title: const Text('Language'),
-                trailing: Text('English', style: AdminTheme.mutedStyle()),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('English', style: AdminTheme.mutedStyle()),
+                    const Icon(Icons.chevron_right_rounded, size: 18, color: AdminColors.textGrey),
+                  ],
+                ),
               ),
             ],
           ),
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 32),
 
         SizedBox(
           width: double.infinity,
-          child: OutlinedButton(
+          child: OutlinedButton.icon(
             onPressed: () => authVM.signOut(),
+            icon: const Icon(Icons.logout_rounded, size: 18),
+            label: const Text('Logout Session'),
             style: AdminTheme.destructiveButtonStyle(height: 52),
-            child: const Text('Logout Session'),
           ),
         ),
         const SizedBox(height: 24),
@@ -602,13 +652,15 @@ class _AdminProfileViewState extends State<_AdminProfileView> {
     );
   }
 
-  Widget _buildInfoRow(String label, String value) {
+  Widget _buildInfoRow(IconData icon, String label, String value) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      padding: const EdgeInsets.symmetric(vertical: 10),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
+          Icon(icon, size: 18, color: AdminColors.textGrey),
+          const SizedBox(width: 12),
           Text(label, style: AdminTheme.mutedStyle(size: 14)),
+          const Spacer(),
           Text(
             value,
             style: AdminTheme.bodyStyle().copyWith(fontWeight: FontWeight.w600),
@@ -635,8 +687,15 @@ class _AdminProfileViewState extends State<_AdminProfileView> {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, color: AdminColors.navy, size: 24),
-            const SizedBox(height: 4),
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: AdminColors.navy.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, color: AdminColors.navy, size: 22),
+            ),
+            const SizedBox(height: 10),
             Text(
               title,
               style: AdminTheme.bodyStyle().copyWith(
@@ -646,24 +705,6 @@ class _AdminProfileViewState extends State<_AdminProfileView> {
             ),
             Text(subtitle, style: AdminTheme.mutedStyle(size: 10)),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _PlaceholderView extends StatelessWidget {
-  final String title;
-  const _PlaceholderView({required this.title});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Text(
-        title,
-        style: GoogleFonts.plusJakartaSans(
-          color: AdminColors.textGrey,
-          fontWeight: FontWeight.w600,
         ),
       ),
     );

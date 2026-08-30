@@ -1,6 +1,9 @@
 // MVVM: Repository — Firestore access only
+import 'dart:async';
+import 'dart:developer' as developer;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/transaction_model.dart';
+import '../models/payment_proof_model.dart';
 import '../services/firestore_service.dart';
 import '../constants/firestore_paths.dart';
 import '../constants/app_constants.dart';
@@ -11,136 +14,41 @@ class TransactionRepository {
 
   TransactionRepository(FirestoreService _);
 
-  /// Live stream of every unsettled commission record for [supplierUid],
-  /// regardless of month.
-  Stream<List<TransactionModel>> watchSupplierUnsettledTransactions(
-    String supplierUid,
-  ) {
-    try {
-      return _db
-          .collection(FirestorePaths.transactionsCol)
-          .where('supplierUid', isEqualTo: supplierUid)
-          .where('status', isEqualTo: 'unsettled')
-          .snapshots()
-          .map((snapshot) {
-        final txs = snapshot.docs
-            .map((d) => TransactionModel.fromMap(d.id, d.data()))
-            .toList()
-          ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-        return txs;
-      });
-    } on FirebaseException catch (e) {
-      throw AppException('Failed to watch unsettled commissions: ${e.message}');
-    }
-  }
-
-  Stream<List<TransactionModel>> watchSupplierEarnings(
-    String supplierUid,
-    String month,
-  ) {
-    final start = _monthStart(month);
-    final end = _monthEnd(month);
-
-    return _db
-        .collection(FirestorePaths.transactionsCol)
+  /// Live stream of every unsettled commission record for [supplierUid].
+  Stream<List<TransactionModel>> watchSupplierUnsettledTransactions(String supplierUid) {
+    return _db.collection(FirestorePaths.transactionsCol)
         .where('supplierUid', isEqualTo: supplierUid)
+        .where('status', isEqualTo: 'unsettled')
         .snapshots()
         .map((snapshot) {
-      final txs = snapshot.docs
-          .map((d) => TransactionModel.fromMap(d.id, d.data()))
-          .where(
-            (tx) => !tx.createdAt.isBefore(start) && tx.createdAt.isBefore(end),
-          )
-          .toList()
-        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-
-      if (txs.length > AppConstants.paginationLimit) {
-        return txs.take(AppConstants.paginationLimit).toList();
-      }
+      final txs = snapshot.docs.map((d) => TransactionModel.fromMap(d.id, d.data())).toList();
+      txs.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       return txs;
     });
   }
 
-  /// Watches ALL transactions for a specific supplier using server-side filtering.
-  Stream<List<TransactionModel>> watchAllSupplierTransactions(String supplierUid) {
-    return _db
-        .collection(FirestorePaths.transactionsCol)
-        .where('supplierUid', isEqualTo: supplierUid)
-        .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((d) => TransactionModel.fromMap(d.id, d.data()))
-            .toList());
-  }
-
-  /// Watches only unsettled/pending transactions for a specific supplier.
-  Stream<List<TransactionModel>> watchAllUnsettledTransactions(String supplierUid) {
-    return _db
-        .collection(FirestorePaths.transactionsCol)
-        .where('supplierUid', isEqualTo: supplierUid)
-        .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((d) => TransactionModel.fromMap(d.id, d.data()))
-            .where((tx) => tx.isUnsettled)
-            .toList());
-  }
-
-  Future<List<MonthlyEarning>> getMonthlyEarningsSummary(
-    String supplierUid,
-    int months,
-  ) async {
-    try {
-      final results = <MonthlyEarning>[];
-      for (int i = 0; i < months; i++) {
-        final date = DateTime.now().subtract(Duration(days: 30 * i));
-        final month = '${date.year}-${date.month.toString().padLeft(2, '0')}';
-        final doc = await _db
-            .collection(FirestorePaths.suppliersCol)
-            .doc(supplierUid)
-            .collection('earnings')
-            .doc(month)
-            .get();
-        if (doc.exists) {
-          results.add(
-            MonthlyEarning.fromMap(
-              month,
-              Map<String, dynamic>.from(doc.data()!),
-            ),
-          );
-        } else {
-          results.add(MonthlyEarning(month: month, gross: 0, commission: 0, net: 0, orderCount: 0));
-        }
-      }
-      return results.reversed.toList(); // chronological order
-    } on FirebaseException catch (e) {
-      throw AppException('Failed to get monthly earnings: ${e.message}');
-    }
-  }
-
-  Stream<List<TransactionModel>> watchAdminRevenue() {
-    try {
-      return _db
-          .collection(FirestorePaths.transactionsCol)
-          .orderBy('createdAt', descending: true)
-          .limit(50)
+  /// Watches all settled transactions for history.
+  Stream<List<TransactionModel>> watchSupplierSettledTransactions(String supplierUid) {
+     return _db.collection(FirestorePaths.transactionsCol)
+          .where('supplierUid', isEqualTo: supplierUid)
+          .where('status', isEqualTo: 'settled')
           .snapshots()
-          .map((s) => s.docs.map((d) =>
-            TransactionModel.fromMap(d.id, d.data())).toList());
-    } on FirebaseException catch (e) {
-      throw AppException('Failed to watch admin revenue: ${e.message}');
-    }
+          .map((snapshot) => snapshot.docs.map((d) => TransactionModel.fromMap(d.id, d.data())).toList());
   }
 
-  Future<bool> hasTransactionForOrder(String orderId) async {
-    try {
-      final snap = await _db
-          .collection(FirestorePaths.transactionsCol)
-          .where('orderId', isEqualTo: orderId)
-          .limit(1)
-          .get();
-      return snap.docs.isNotEmpty;
-    } on FirebaseException catch (e) {
-      throw AppException('Failed to check transaction: ${e.message}');
-    }
+  /// Watches transactions for a specific month.
+  Stream<List<TransactionModel>> watchSupplierEarnings(String supplierUid, String month) {
+    final start = _monthStart(month);
+    final end = _monthEnd(month);
+    return _db.collection(FirestorePaths.transactionsCol)
+        .where('supplierUid', isEqualTo: supplierUid)
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs
+          .map((d) => TransactionModel.fromMap(d.id, d.data()))
+          .where((tx) => !tx.createdAt.isBefore(start) && tx.createdAt.isBefore(end))
+          .toList()..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    });
   }
 
   /// Creates an unsettled commission transaction when delivery is confirmed.
@@ -154,11 +62,15 @@ class TransactionRepository {
     required double supplierEarning,
   }) async {
     try {
+      final txId = 'comm_$orderId'; 
+      final docRef = _db.collection(FirestorePaths.transactionsCol).doc(txId);
+      final doc = await docRef.get();
+      if (doc.exists) return; 
+
       final now = DateTime.now();
       final month = '${now.year}-${now.month.toString().padLeft(2, '0')}';
-      final txId = 'comm_$orderId';
 
-      await _db.collection(FirestorePaths.transactionsCol).doc(txId).set({
+      await docRef.set({
         'orderId': orderId,
         'companyId': companyId,
         'supplierUid': supplierUid,
@@ -171,135 +83,108 @@ class TransactionRepository {
         'month': month,
         'year': now.year,
         'createdAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      });
     } on FirebaseException catch (e) {
       throw AppException('Failed to create commission transaction: ${e.message}');
     }
   }
 
-  DateTime _monthStart(String month) => DateTime.parse('$month-01');
-  DateTime _monthEnd(String month) {
-    final parts = month.split('-');
-    final next = DateTime(int.parse(parts[0]), int.parse(parts[1]) + 1, 1);
-    return next;
-  }
+  // --- Admin Ledger Integration (Source of Truth) ---
 
-  bool _isInCurrentMonth(DateTime date) {
-    final now = DateTime.now();
-    return date.year == now.year && date.month == now.month;
-  }
-
-  bool _txInCurrentMonth(TransactionModel tx) {
-    final monthKey = tx.createdAt;
-    if (_isInCurrentMonth(monthKey)) return true;
-    return false;
-  }
-
-  bool _settledInCurrentMonth(TransactionModel tx) {
-    final settled = tx.settledAt;
-    if (settled == null) return false;
-    return _isInCurrentMonth(settled);
-  }
-
+  /// Live stream of the entire ledger, reactive to both transactions and payments.
   Stream<CommissionLedgerSnapshot> watchCommissionLedger() {
-    try {
-      return _db
-          .collection(FirestorePaths.transactionsCol)
-          .orderBy('createdAt', descending: true)
-          .snapshots()
-          .asyncMap(_buildCommissionLedgerSnapshot);
-    } on FirebaseException catch (e) {
-      throw AppException('Failed to watch commission ledger: ${e.message}');
-    }
-  }
-
-  Future<CommissionLedgerSnapshot> loadCommissionLedger() async {
-    try {
-      final snap = await _db
-          .collection(FirestorePaths.transactionsCol)
-          .orderBy('createdAt', descending: true)
-          .get();
-      final txs = snap.docs
-          .map((d) => TransactionModel.fromMap(d.id, d.data()))
-          .toList();
-      return _buildCommissionLedgerSnapshotFromList(txs);
-    } on FirebaseException catch (e) {
-      throw AppException('Failed to load commission ledger: ${e.message}');
-    }
-  }
-
-  Future<void> settleSupplierCommissions(String supplierUid) async {
-    try {
-      final snap = await _db
-          .collection(FirestorePaths.transactionsCol)
-          .where('supplierUid', isEqualTo: supplierUid)
-          .where('status', isEqualTo: 'unsettled')
-          .get();
-
-      if (snap.docs.isEmpty) return;
-
-      final batch = _db.batch();
-      for (final doc in snap.docs) {
-        batch.update(doc.reference, {
-          'status': 'settled',
-          'settledAt': FieldValue.serverTimestamp(),
-        });
+    final controller = StreamController<CommissionLedgerSnapshot>();
+    
+    Future<void> refresh() async {
+      if (controller.isClosed) return;
+      try {
+        // Fetch fresh snapshots of both collections to build the unified ledger state
+        final txSnap = await _db.collection(FirestorePaths.transactionsCol)
+            .orderBy('createdAt', descending: true)
+            .get();
+        
+        final paymentSnap = await _db.collection('payment_proofs')
+            .where('type', isEqualTo: 'commission')
+            .where('status', whereIn: ['confirmed', 'settled', 'approved'])
+            .get();
+        
+        final snapshot = await _buildSnapshotFromData(txSnap, paymentSnap);
+        if (!controller.isClosed) controller.add(snapshot);
+      } catch (e) {
+        developer.log("Error refreshing commission ledger: $e");
       }
-      await batch.commit();
-    } on FirebaseException catch (e) {
-      throw AppException('Failed to settle commissions: ${e.message}');
     }
+
+    // React to changes in either collection to ensure real-time updates
+    final txSub = _db.collection(FirestorePaths.transactionsCol).snapshots().listen((_) => refresh());
+    final paySub = _db.collection('payment_proofs')
+        .where('type', isEqualTo: 'commission')
+        .snapshots().listen((_) => refresh());
+
+    controller.onCancel = () {
+      txSub.cancel();
+      paySub.cancel();
+      controller.close();
+    };
+
+    refresh(); // Initial load
+    return controller.stream;
   }
 
-  Future<CommissionLedgerSnapshot> _buildCommissionLedgerSnapshot(
-    QuerySnapshot<Map<String, dynamic>> snap,
+  Future<CommissionLedgerSnapshot> _buildSnapshotFromData(
+    QuerySnapshot<Map<String, dynamic>> txSnap, 
+    QuerySnapshot<Map<String, dynamic>> paymentSnap
   ) async {
-    final txs = snap.docs
-        .map((d) => TransactionModel.fromMap(d.id, d.data()))
-        .toList();
-    return _buildCommissionLedgerSnapshotFromList(txs);
-  }
+    final allTxs = txSnap.docs.map((d) => TransactionModel.fromMap(d.id, d.data())).toList();
+    final payments = paymentSnap.docs.map((d) => PaymentProofModel.fromMap(d.id, d.data())).toList();
 
-  Future<CommissionLedgerSnapshot> _buildCommissionLedgerSnapshotFromList(
-    List<TransactionModel> txs,
-  ) async {
-    double outstandingThisMonth = 0;
     double collectedThisMonth = 0;
-    double grandTotalCollected = 0;
+    double grandTotalCollected = payments.fold(0.0, (sum, p) => sum + p.amount);
+    final now = DateTime.now();
 
-    final unsettledBySupplier = <String, List<TransactionModel>>{};
-
-    for (final tx in txs) {
-      if (tx.isUnsettled) {
-        if (_txInCurrentMonth(tx)) {
-          outstandingThisMonth += tx.commissionAmount;
-        }
-        unsettledBySupplier.putIfAbsent(tx.supplierUid, () => []).add(tx);
-      } else if (tx.isSettled) {
-        grandTotalCollected += tx.commissionAmount;
-        if (_settledInCurrentMonth(tx)) {
-          collectedThisMonth += tx.commissionAmount;
-        } else if (tx.settledAt == null && _txInCurrentMonth(tx)) {
-          collectedThisMonth += tx.commissionAmount;
-        }
+    for (final p in payments) {
+      final date = p.confirmedAt ?? p.createdAt;
+      if (date.year == now.year && date.month == now.month) {
+        collectedThisMonth += p.amount;
       }
     }
 
-    final supplierUids = unsettledBySupplier.keys.toList();
-    final nameCache = await _supplierNamesFor(supplierUids);
+    final dataBySupplier = <String, Map<String, dynamic>>{};
+    for (final tx in allTxs) {
+      dataBySupplier.putIfAbsent(tx.supplierUid, () => {'generated': 0.0, 'orders': 0, 'txIds': <String>[]});
+      dataBySupplier[tx.supplierUid]!['generated'] += tx.commissionAmount;
+      dataBySupplier[tx.supplierUid]!['orders'] += 1;
+      dataBySupplier[tx.supplierUid]!['txIds'].add(tx.txId);
+    }
 
-    final suppliers = supplierUids.map((uid) {
-      final rows = unsettledBySupplier[uid]!;
-      final amount = rows.fold<double>(0, (acc, tx) => acc + tx.commissionAmount);
-      return SupplierUnsettledSummary(
-        supplierUid: uid,
-        supplierName: nameCache[uid] ?? uid,
-        unsettledAmount: amount,
-        orderCount: rows.length,
-        transactionIds: rows.map((tx) => tx.txId).toList(),
-      );
-    }).toList()
-      ..sort((a, b) => b.unsettledAmount.compareTo(a.unsettledAmount));
+    final paymentsBySupplier = <String, double>{};
+    for (final p in payments) {
+      paymentsBySupplier[p.payerId] = (paymentsBySupplier[p.payerId] ?? 0.0) + p.amount;
+    }
+
+    final suppliers = <SupplierUnsettledSummary>[];
+    for (final uid in dataBySupplier.keys) {
+      final totalGenerated = dataBySupplier[uid]!['generated'] as double;
+      final totalPaid = paymentsBySupplier[uid] ?? 0.0;
+      final netOwed = totalGenerated - totalPaid;
+
+      if (netOwed > 0.01) {
+        // Fetch name
+        final sDoc = await _db.collection('suppliers').doc(uid).get();
+        final name = sDoc.data()?['name'] ?? uid;
+
+        suppliers.add(SupplierUnsettledSummary(
+          supplierUid: uid,
+          supplierName: name,
+          unsettledAmount: netOwed,
+          orderCount: dataBySupplier[uid]!['orders'] as int,
+          transactionIds: List<String>.from(dataBySupplier[uid]!['txIds']),
+        ));
+      }
+    }
+
+    suppliers.sort((a, b) => b.unsettledAmount.compareTo(a.unsettledAmount));
+    final outstandingThisMonth = suppliers.fold(0.0, (sum, s) => sum + s.unsettledAmount);
 
     return CommissionLedgerSnapshot(
       outstandingThisMonth: outstandingThisMonth,
@@ -309,16 +194,40 @@ class TransactionRepository {
     );
   }
 
-  Future<Map<String, String>> _supplierNamesFor(List<String> supplierUids) async {
-    final names = <String, String>{};
-    for (final uid in supplierUids) {
-      if (uid.isEmpty) continue;
-      final doc = await _db.collection(FirestorePaths.suppliersCol).doc(uid).get();
-      final data = doc.data();
-      names[uid] = (data?['name'] as String?)?.trim().isNotEmpty == true
-          ? data!['name'] as String
-          : uid;
+  Future<void> settleSupplierCommissions(String supplierUid, List<String> transactionIds) async {
+    final batch = _db.batch();
+    for (final id in transactionIds) {
+      batch.update(_db.collection(FirestorePaths.transactionsCol).doc(id), {
+        'status': 'settled',
+        'settledAt': FieldValue.serverTimestamp(),
+      });
     }
-    return names;
+    await batch.commit();
+  }
+
+  Future<List<MonthlyEarning>> getMonthlyEarningsSummary(String supplierUid, int count) async {
+    final results = <MonthlyEarning>[];
+    for (int i = 0; i < count; i++) {
+      final date = DateTime.now().subtract(Duration(days: 30 * i));
+      final month = '${date.year}-${date.month.toString().padLeft(2, '0')}';
+      final start = DateTime.parse('$month-01');
+      final end = DateTime(date.month == 12 ? date.year + 1 : date.year, date.month == 12 ? 1 : date.month + 1, 1);
+      final snap = await _db.collection(FirestorePaths.transactionsCol)
+          .where('supplierUid', isEqualTo: supplierUid)
+          .where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(start))
+          .where('createdAt', isLessThan: Timestamp.fromDate(end)).get();
+      final txs = snap.docs.map((d) => TransactionModel.fromMap(d.id, d.data())).toList();
+      double gross = 0; double comm = 0; double net = 0;
+      for (final tx in txs) { gross += tx.totalAmount; comm += tx.commissionAmount; net += tx.supplierEarning; }
+      results.add(MonthlyEarning(month: month, gross: gross, commission: comm, net: net, orderCount: txs.length));
+    }
+    return results;
+  }
+
+  DateTime _monthStart(String month) => DateTime.parse('$month-01');
+  DateTime _monthEnd(String month) {
+    final parts = month.split('-');
+    final y = int.parse(parts[0]); final m = int.parse(parts[1]);
+    return DateTime(m == 12 ? y + 1 : y, m == 12 ? 1 : m + 1, 1);
   }
 }

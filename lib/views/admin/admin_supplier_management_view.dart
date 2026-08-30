@@ -50,11 +50,22 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Bulk Approve Suppliers'),
+        title: Row(
+          children: [
+            const Icon(Icons.verified_user_rounded, color: AdminColors.navy),
+            const SizedBox(width: 10),
+            const Text('Bulk Approval'),
+          ],
+        ),
         content: Text('Approve all ${_selectedSupplierUids.length} selected suppliers and grant dashboard access?'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('CANCEL')),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('APPROVE ALL', style: TextStyle(fontWeight: FontWeight.bold))),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.pop(context, true),
+            icon: const Icon(Icons.done_all_rounded, size: 18),
+            label: const Text('APPROVE ALL'),
+            style: AdminTheme.primaryButtonStyle(height: 40),
+          ),
         ],
       ),
     );
@@ -68,7 +79,16 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
       }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Successfully approved ${_selectedSupplierUids.length} suppliers')),
+          SnackBar(
+            behavior: SnackBarBehavior.floating,
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+                const SizedBox(width: 12),
+                Text('Successfully approved ${_selectedSupplierUids.length} suppliers'),
+              ],
+            ),
+          ),
         );
         setState(() => _selectedSupplierUids.clear());
       }
@@ -99,6 +119,10 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
               title: 'Supplier Management',
               bottom: TabBar(
                 controller: _tabController,
+                indicatorColor: AdminColors.amber,
+                indicatorWeight: 3,
+                labelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 13),
+                unselectedLabelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w500, fontSize: 13),
                 tabs: const [
                   Tab(text: 'Pending'),
                   Tab(text: 'Active'),
@@ -114,6 +138,12 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
                   color: AdminColors.navy,
                   child: TabBar(
                     controller: _tabController,
+                    indicatorColor: AdminColors.amber,
+                    indicatorWeight: 3,
+                    labelColor: AdminColors.amber,
+                    unselectedLabelColor: Colors.white70,
+                    labelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 12),
+                    unselectedLabelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w500, fontSize: 12),
                     tabs: const [
                       Tab(text: 'Pending'),
                       Tab(text: 'Active'),
@@ -129,11 +159,11 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
       floatingActionButton: (_tabController.index == 0 && _selectedSupplierUids.isNotEmpty)
           ? FloatingActionButton.extended(
               onPressed: _isBulkProcessing ? null : () => _bulkApprove(adminVM),
-              backgroundColor: AdminColors.amber,
+              backgroundColor: AdminColors.navy,
               label: _isBulkProcessing 
                   ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                   : Text('Approve Selected (${_selectedSupplierUids.length})', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-              icon: const Icon(Icons.done_all, color: Colors.white),
+              icon: const Icon(Icons.verified_user_rounded, color: Colors.white),
             )
           : null,
     );
@@ -156,7 +186,7 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
 
         if (suppliers.isEmpty) {
           return AdminEmptyState(
-            icon: Icons.storefront_outlined,
+            icon: _emptyIcon(status),
             message: 'No $status suppliers found.',
           );
         }
@@ -187,6 +217,15 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
     );
   }
 
+  IconData _emptyIcon(String status) {
+    switch(status) {
+      case 'pending': return Icons.person_search_rounded;
+      case 'active': return Icons.storefront_rounded;
+      case 'suspended': return Icons.block_rounded;
+      default: return Icons.domain_disabled_rounded;
+    }
+  }
+
   Widget _buildSupplierCard(
     UserModel supplier,
     SupplierModel? profile,
@@ -205,24 +244,36 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (isPending)
-                  Checkbox(
-                    value: isSelected,
-                    onChanged: (val) {
-                      setState(() {
-                        if (val == true) {
-                          _selectedSupplierUids.add(supplier.uid);
-                        } else {
-                          _selectedSupplierUids.remove(supplier.uid);
-                        }
-                      });
-                    },
-                    activeColor: AdminColors.amber,
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: Checkbox(
+                        value: isSelected,
+                        onChanged: (val) {
+                          setState(() {
+                            if (val == true) {
+                              _selectedSupplierUids.add(supplier.uid);
+                            } else {
+                              _selectedSupplierUids.remove(supplier.uid);
+                            }
+                          });
+                        },
+                        activeColor: AdminColors.amber,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                      ),
+                    ),
                   ),
-                CircleAvatar(
-                  radius: 20,
-                  backgroundColor: AdminColors.amber.withValues(alpha: 0.1),
-                  child: const Icon(Icons.storefront_rounded,
-                      color: AdminColors.amber, size: 20),
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: AdminColors.amber.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.store_rounded,
+                      color: AdminColors.amber, size: 24),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -230,18 +281,24 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(profile?.name ?? supplier.name,
-                          style: const TextStyle(
-                              fontWeight: FontWeight.bold, fontSize: 16)),
-                      Text(supplier.email,
-                          style: const TextStyle(
-                              color: AdminColors.textGrey, fontSize: 12)),
+                          style: GoogleFonts.plusJakartaSans(
+                              fontWeight: FontWeight.w700, fontSize: 16, color: AdminColors.navy)),
+                      Row(
+                        children: [
+                          const Icon(Icons.email_outlined, size: 12, color: AdminColors.textGrey),
+                          const SizedBox(width: 4),
+                          Text(supplier.email,
+                              style: const TextStyle(
+                                  color: AdminColors.textGrey, fontSize: 12)),
+                        ],
+                      ),
                     ],
                   ),
                 ),
                 StatusChip(status: status),
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             Row(
               children: [
                 const Icon(Icons.location_on_outlined,
@@ -261,12 +318,12 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
                 ),
               ],
             ),
-            const Divider(height: 28),
+            const Divider(height: 32),
             SupplierPerformanceScorecard(
               supplierId: supplier.uid,
               averageRating: supplier.rating ?? 0.0,
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
             AdminApprovalSection(
               title: 'BUSINESS IDENTITY',
               children: [
@@ -282,7 +339,7 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
             AdminApprovalSection(
               title: 'DECLARED CATEGORIES',
               children: [
@@ -292,76 +349,91 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
                 ),
               ],
             ),
-            const Divider(height: 28),
+            const Divider(height: 32),
             _buildActionButtons(supplier, adminVM),
           ],
         ),
     );
   }
 
-  String _formatCnic(String? raw) {
-    if (raw == null || raw.trim().isEmpty) return '';
-    return PakistanValidators.formatCnic(raw);
-  }
-
   Widget _buildActionButtons(UserModel supplier, AdminViewModel adminVM) {
     final status = (supplier.status ?? 'pending').toLowerCase();
 
     return Wrap(
-      spacing: 8,
-      runSpacing: 8,
+      spacing: 12,
+      runSpacing: 12,
       children: [
         if (status == 'pending') ...[
-          ElevatedButton(
+          ElevatedButton.icon(
             onPressed: () => _confirmAction(
               context,
               'Approve Supplier?',
               'This will activate the supplier and grant access to their dashboard.',
               () => adminVM.approveSupplier(supplier.uid),
+              confirmIcon: Icons.check_circle_rounded,
             ),
-            style: AdminTheme.primaryButtonStyle(height: 46),
-            child: const Text('Approve'),
+            icon: const Icon(Icons.check_rounded, size: 18),
+            label: const Text('Approve'),
+            style: AdminTheme.primaryButtonStyle(height: 46).copyWith(
+              minimumSize: WidgetStateProperty.all(const Size(140, 46)),
+            ),
           ),
-          OutlinedButton(
+          OutlinedButton.icon(
             onPressed: () => _showRejectDialog(context, supplier.uid, adminVM),
-            style: AdminTheme.destructiveButtonStyle(),
-            child: const Text('Reject'),
+            icon: const Icon(Icons.close_rounded, size: 18),
+            label: const Text('Reject'),
+            style: AdminTheme.destructiveButtonStyle().copyWith(
+              minimumSize: WidgetStateProperty.all(const Size(120, 46)),
+            ),
           ),
         ],
         if (status == 'active') ...[
-          OutlinedButton(
+          OutlinedButton.icon(
             onPressed: () => _confirmAction(
               context,
               'Suspend Supplier?',
               'The supplier will lose dashboard access immediately.',
               () => adminVM.suspendSupplier(supplier.uid),
+              confirmIcon: Icons.block_rounded,
+              isDestructive: true,
             ),
-            style: AdminTheme.destructiveButtonStyle(),
-            child: const Text('Suspend'),
+            icon: const Icon(Icons.block_rounded, size: 18),
+            label: const Text('Suspend Account'),
+            style: AdminTheme.destructiveButtonStyle().copyWith(
+              minimumSize: WidgetStateProperty.all(const Size(160, 46)),
+            ),
           ),
         ],
         if (status == 'suspended' || status == 'rejected') ...[
-          ElevatedButton(
+          ElevatedButton.icon(
             onPressed: () => _confirmAction(
               context,
               'Activate Supplier?',
               'The supplier will regain full access to the platform.',
               () => adminVM.reactivateSupplier(supplier.uid),
+              confirmIcon: Icons.bolt_rounded,
             ),
-            style: AdminTheme.primaryButtonStyle(height: 46),
-            child: const Text('Activate'),
+            icon: const Icon(Icons.bolt_rounded, size: 18),
+            label: const Text('Activate Account'),
+            style: AdminTheme.primaryButtonStyle(height: 46).copyWith(
+              minimumSize: WidgetStateProperty.all(const Size(160, 46)),
+            ),
           ),
         ],
-        OutlinedButton(
+        OutlinedButton.icon(
           onPressed: () => _confirmAction(
             context,
             'Delete Permanently?',
             'This action is irreversible. All supplier records will be removed.',
             () => adminVM.deleteSupplierPermanently(supplier.uid),
+            confirmIcon: Icons.delete_forever_rounded,
             isDestructive: true,
           ),
-          style: AdminTheme.destructiveButtonStyle(),
-          child: const Text('Delete'),
+          icon: const Icon(Icons.delete_forever_rounded, size: 18),
+          label: const Text('Delete'),
+          style: AdminTheme.destructiveButtonStyle().copyWith(
+            minimumSize: WidgetStateProperty.all(const Size(120, 46)),
+          ),
         ),
       ],
     );
@@ -373,11 +445,18 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
     String message,
     Future<void> Function() onConfirm, {
     bool isDestructive = false,
+    IconData? confirmIcon,
   }) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+        title: Row(
+          children: [
+            if (confirmIcon != null) Icon(confirmIcon, color: isDestructive ? AdminColors.red : AdminColors.navy),
+            if (confirmIcon != null) const SizedBox(width: 10),
+            Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+          ],
+        ),
         content: Text(message),
         actions: [
           TextButton(
@@ -391,13 +470,14 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
+                        behavior: SnackBarBehavior.floating,
                         content: Text('Action completed successfully')),
                   );
                 }
               } catch (e) {
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Error: $e')),
+                    SnackBar(behavior: SnackBarBehavior.floating, content: Text('Error: $e')),
                   );
                 }
               }
@@ -424,14 +504,20 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Reject Supplier Application'),
+        title: Row(
+          children: [
+            const Icon(Icons.cancel_outlined, color: AdminColors.red),
+            const SizedBox(width: 10),
+            const Text('Reject Application'),
+          ],
+        ),
         content: TextField(
           controller: reasonController,
           decoration: AdminTheme.inputDecoration(
             labelText: 'Reason for rejection',
             hintText: 'Shown to the applicant',
           ),
-          maxLines: 2,
+          maxLines: 3,
         ),
         actions: [
           TextButton(

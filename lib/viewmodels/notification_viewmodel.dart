@@ -1,9 +1,9 @@
-// MVVM: ViewModel — business logic only
+// MVVM: ViewModel — business logic for all roles
 import 'dart:async';
+import 'dart:developer' as developer;
 import 'package:flutter/material.dart';
 import '../models/notification_model.dart';
 import '../repositories/notification_repository.dart';
-import '../constants/firestore_paths.dart';
 import 'auth_viewmodel.dart';
 
 class NotificationViewModel extends ChangeNotifier {
@@ -11,8 +11,6 @@ class NotificationViewModel extends ChangeNotifier {
   NotificationViewModel(this._notificationRepo);
 
   String? _uid;
-  String? _role;
-  String? _companyId;
   List<NotificationModel> _notifications = [];
   int _unreadCount = 0;
   bool _isLoading = false;
@@ -20,45 +18,84 @@ class NotificationViewModel extends ChangeNotifier {
   StreamSubscription? _notifSubscription;
   StreamSubscription? _unreadSubscription;
 
+  /// Automatically called by ProxyProvider in main.dart when Auth state changes.
   void updateAuth(AuthViewModel auth) {
-    final newUser = auth.user;
-    final newUid = newUser?.uid;
-    final newRole = newUser?.role;
-    final newCompanyId = newUser?.companyId;
+    final newUid = auth.user?.uid;
 
-    if (newUid == _uid && newRole == _role && newCompanyId == _companyId) return;
+    if (newUid == _uid) return;
 
+    developer.log('NOTIFICATION: Auth update. Old UID: $_uid, New UID: $newUid');
+    
     _uid = newUid;
-    _role = newRole;
-    _companyId = newCompanyId;
 
     if (_uid != null) {
-      final path = _getNotificationPath();
-      watchUnreadCount(_uid!, path: path);
-      loadNotifications(_uid!, path: path);
+      _startListening();
     } else {
-      _notifSubscription?.cancel();
-      _unreadSubscription?.cancel();
-      _notifications = [];
-      _unreadCount = 0;
+      _stopListening();
     }
-    notifyListeners();
   }
 
-  String? _getNotificationPath() {
-    if (_role == null) return null;
-    final roleLower = _role!.toLowerCase();
+  /// Explicitly reload/start listening if needed (e.g. after error).
+  void loadNotifications(String uid) {
+    if (uid != _uid) {
+      _uid = uid;
+      _startListening();
+    } else if (_notifSubscription == null) {
+      _startListening();
+    }
+  }
+
+  /// Legacy support for widgets that expect this method.
+  void watchNotifications(String uid) => loadNotifications(uid);
+  void watchUnreadCount(String uid) => loadNotifications(uid);
+
+  void _startListening() {
+    if (_uid == null) return;
+
+    developer.log('NOTIFICATION: Listening to notifications for UID: $_uid');
     
-    if (roleLower == 'admin' || roleLower == 'administrator') {
-      return FirestorePaths.adminNotificationsCol;
-    }
-    if (roleLower == 'supplier') {
-      return FirestorePaths.supplierNotificationsCol(_uid!);
-    }
-    if (_companyId != null && _companyId!.isNotEmpty) {
-      return FirestorePaths.companyNotificationsCol(_companyId!);
-    }
-    return null; // Fallback to root 'notifications'
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    _notifSubscription?.cancel();
+    _notifSubscription = _notificationRepo
+      .watchNotifications(_uid!)
+      .listen((notifs) {
+        developer.log('NOTIFICATION: Received ${notifs.length} notifications');
+        _notifications = notifs;
+        _isLoading = false;
+        notifyListeners();
+      }, onError: (e) {
+        developer.log('NOTIFICATION ERROR: $e');
+        _errorMessage = e.toString();
+        _isLoading = false;
+        notifyListeners();
+      });
+
+    _unreadSubscription?.cancel();
+    _unreadSubscription = _notificationRepo
+      .watchUnreadCount(_uid!)
+      .listen((count) {
+        _unreadCount = count;
+        notifyListeners();
+      }, onError: (e) {
+        developer.log('NOTIFICATION UNREAD ERROR: $e');
+        _errorMessage = e.toString();
+        notifyListeners();
+      });
+  }
+
+  void _stopListening() {
+    developer.log('NOTIFICATION: Stopping listeners for UID: $_uid');
+    _notifSubscription?.cancel();
+    _unreadSubscription?.cancel();
+    _notifSubscription = null;
+    _unreadSubscription = null;
+    _notifications = [];
+    _unreadCount = 0;
+    _isLoading = false;
+    notifyListeners();
   }
 
   String? get uid => _uid;
@@ -67,51 +104,39 @@ class NotificationViewModel extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
 
-  void loadNotifications(String uid, {String? path}) {
-    _notifSubscription?.cancel();
-    _isLoading = true;
-    _errorMessage = null;
-    notifyListeners();
-    _notifSubscription = _notificationRepo
-      .watchNotifications(uid, path: path)
-      .listen((notifs) {
-        _notifications = notifs;
-        _isLoading = false;
-        notifyListeners();
-      }, onError: (e) {
-        _errorMessage = e.toString();
-        _isLoading = false;
-        notifyListeners();
-      });
+  /// Marks a notification as read.
+  /// Standardized to use only notifId as it is unique in the root collection.
+  Future<void> markAsRead(String notifId, [String? _]) async {
+    try {
+      await _notificationRepo.markAsRead(notifId);
+    } catch (e) {
+      developer.log('NOTIFICATION MARK READ ERROR: $e');
+      _errorMessage = e.toString();
+      notifyListeners();
+    }
   }
 
-  void watchUnreadCount(String uid, {String? path}) {
-    _unreadSubscription?.cancel();
-    _unreadSubscription = _notificationRepo
-      .watchUnreadCount(uid, path: path)
-      .listen((count) {
-        _unreadCount = count;
-        notifyListeners();
-      }, onError: (e) {
-        _errorMessage = e.toString();
-        notifyListeners();
-      });
-  }
-
-  Future<void> markAsRead(String uid, String notifId) async {
-    final path = _getNotificationPath();
-    await _notificationRepo.markAsRead(uid, notifId, path: path);
-  }
-
-  Future<void> markAllRead(String uid) async {
-    final path = _getNotificationPath();
-    await _notificationRepo.markAllRead(uid, path: path);
+  /// Marks all notifications for the current user as read.
+  Future<void> markAllRead([String? uid]) async {
+    final targetUid = uid ?? _uid;
+    if (targetUid == null) return;
+    try {
+      await _notificationRepo.markAllRead(targetUid);
+    } catch (e) {
+      developer.log('NOTIFICATION MARK ALL READ ERROR: $e');
+      _errorMessage = e.toString();
+      notifyListeners();
+    }
   }
 
   @override
   void dispose() {
-    _notifSubscription?.cancel();
-    _unreadSubscription?.cancel();
+    _stopListening();
     super.dispose();
+  }
+
+  void clearError() {
+    _errorMessage = null;
+    notifyListeners();
   }
 }

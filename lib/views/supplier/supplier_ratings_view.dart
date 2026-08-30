@@ -120,8 +120,8 @@ class _SupplierRatingsViewState extends State<SupplierRatingsView> {
                     labelText: 'Filter by Material',
                   ),
                   items: materialOptions
-                      .map(
-                        (m) => DropdownMenuItem(
+                      .map<DropdownMenuItem<String>>(
+                        (m) => DropdownMenuItem<String>(
                           value: m,
                           child: Text(m, style: AppTextStyles.body),
                         ),

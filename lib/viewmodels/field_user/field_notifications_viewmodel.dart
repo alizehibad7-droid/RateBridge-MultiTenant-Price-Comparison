@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 import '../../models/notification_model.dart';
 import '../../repositories/notification_repository.dart';
 
-/// In-app notifications for field users.
+/// Legacy in-app notifications ViewModel for field users.
+/// @deprecated Use [NotificationViewModel] instead.
 class FieldNotificationsViewModel extends ChangeNotifier {
   final NotificationRepository _notificationRepo;
 
@@ -57,7 +58,8 @@ class FieldNotificationsViewModel extends ChangeNotifier {
   Future<void> markAsRead(String uid, String notifId) async {
     _errorMessage = null;
     try {
-      await _notificationRepo.markAsRead(uid, notifId);
+      // Fixed: NotificationRepository.markAsRead now takes 1 argument
+      await _notificationRepo.markAsRead(notifId);
     } catch (e) {
       _errorMessage = e.toString();
       notifyListeners();

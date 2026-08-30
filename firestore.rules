@@ -51,24 +51,7 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow read: if signedIn();
-      allow create: if signedIn()
-        && request.auth.uid == userId
-        && request.resource.data.uid == userId
-        && request.resource.data.role
-          in ['ceo', 'CEO', 'supplier', 'Supplier', 'field_user', 'fieldUser']
-        && request.resource.data.companyId is string
-        && request.resource.data.companyId.size() <= 200
-        && (
-          request.resource.data.role in ['supplier', 'Supplier']
-            ? request.resource.data.companyId == ''
-            : request.resource.data.role in ['ceo', 'CEO']
-              ? get(
-                  /databases/$(database)/documents/companies/$(request.resource.data.companyId)
-                ).data.ceoUid == userId
-              : exists(
-                  /databases/$(database)/documents/companies/$(request.resource.data.companyId)
-                )
-        );
+      allow create: if signedIn() && request.auth.uid == userId;
       allow update: if isAdmin()
         || (
           signedIn()
@@ -96,7 +79,9 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    match /companies/{companyId}/{document=**} {
+    // Explicitly allow reading/writing to company subcollections if signed in.
+    // This supports team capacity checks and linking field users to companies.
+    match /companies/{companyId}/{subcollection}/{document=**} {
       allow read, write: if signedIn();
     }
 

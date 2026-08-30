@@ -1,15 +1,12 @@
 import 'package:flutter/material.dart';
 import '../../models/material_listing.dart';
-import '../../models/supplier_compare_model.dart';
 import '../../repositories/material_repository.dart';
-import '../../services/gemini_service.dart';
 
 enum CompareSortOption { price, rating }
 
-/// Supplier comparison with price anomaly detection and AI insights.
+/// Supplier comparison with price anomaly detection.
 class FieldCompareViewModel extends ChangeNotifier {
   final MaterialRepository _materialRepo;
-  final GeminiService _geminiService;
 
   bool _isLoading = false;
   String? _errorMessage;
@@ -18,10 +15,7 @@ class FieldCompareViewModel extends ChangeNotifier {
   CompareSortOption _sortBy = CompareSortOption.price;
   String? _cityFilter;
 
-  String? _aiRecommendation;
-  bool _isAiLoading = false;
-
-  FieldCompareViewModel(this._materialRepo, this._geminiService);
+  FieldCompareViewModel(this._materialRepo);
 
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
@@ -30,10 +24,7 @@ class FieldCompareViewModel extends ChangeNotifier {
   String? get materialName => _materialName;
   CompareSortOption get sortBy => _sortBy;
   String? get cityFilter => _cityFilter;
-  String? get aiRecommendation => _aiRecommendation;
-  bool get isAiLoading => _isAiLoading;
-  bool get showAiCard =>
-      _aiRecommendation != null && _aiRecommendation!.isNotEmpty;
+  bool get showAiCard => false;
   bool get hasCityFilter => _cityFilter != null && _cityFilter!.isNotEmpty;
 
   List<String> get availableCities {
@@ -88,8 +79,6 @@ class FieldCompareViewModel extends ChangeNotifier {
     _compareResults = [];
     _materialName = trimmedName;
     _cityFilter = null;
-    _aiRecommendation = null;
-    _isAiLoading = false;
     notifyListeners();
 
     try {
@@ -100,9 +89,6 @@ class FieldCompareViewModel extends ChangeNotifier {
               trimmedName,
             );
       _compareResults = _applyAnomalyAndBestValue(listings);
-      if (_compareResults.isNotEmpty) {
-        _loadAiRecommendation();
-      }
     } catch (e) {
       _errorMessage = e.toString();
     } finally {
@@ -168,65 +154,9 @@ class FieldCompareViewModel extends ChangeNotifier {
 
   void clearCityFilter() => setCityFilter(null);
 
-  Future<void> _loadAiRecommendation() async {
-    if (_compareResults.isEmpty || _materialName == null) return;
-
-    _isAiLoading = true;
-    _aiRecommendation = null;
-    notifyListeners();
-
-    try {
-      final supplierPayload = _compareResults
-          .map(
-            (listing) => SupplierCompareModel(
-              supplierUid: listing.supplierId,
-              businessName: listing.supplierName,
-              price: listing.pricePerUnit,
-              rating: listing.supplierRating,
-              reviewCount: listing.reviewCount,
-              city: listing.city ?? '',
-              isVerified: false,
-              isAnomalyFlagged: listing.isAnomaly,
-              materialId: listing.id,
-              materialName: listing.materialName,
-              unit: listing.unit,
-              category: listing.category,
-              phone: listing.phone ?? '',
-              priceUpdatedAt: listing.priceUpdatedAt,
-            ),
-          )
-          .toList();
-
-      final result = await _geminiService.getSupplierRecommendation(
-        supplierPayload,
-        _materialName!,
-        locale: 'en',
-        inlineBrief: true,
-      );
-      final trimmed = result.trim();
-      if (trimmed.isNotEmpty &&
-          !trimmed.toLowerCase().contains('temporarily unavailable') &&
-          !trimmed.toLowerCase().contains('rate limit')) {
-        _aiRecommendation = _limitWords(trimmed, 12);
-      }
-    } catch (_) {
-      _aiRecommendation = null;
-    } finally {
-      _isAiLoading = false;
-      notifyListeners();
-    }
-  }
-
   void clearError() {
     _errorMessage = null;
     notifyListeners();
-  }
-
-  static String _limitWords(String text, int maxWords) {
-    final words = text.split(RegExp(r'\s+')).where((w) => w.isNotEmpty);
-    final list = words.toList();
-    if (list.length <= maxWords) return text;
-    return list.take(maxWords).join(' ');
   }
 }
 

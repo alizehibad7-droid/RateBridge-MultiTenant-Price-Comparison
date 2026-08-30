@@ -22,6 +22,16 @@ class CeoStatusBadge extends StatelessWidget {
         .join(' ');
   }
 
+  IconData get _icon {
+    final s = status.toLowerCase();
+    if (s.contains('pending')) return Icons.hourglass_empty_rounded;
+    if (s.contains('accept') || s.contains('approved') || s.contains('confirmed')) return Icons.check_circle_outline_rounded;
+    if (s.contains('reject') || s.contains('cancel') || s.contains('removed')) return Icons.cancel_outlined;
+    if (s.contains('progress')) return Icons.pending_rounded;
+    if (s.contains('deliver')) return Icons.local_shipping_outlined;
+    return Icons.info_outline_rounded;
+  }
+
   @override
   Widget build(BuildContext context) {
     final normalized = status.toLowerCase().replaceAll('_', '');
@@ -33,13 +43,20 @@ class CeoStatusBadge extends StatelessWidget {
         color: style.bg,
         borderRadius: BorderRadius.circular(20),
       ),
-      child: Text(
-        _label,
-        style: GoogleFonts.plusJakartaSans(
-          color: style.fg,
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(_icon, size: 12, color: style.fg),
+          const SizedBox(width: 4),
+          Text(
+            _label,
+            style: GoogleFonts.plusJakartaSans(
+              color: style.fg,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -72,42 +89,59 @@ class CeoInviteCodeCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            'COMPANY INVITE CODE',
-            style: CeoTheme.sectionHeaderStyle(),
+          Row(
+            children: [
+              const Icon(Icons.key_rounded, color: CeoColors.amber, size: 18),
+              const SizedBox(width: 8),
+              Text(
+                'COMPANY INVITE CODE',
+                style: CeoTheme.sectionHeaderStyle(),
+              ),
+            ],
           ),
-          const SizedBox(height: 10),
-          Text(
-            inviteCode,
-            style: GoogleFonts.jetBrainsMono(
-              fontSize: 22,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 4,
-              color: CeoColors.navy,
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            decoration: BoxDecoration(
+              color: CeoColors.screenBg,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Center(
+              child: Text(
+                inviteCode,
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 6,
+                  color: CeoColors.navy,
+                ),
+              ),
             ),
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 16),
           Row(
             children: [
               Expanded(
-                child: ElevatedButton(
+                child: ElevatedButton.icon(
                   onPressed: onCopy,
-                  style: CeoTheme.primaryButtonStyle(height: 40),
-                  child: const Text('Copy Code'),
+                  icon: const Icon(Icons.content_copy_rounded, size: 16),
+                  label: const Text('Copy Code'),
+                  style: CeoTheme.primaryButtonStyle(height: 44),
                 ),
               ),
               const SizedBox(width: 10),
               Expanded(
-                child: OutlinedButton(
+                child: OutlinedButton.icon(
                   onPressed: isRegenerating ? null : onRegenerate,
-                  style: CeoTheme.destructiveButtonStyle(height: 40),
-                  child: isRegenerating
+                  icon: isRegenerating ? const SizedBox.shrink() : const Icon(Icons.refresh_rounded, size: 16),
+                  label: isRegenerating
                       ? const SizedBox(
                           width: 16,
                           height: 16,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Text('Regenerate'),
+                  style: CeoTheme.destructiveButtonStyle(height: 44),
                 ),
               ),
             ],
@@ -123,49 +157,48 @@ class CeoStatCard extends StatelessWidget {
   final IconData icon;
   final String value;
   final String label;
+  final Color color;
 
   const CeoStatCard({
     super.key,
     required this.icon,
     required this.value,
     required this.label,
+    this.color = CeoColors.amber,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(16),
       decoration: CeoTheme.cardDecoration(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
-        mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 32,
-            height: 32,
+            padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: CeoColors.amber.withValues(alpha: 0.12),
-              shape: BoxShape.circle,
+              color: color.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(icon, color: CeoColors.amber, size: 16),
+            child: Icon(icon, color: color, size: 20),
           ),
-          const SizedBox(height: 8),
+          const Spacer(),
           Text(
             value,
             style: GoogleFonts.plusJakartaSans(
-              fontSize: 22,
-              fontWeight: FontWeight.w700,
+              fontSize: 24,
+              fontWeight: FontWeight.w800,
               color: CeoColors.navy,
               height: 1.1,
             ),
           ),
-          const SizedBox(height: 2),
+          const SizedBox(height: 4),
           Text(
             label,
-            maxLines: 2,
+            maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: CeoTheme.mutedStyle(size: 11),
+            style: CeoTheme.mutedStyle(size: 11).copyWith(fontWeight: FontWeight.w600),
           ),
         ],
       ),
@@ -193,30 +226,43 @@ class CeoPendingApprovalBanner extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         child: Ink(
           decoration: BoxDecoration(
-            color: CeoColors.amber.withValues(alpha: 0.1),
+            color: CeoColors.amber.withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(12),
-            border: const Border(
-              left: BorderSide(color: CeoColors.amber, width: 4),
-            ),
+            border: Border.all(color: CeoColors.amber.withValues(alpha: 0.3)),
           ),
           child: Padding(
-            padding: const EdgeInsets.all(14),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             child: Row(
               children: [
-                const Icon(Icons.hourglass_top_rounded,
-                    color: CeoColors.darkAmber, size: 22),
-                const SizedBox(width: 10),
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: const BoxDecoration(
+                    color: CeoColors.amber,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.priority_high_rounded, color: Colors.white, size: 14),
+                ),
+                const SizedBox(width: 12),
                 Expanded(
-                  child: Text(
-                    '⏳ $count order(s) awaiting your approval',
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: CeoColors.navy,
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Approvals Required',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                          color: CeoColors.navy,
+                        ),
+                      ),
+                      Text(
+                        '$count order(s) waiting for your review',
+                        style: CeoTheme.mutedStyle(size: 12).copyWith(color: CeoColors.darkAmber),
+                      ),
+                    ],
                   ),
                 ),
-                const Icon(Icons.chevron_right, color: CeoColors.textGrey),
+                const Icon(Icons.arrow_forward_ios_rounded, color: CeoColors.amber, size: 16),
               ],
             ),
           ),
@@ -227,5 +273,6 @@ class CeoPendingApprovalBanner extends StatelessWidget {
 }
 
 /// Maps CEO order status to display label for approval cards.
-bool isCeoAwaitingApproval(String status) =>
-    status == AppConstants.statusPendingApproval;
+bool isCeoAwaitingApproval(String status) {
+  return status == AppConstants.statusPendingApproval;
+}

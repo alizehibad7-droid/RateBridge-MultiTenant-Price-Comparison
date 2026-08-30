@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -79,10 +80,11 @@ class _CeoCompanyProfileViewState extends State<CeoCompanyProfileView> {
                 onPressed: () => Navigator.pop(context, false),
                 child: const Text('Cancel'),
               ),
-              OutlinedButton(
+              OutlinedButton.icon(
                 onPressed: () => Navigator.pop(context, true),
                 style: CeoTheme.destructiveButtonStyle(height: 40),
-                child: const Text('Log out'),
+                icon: const Icon(Icons.logout_rounded, size: 18),
+                label: const Text('Log out'),
               ),
             ],
           ),
@@ -103,17 +105,17 @@ class _CeoCompanyProfileViewState extends State<CeoCompanyProfileView> {
         child: Wrap(
           children: [
             ListTile(
-              leading: const Icon(Icons.camera_alt),
+              leading: const Icon(Icons.camera_alt_rounded),
               title: const Text('Camera'),
               onTap: () => Navigator.pop(context, ImageSource.camera),
             ),
             ListTile(
-              leading: const Icon(Icons.photo_library),
+              leading: const Icon(Icons.photo_library_rounded),
               title: const Text('Gallery'),
               onTap: () => Navigator.pop(context, ImageSource.gallery),
             ),
             ListTile(
-              leading: const Icon(Icons.close),
+              leading: const Icon(Icons.close_rounded),
               title: const Text('Cancel'),
               onTap: () => Navigator.pop(context),
             ),
@@ -185,7 +187,7 @@ class _CeoCompanyProfileViewState extends State<CeoCompanyProfileView> {
 
     return Scaffold(
       backgroundColor: CeoColors.screenBg,
-      appBar: const CeoAppBar(title: 'CEO Profile'),
+      appBar: const CeoAppBar(title: 'Account Settings'),
       body: StreamBuilder<Map<String, dynamic>>(
         stream: _statsStream,
         builder: (context, snapshot) {
@@ -195,47 +197,78 @@ class _CeoCompanyProfileViewState extends State<CeoCompanyProfileView> {
               _buildProfileHeader(user, company),
               const SizedBox(height: 24),
 
-              _buildSectionTitle('Personal Information'),
+              Row(
+                children: [
+                  const Icon(Icons.person_outline_rounded, color: CeoColors.navy, size: 20),
+                  const SizedBox(width: 8),
+                  _buildSectionTitle('Personal Information'),
+                ],
+              ),
               const SizedBox(height: 12),
               _buildInfoCard([
-                _buildInfoRow('Full Name', user?.name ?? company.ceoFullName ?? 'N/A'),
-                _buildInfoRow('Designation', user?.jobTitle ?? company.designation ?? 'CEO'),
-                _buildInfoRow('CNIC', _maskCnic(user?.cnic ?? company.cnicNumber)),
+                _buildInfoRow(Icons.person_rounded, 'Full Name', user?.name ?? company.ceoFullName ?? 'N/A'),
+                _buildInfoRow(Icons.badge_outlined, 'Designation', user?.jobTitle ?? company.designation ?? 'CEO'),
+                _buildInfoRow(Icons.credit_card_rounded, 'CNIC', _maskCnic(user?.cnic ?? company.cnicNumber)),
               ]),
               const SizedBox(height: 24),
 
-              _buildSectionTitle('Company Information'),
+              Row(
+                children: [
+                  const Icon(Icons.business_rounded, color: CeoColors.navy, size: 20),
+                  const SizedBox(width: 8),
+                  _buildSectionTitle('Company Information'),
+                ],
+              ),
               const SizedBox(height: 12),
               _buildInfoCard([
-                _buildInfoRow('Company Name', company.name),
-                _buildInfoRow('Registration #', company.registrationNumber.isEmpty ? 'Not Provided' : company.registrationNumber),
-                _buildInfoRow('Company Type', company.companyType ?? 'N/A'),
-                _buildInfoRow('Monthly Volume', company.estimatedMonthlyVolume ?? 'N/A'),
-                _buildInfoRow('Active Sites', '${company.activeSitesCount ?? 0}'),
+                _buildInfoRow(Icons.apartment_rounded, 'Company Name', company.name),
+                _buildInfoRow(Icons.app_registration_rounded, 'Registration #', company.registrationNumber.isEmpty ? 'Not Provided' : company.registrationNumber),
+                _buildInfoRow(Icons.category_outlined, 'Company Type', company.companyType ?? 'N/A'),
+                _buildInfoRow(Icons.bar_chart_rounded, 'Monthly Volume', company.estimatedMonthlyVolume ?? 'N/A'),
+                _buildInfoRow(Icons.location_on_outlined, 'Active Sites', '${company.activeSitesCount ?? 0}'),
               ]),
               const SizedBox(height: 24),
 
-              _buildSectionTitle('Verification Status'),
+              Row(
+                children: [
+                  const Icon(Icons.verified_user_outlined, color: CeoColors.navy, size: 20),
+                  const SizedBox(width: 8),
+                  _buildSectionTitle('Verification Status'),
+                ],
+              ),
               const SizedBox(height: 12),
               _buildVerificationCard(company),
               const SizedBox(height: 24),
 
-              _buildSectionTitle('Subscription Plan'),
+              Row(
+                children: [
+                  const Icon(Icons.workspace_premium_outlined, color: CeoColors.navy, size: 20),
+                  const SizedBox(width: 8),
+                  _buildSectionTitle('Subscription Plan'),
+                ],
+              ),
               const SizedBox(height: 12),
               _buildSubscriptionCard(company),
               const SizedBox(height: 24),
 
-              _buildSectionTitle('Company Invite Code'),
+              Row(
+                children: [
+                  const Icon(Icons.key_rounded, color: CeoColors.navy, size: 20),
+                  const SizedBox(width: 8),
+                  _buildSectionTitle('Team Access'),
+                ],
+              ),
               const SizedBox(height: 12),
               _buildInviteKeyCard(context, company),
-              const SizedBox(height: 24),
+              const SizedBox(height: 32),
 
               SizedBox(
                 width: double.infinity,
-                child: OutlinedButton(
+                child: OutlinedButton.icon(
                   onPressed: () => _logout(context),
+                  icon: const Icon(Icons.logout_rounded, size: 18),
+                  label: const Text('Logout Session'),
                   style: CeoTheme.destructiveButtonStyle(height: 52),
-                  child: const Text('Log out'),
                 ),
               ),
             ],
@@ -265,18 +298,18 @@ class _CeoCompanyProfileViewState extends State<CeoCompanyProfileView> {
               alignment: Alignment.center,
               children: [
                 CircleAvatar(
-                  radius: 35,
+                  radius: 38,
                   backgroundColor: CeoColors.navy.withValues(alpha: 0.1),
                   backgroundImage: profileImageUrl != null 
                     ? NetworkImage(profileImageUrl) 
                     : (company.logoUrl != null ? NetworkImage(company.logoUrl!) : null),
                   child: (profileImageUrl == null && company.logoUrl == null)
-                      ? const Icon(Icons.person, size: 35, color: CeoColors.navy)
+                      ? const Icon(Icons.account_circle_rounded, size: 76, color: CeoColors.navy)
                       : null,
                 ),
                 if (_isUploadingImage)
                   const CircleAvatar(
-                    radius: 35,
+                    radius: 38,
                     backgroundColor: Colors.black26,
                     child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                   ),
@@ -284,12 +317,13 @@ class _CeoCompanyProfileViewState extends State<CeoCompanyProfileView> {
                   bottom: 0,
                   right: 0,
                   child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: const BoxDecoration(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
                       color: CeoColors.amber,
                       shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 2),
                     ),
-                    child: const Icon(Icons.camera_alt, size: 12, color: CeoColors.navy),
+                    child: const Icon(Icons.camera_alt_rounded, size: 12, color: CeoColors.navy),
                   ),
                 ),
               ],
@@ -302,25 +336,33 @@ class _CeoCompanyProfileViewState extends State<CeoCompanyProfileView> {
               children: [
                 Text(
                   user?.name ?? company.ceoFullName ?? 'CEO',
-                  style: CeoTheme.titleStyle(size: 18),
+                  style: CeoTheme.titleStyle(size: 20),
                 ),
                 Text(
                   company.name,
-                  style: CeoTheme.mutedStyle(),
+                  style: CeoTheme.mutedStyle(size: 14),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 10),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
                     color: statusData.bg,
-                    borderRadius: BorderRadius.circular(6),
+                    borderRadius: BorderRadius.circular(20),
                   ),
-                  child: Text(
-                    company.status.toUpperCase(),
-                    style: CeoTheme.bodyStyle(color: statusData.fg).copyWith(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w800,
-                    ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.circle, size: 8, color: statusData.fg),
+                      const SizedBox(width: 6),
+                      Text(
+                        company.status.toUpperCase(),
+                        style: CeoTheme.bodyStyle(color: statusData.fg).copyWith(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -339,13 +381,15 @@ class _CeoCompanyProfileViewState extends State<CeoCompanyProfileView> {
     );
   }
 
-  Widget _buildInfoRow(String label, String value) {
+  Widget _buildInfoRow(IconData icon, String label, String value) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
+          Icon(icon, size: 18, color: CeoColors.textGrey),
+          const SizedBox(width: 12),
           Text(label, style: CeoTheme.mutedStyle(size: 14)),
+          const Spacer(),
           Flexible(
             child: Text(
               value,
@@ -360,6 +404,8 @@ class _CeoCompanyProfileViewState extends State<CeoCompanyProfileView> {
 
   Widget _buildVerificationCard(dynamic company) {
     final statusData = CeoTheme.statusColors(company.status);
+    final isActive = company.status == 'active';
+    
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: CeoTheme.cardDecoration(borderColor: statusData.fg.withValues(alpha: 0.3)),
@@ -368,22 +414,58 @@ class _CeoCompanyProfileViewState extends State<CeoCompanyProfileView> {
         children: [
           Row(
             children: [
-              Icon(
-                company.status == 'active' ? Icons.verified : Icons.info_outline,
-                color: statusData.fg,
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: statusData.bg,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  isActive ? Icons.verified_rounded : Icons.pending_rounded,
+                  color: statusData.fg,
+                  size: 20,
+                ),
               ),
-              const SizedBox(width: 8),
-              Text(
-                'Status: ${company.status.toUpperCase()}',
-                style: CeoTheme.bodyStyle(color: statusData.fg).copyWith(fontWeight: FontWeight.bold),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      isActive ? 'Verified Account' : 'Account ${company.status.toUpperCase()}',
+                      style: CeoTheme.bodyStyle(color: CeoColors.navy).copyWith(fontWeight: FontWeight.bold),
+                    ),
+                    Text(
+                      isActive ? 'Your business is verified on RateBridge' : 'Awaiting administrator confirmation',
+                      style: CeoTheme.mutedStyle(size: 12),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
           if (company.status == 'rejected' && company.rejectionReason != null) ...[
-            const SizedBox(height: 8),
-            Text(
-              'Reason: ${company.rejectionReason}',
-              style: CeoTheme.bodyStyle(color: CeoColors.red).copyWith(fontSize: 12),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: CeoColors.red.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: CeoColors.red.withValues(alpha: 0.1)),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.error_outline_rounded, color: CeoColors.red, size: 16),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Reason: ${company.rejectionReason}',
+                      style: CeoTheme.bodyStyle(color: CeoColors.red).copyWith(fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ],
@@ -393,15 +475,24 @@ class _CeoCompanyProfileViewState extends State<CeoCompanyProfileView> {
 
   Widget _buildSubscriptionCard(dynamic company) {
     final plan = company.plan?.toString().toUpperCase() ?? 'FREE';
+    final isPremium = company.plan == 'premium';
+    
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [CeoColors.navy, CeoColors.navy.withValues(alpha: 0.8)],
+          colors: [CeoColors.navy, CeoColors.navy.withValues(alpha: 0.85)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: CeoColors.navy.withValues(alpha: 0.2),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -409,27 +500,50 @@ class _CeoCompanyProfileViewState extends State<CeoCompanyProfileView> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                '$plan PLAN',
-                style: const TextStyle(color: CeoColors.amber, fontWeight: FontWeight.w900, fontSize: 18),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '$plan PLAN',
+                    style: GoogleFonts.plusJakartaSans(
+                      color: CeoColors.amber,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 20,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                  Text(
+                    isPremium ? 'Full Access' : 'Limited Access',
+                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+                ],
               ),
-              const Icon(Icons.star, color: CeoColors.amber),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  isPremium ? Icons.auto_awesome_rounded : Icons.eco_rounded,
+                  color: CeoColors.amber,
+                  size: 28,
+                ),
+              ),
             ],
           ),
-          const SizedBox(height: 8),
-          Text(
-            company.plan == 'premium' ? 'Unlimited connections & RFQ active' : 'Basic business features active',
-            style: const TextStyle(color: Colors.white70, fontSize: 12),
-          ),
-          const SizedBox(height: 16),
-          ElevatedButton(
+          const SizedBox(height: 20),
+          ElevatedButton.icon(
             onPressed: () => context.push(RouteNames.ceoSubscription),
+            icon: Icon(isPremium ? Icons.settings_rounded : Icons.upgrade_rounded, size: 18),
+            label: Text(isPremium ? 'MANAGE PLAN' : 'UPGRADE TO PREMIUM'),
             style: ElevatedButton.styleFrom(
               backgroundColor: CeoColors.amber,
               foregroundColor: CeoColors.navy,
-              minimumSize: const Size(double.infinity, 40),
+              elevation: 0,
+              minimumSize: const Size(double.infinity, 48),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
-            child: const Text('MANAGE SUBSCRIPTION'),
           ),
         ],
       ),
@@ -440,31 +554,64 @@ class _CeoCompanyProfileViewState extends State<CeoCompanyProfileView> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: CeoTheme.cardDecoration(),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: CeoColors.amber.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.group_add_rounded, color: CeoColors.amber, size: 20),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(child: CeoSectionLabel('Field User Invite Code')),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: CeoColors.screenBg,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: CeoColors.border),
+            ),
+            child: Row(
               children: [
-                const CeoSectionLabel('Field User Invite Code'),
-                const SizedBox(height: 4),
-                Text(
-                  company.inviteCode ?? 'RB-XXXXXX',
-                  style: CeoTheme.titleStyle(size: 20).copyWith(letterSpacing: 2),
+                Expanded(
+                  child: Text(
+                    company.inviteCode ?? 'RB-XXXXXX',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w700,
+                      color: CeoColors.navy,
+                      letterSpacing: 2,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.content_copy_rounded, size: 20, color: CeoColors.navy),
+                  onPressed: () {
+                    Clipboard.setData(ClipboardData(text: company.inviteCode ?? ''));
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Code copied to clipboard')));
+                  },
+                  tooltip: 'Copy',
+                ),
+                IconButton(
+                  icon: const Icon(Icons.share_rounded, size: 20, color: CeoColors.navy),
+                  onPressed: () => Share.share('Join our construction team on RateBridge using this invite code: ${company.inviteCode}'),
+                  tooltip: 'Share',
                 ),
               ],
             ),
           ),
-          IconButton(
-            icon: const Icon(Icons.copy, color: CeoColors.navy),
-            onPressed: () {
-              Clipboard.setData(ClipboardData(text: company.inviteCode ?? ''));
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Code copied')));
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.share, color: CeoColors.navy),
-            onPressed: () => Share.share('Join our team on RateBridge using code: ${company.inviteCode}'),
+          const SizedBox(height: 8),
+          Text(
+            'Share this code with your field engineers to link them to your company.',
+            style: CeoTheme.mutedStyle(size: 11),
           ),
         ],
       ),

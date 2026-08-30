@@ -15,7 +15,7 @@ import '../../../utils/chat_image_utils.dart';
 import '../../../utils/firestore_seed.dart';
 import '../../../viewmodels/auth_viewmodel.dart';
 import '../../../viewmodels/field_user/field_catalog_viewmodel.dart';
-import '../../../viewmodels/field_user/field_notifications_viewmodel.dart';
+import '../../../viewmodels/notification_viewmodel.dart';
 import '../../../viewmodels/field_user/field_orders_viewmodel.dart';
 import '../../../viewmodels/field_user/field_session_viewmodel.dart';
 import '../shell/field_shell_view.dart';
@@ -227,7 +227,7 @@ class _FieldProfileViewState extends State<FieldProfileView> {
       if (!mounted) return;
       await context.read<FieldCatalogViewModel>().loadHomeData(companyId);
       if (!mounted) return;
-      context.read<FieldNotificationsViewModel>().watchNotifications(uid);
+      context.read<NotificationViewModel>().loadNotifications(uid);
     } catch (e) {
       if (mounted) setState(() => _seedMessage = 'Seed failed: $e');
     } finally {

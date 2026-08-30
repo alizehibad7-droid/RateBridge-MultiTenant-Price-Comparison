@@ -4,11 +4,14 @@ import 'package:flutter/material.dart';
 import '../models/order_model.dart';
 import '../models/rating_model.dart';
 import '../repositories/order_repository.dart';
+import '../repositories/transaction_repository.dart';
 import '../services/cloud_function_service.dart';
+import '../constants/app_constants.dart';
 import 'auth_viewmodel.dart';
 
 class OrderViewModel extends ChangeNotifier {
   final OrderRepository _orderRepo;
+  final TransactionRepository _transactionRepo;
   final CloudFunctionService _cloudFunctions;
 
   List<OrderModel> _orders = [];
@@ -20,7 +23,7 @@ class OrderViewModel extends ChangeNotifier {
   bool? _hasExistingRating;
   StreamSubscription? _ordersSubscription;
 
-  OrderViewModel(this._orderRepo, this._cloudFunctions);
+  OrderViewModel(this._orderRepo, this._transactionRepo, this._cloudFunctions);
 
   void updateAuth(AuthViewModel auth) {
     notifyListeners();
@@ -46,32 +49,7 @@ class OrderViewModel extends ChangeNotifier {
     notifyListeners();
     try {
       await _orderRepo.submitOrder(order);
-      // Notifications for CEO would happen here usually
       _isOrderPlaced = true;
-    } catch(e) {
-      _error = e.toString();
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
-  }
-
-  /// CEO Approves the field user's order request
-  Future<void> ceoApproveOrder(String orderId, String companyId, String supplierUid) async {
-    _isLoading = true;
-    _error = null;
-    notifyListeners();
-    try {
-      await _orderRepo.updateStatus(orderId, companyId, 'pending');
-      
-      // Notify supplier that a new approved order is available
-      await _cloudFunctions.callFunction('sendOrderNotification', {
-        'toUid': supplierUid,
-        'orderId': orderId,
-        'type': 'newOrder',
-        'title': 'New Approved Order',
-        'body': 'A new order has been approved and is ready for fulfillment.',
-      });
     } catch(e) {
       _error = e.toString();
     } finally {
@@ -85,7 +63,26 @@ class OrderViewModel extends ChangeNotifier {
     _error = null;
     notifyListeners();
     try {
+      final order = await _orderRepo.getOrderById(orderId);
+      if (order == null) throw Exception("Order not found");
+
+      // 1. Update Order Status to Confirmed
       await _orderRepo.updateStatus(orderId, companyId, 'confirmed', confirmedAt: DateTime.now());
+
+      // 2. Generate Commission Record (2%)
+      // This uses a deterministic ID internally to prevent duplicates
+      final commissionAmount = order.totalAmount * AppConstants.commissionRate;
+      final supplierEarning = order.totalAmount - commissionAmount;
+
+      await _transactionRepo.createUnsettledCommissionTransaction(
+        orderId: orderId,
+        companyId: companyId,
+        supplierUid: order.supplierId,
+        totalAmount: order.totalAmount,
+        commissionAmount: commissionAmount,
+        supplierEarning: supplierEarning,
+      );
+      
     } catch(e) {
       _error = e.toString();
     } finally {
@@ -149,7 +146,6 @@ class OrderViewModel extends ChangeNotifier {
       });
   }
 
-  // ... rest of the load methods remain same
   void loadSupplierOrders(String supplierUid, String companyId, {String? statusFilter}) {
     _ordersSubscription?.cancel();
     _isLoading = true;
@@ -184,16 +180,7 @@ class OrderViewModel extends ChangeNotifier {
       });
   }
 
-  Future<void> checkExistingRating(String orderId, String companyId) async {
-    _hasExistingRating = await _orderRepo.hasRatingForOrder(orderId, companyId);
-    notifyListeners();
-  }
-
-  Future<void> submitRating(
-    String orderId,
-    String companyId,
-    RatingModel rating,
-  ) async {
+  Future<void> submitRating(String orderId, String companyId, RatingModel rating) async {
     _isLoading = true;
     _isRatingSubmitted = false;
     _error = null;

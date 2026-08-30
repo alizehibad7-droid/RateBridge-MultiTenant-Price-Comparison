@@ -13,7 +13,6 @@ import 'viewmodels/field_user/field_compare_viewmodel.dart';
 import 'viewmodels/field_user/field_trends_viewmodel.dart';
 import 'viewmodels/field_user/field_orders_viewmodel.dart';
 import 'viewmodels/field_user/field_chat_viewmodel.dart';
-import 'viewmodels/field_user/field_notifications_viewmodel.dart';
 import 'viewmodels/field_user/field_rating_viewmodel.dart';
 import 'viewmodels/field_user/field_supplier_profile_viewmodel.dart';
 import 'viewmodels/invite_viewmodel.dart';
@@ -25,6 +24,7 @@ import 'viewmodels/notification_viewmodel.dart';
 import 'viewmodels/material_viewmodel.dart';
 import 'viewmodels/rfq_viewmodel.dart';
 import 'viewmodels/dispute_viewmodel.dart';
+import 'viewmodels/ai_viewmodel.dart';
 import 'repositories/user_repository.dart';
 import 'repositories/company_repository.dart';
 import 'repositories/material_repository.dart';
@@ -42,7 +42,6 @@ import 'services/firestore_service.dart';
 import 'services/storage_service.dart';
 import 'services/cloud_function_service.dart';
 import 'services/dynamic_link_service.dart';
-import 'services/gemini_service.dart';
 import 'services/ai_context_service.dart';
 import 'services/voice_search_service.dart';
 import 'services/recently_viewed_service.dart';
@@ -95,9 +94,13 @@ void main() async {
           Provider<StorageService>(create: (_) => StorageService()),
           Provider<CloudFunctionService>(create: (_) => CloudFunctionService()),
           Provider<DynamicLinkService>(create: (_) => DynamicLinkService()),
-          Provider<GeminiService>(create: (_) => GeminiService()),
           ChangeNotifierProvider<AiContextService>(
             create: (_) => AiContextService(),
+          ),
+          ChangeNotifierProvider<AiViewModel>(
+            create: (context) => AiViewModel(
+              context.read<CloudFunctionService>(),
+            ),
           ),
           Provider<VoiceSearchService>(create: (_) => VoiceSearchService()),
 
@@ -194,36 +197,40 @@ void main() async {
                     AuthViewModel(repo, context.read<FirebaseAuthService>(), notif),
           ),
 
-          ChangeNotifierProxyProvider2<
+          ChangeNotifierProxyProvider3<
             OrderRepository,
+            TransactionRepository,
             CloudFunctionService,
             OrderViewModel
           >(
             create:
                 (context) => OrderViewModel(
                   context.read<OrderRepository>(),
+                  context.read<TransactionRepository>(),
                   context.read<CloudFunctionService>(),
                 ),
-            update: (context, repo, cloud, previous) {
-              final vm = previous ?? OrderViewModel(repo, cloud);
+            update: (context, repo, txRepo, cloud, previous) {
+              final vm = previous ?? OrderViewModel(repo, txRepo, cloud);
               vm.updateAuth(context.read<AuthViewModel>());
               return vm;
             },
           ),
 
-          ChangeNotifierProxyProvider2<
+          ChangeNotifierProxyProvider3<
             FirestoreService,
             CloudFunctionService,
+            StorageService,
             SubscriptionViewModel
           >(
             create:
                 (context) => SubscriptionViewModel(
                   context.read<FirestoreService>(),
                   context.read<CloudFunctionService>(),
+                  context.read<StorageService>(),
                 ),
             update:
-                (context, firestore, cloud, previous) =>
-                    previous ?? SubscriptionViewModel(firestore, cloud),
+                (context, firestore, cloud, storage, previous) =>
+                    previous ?? SubscriptionViewModel(firestore, cloud, storage),
           ),
 
           ChangeNotifierProxyProvider4<
@@ -247,19 +254,17 @@ void main() async {
             },
           ),
 
-          ChangeNotifierProxyProvider2<
+          ChangeNotifierProxyProvider<
             MaterialRepository,
-            GeminiService,
             ComparisonViewModel
           >(
             create:
                 (context) => ComparisonViewModel(
                   context.read<MaterialRepository>(),
-                  context.read<GeminiService>(),
                 ),
             update:
-                (context, mat, gem, previous) =>
-                    previous ?? ComparisonViewModel(mat, gem),
+                (context, mat, previous) =>
+                    previous ?? ComparisonViewModel(mat),
           ),
 
           // --- Field User Panel ViewModels ---
@@ -294,36 +299,32 @@ void main() async {
                     previous ?? FieldCatalogViewModel(mat),
           ),
 
-          ChangeNotifierProxyProvider2<
+          ChangeNotifierProxyProvider<
             MaterialRepository,
-            GeminiService,
             FieldCompareViewModel
           >(
             create:
                 (context) => FieldCompareViewModel(
                   context.read<MaterialRepository>(),
-                  context.read<GeminiService>(),
                 ),
             update:
-                (context, mat, gem, previous) =>
-                    previous ?? FieldCompareViewModel(mat, gem),
+                (context, mat, previous) =>
+                    previous ?? FieldCompareViewModel(mat),
           ),
 
-          ChangeNotifierProxyProvider3<
+          ChangeNotifierProxyProvider2<
             MaterialRepository,
-            GeminiService,
             CompanyRepository,
             FieldTrendsViewModel
           >(
             create:
                 (context) => FieldTrendsViewModel(
                   context.read<MaterialRepository>(),
-                  context.read<GeminiService>(),
                   context.read<CompanyRepository>(),
                 ),
             update:
-                (context, mat, gem, comp, previous) =>
-                    previous ?? FieldTrendsViewModel(mat, gem, comp),
+                (context, mat, comp, previous) =>
+                    previous ?? FieldTrendsViewModel(mat, comp),
           ),
 
           ChangeNotifierProxyProvider4<
@@ -372,19 +373,6 @@ void main() async {
             create: (context) => ChatViewModel(context.read<ChatRepository>()),
             update:
                 (context, chat, previous) => previous ?? ChatViewModel(chat),
-          ),
-
-          ChangeNotifierProxyProvider<
-            NotificationRepository,
-            FieldNotificationsViewModel
-          >(
-            create:
-                (context) => FieldNotificationsViewModel(
-                  context.read<NotificationRepository>(),
-                ),
-            update:
-                (context, notif, previous) =>
-                    previous ?? FieldNotificationsViewModel(notif),
           ),
 
           ChangeNotifierProxyProvider<OrderRepository, FieldRatingViewModel>(
@@ -487,9 +475,9 @@ void main() async {
           ),
 
           ChangeNotifierProxyProvider<AuthViewModel, AdminViewModel>(
-            create: (_) => AdminViewModel(),
-            update: (_, auth, previous) {
-              final vm = previous ?? AdminViewModel();
+            create: (context) => AdminViewModel(context.read<NotificationService>()),
+            update: (context, auth, previous) {
+              final vm = previous ?? AdminViewModel(context.read<NotificationService>());
               vm.updateAuth(auth);
               return vm;
             },
@@ -539,7 +527,6 @@ void main() async {
     );
   } catch (e) {
     debugPrint("Global Main Error: $e");
-    // Fallback minimal app to show something if everything else fails
     runApp(
       MaterialApp(home: Scaffold(body: Center(child: Text("Fatal Error: $e")))),
     );

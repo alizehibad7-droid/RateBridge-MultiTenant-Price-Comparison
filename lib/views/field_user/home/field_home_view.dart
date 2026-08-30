@@ -8,12 +8,11 @@ import '../../../models/category_model.dart';
 import '../../../models/material_model.dart';
 import '../../../models/order_model.dart';
 import '../../../services/ai_context_service.dart';
-import '../../../services/gemini_service.dart';
 import '../../../services/recently_viewed_service.dart';
 import '../../../theme/field_theme.dart';
 import '../../../utils/currency_formatter.dart';
 import '../../../viewmodels/field_user/field_catalog_viewmodel.dart';
-import '../../../viewmodels/field_user/field_notifications_viewmodel.dart';
+import '../../../viewmodels/notification_viewmodel.dart';
 import '../../../viewmodels/field_user/field_orders_viewmodel.dart';
 import '../../../viewmodels/field_user/field_session_viewmodel.dart';
 import '../orders/field_order_status.dart';
@@ -64,7 +63,6 @@ class _FieldHomeViewState extends State<FieldHomeView> {
       }
       if (mounted) {
         setState(() => _initialized = true);
-        _loadHomeAiGreeting();
         context.read<AiContextService>().updateContext('home', {
           'screen': 'home dashboard',
         });
@@ -89,61 +87,6 @@ class _FieldHomeViewState extends State<FieldHomeView> {
       else
         catalog.loadRecentlyViewedMaterials(companyId, []),
     ]);
-  }
-
-  Future<void> _loadHomeAiGreeting() async {
-    if (!mounted) return;
-
-    final materials = context.read<FieldCatalogViewModel>().catalogMaterials;
-    if (materials.isEmpty) return;
-
-    final byCategory = <String, List<double>>{};
-    for (final material in materials) {
-      if (material.pricePerUnit <= 0) continue;
-      byCategory
-          .putIfAbsent(material.category, () => [])
-          .add(material.pricePerUnit);
-    }
-    if (byCategory.isEmpty) return;
-
-    final payload =
-        byCategory.entries.map((entry) {
-          final prices = entry.value;
-          final minPrice = prices.reduce((a, b) => a < b ? a : b);
-          final maxPrice = prices.reduce((a, b) => a > b ? a : b);
-          final avgPrice = prices.reduce((a, b) => a + b) / prices.length;
-          return {
-            'category': entry.key,
-            'minPrice': minPrice.round(),
-            'maxPrice': maxPrice.round(),
-            'avgPrice': avgPrice.round(),
-            'listingCount': prices.length,
-          };
-        }).toList();
-
-    try {
-      final line = await context
-          .read<GeminiService>()
-          .getHomeMarketGreeting(payload, locale: 'en')
-          .timeout(const Duration(seconds: 20));
-      final trimmed = line.trim();
-      if (!mounted || trimmed.isEmpty) return;
-      final lower = trimmed.toLowerCase();
-      if (lower.contains('temporarily unavailable') ||
-          lower.contains('rate limit')) {
-        return;
-      }
-      setState(() => _homeAiGreeting = _limitWords(trimmed, 10));
-    } catch (_) {
-      // Silent hide on failure or timeout.
-    }
-  }
-
-  static String _limitWords(String text, int maxWords) {
-    final words = text.split(RegExp(r'\s+')).where((w) => w.isNotEmpty);
-    final list = words.toList();
-    if (list.length <= maxWords) return text;
-    return list.take(maxWords).join(' ');
   }
 
   void _openNotifications() {
@@ -255,7 +198,7 @@ class _FieldHomeViewState extends State<FieldHomeView> {
     final session = context.watch<FieldSessionViewModel>();
     final catalog = context.watch<FieldCatalogViewModel>();
     final orders = context.watch<FieldOrdersViewModel>();
-    final notifications = context.watch<FieldNotificationsViewModel>();
+    final notifications = context.watch<NotificationViewModel>();
 
     final user = session.user;
     if (user == null) {

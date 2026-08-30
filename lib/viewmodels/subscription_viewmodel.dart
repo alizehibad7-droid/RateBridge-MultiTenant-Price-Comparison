@@ -1,30 +1,41 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'dart:io';
 
 import '../models/subscription_model.dart';
+import '../models/payment_proof_model.dart';
 import '../services/cloud_function_service.dart';
 import '../services/firestore_service.dart';
+import '../services/storage_service.dart';
+import '../services/cloudinary_service.dart';
 
 class SubscriptionViewModel extends ChangeNotifier {
   final FirestoreService _firestoreService;
   final CloudFunctionService _cloudFunctionService;
+  final StorageService? _storageService;
 
   SubscriptionViewModel(
     this._firestoreService,
-    this._cloudFunctionService,
-  );
+    this._cloudFunctionService, [
+    this._storageService,
+  ]);
 
   bool _isLoading = false;
   String? error;
   String? successMessage;
   SubscriptionModel? _subscription;
+  PaymentProofModel? _pendingPayment;
 
   bool get isLoading => _isLoading;
   SubscriptionModel? get currentSubscription => _subscription;
   List<SubscriptionHistoryEntry> get history => _subscription?.history ?? [];
+  PaymentProofModel? get pendingPayment => _pendingPayment;
 
-  bool get hasPendingPayment => false;
-  bool get hasRejectedPayment => false;
+  bool get hasPendingPayment => _pendingPayment != null;
+  bool get isWaitingVerification => _pendingPayment?.status == 'pending';
 
   Future<void> loadSubscription(String companyId) async {
     if (companyId.isEmpty) return;
@@ -40,11 +51,28 @@ class SubscriptionViewModel extends ChangeNotifier {
           status: 'active',
         );
       }
+      await _loadPendingPayment(companyId);
     } catch (e) {
       error = 'Failed to load subscription: $e';
     } finally {
       _isLoading = false;
       notifyListeners();
+    }
+  }
+
+  Future<void> _loadPendingPayment(String companyId) async {
+    final snap = await FirebaseFirestore.instance
+        .collection('payment_proofs')
+        .where('companyId', isEqualTo: companyId)
+        .where('status', isEqualTo: 'pending')
+        .where('type', isEqualTo: 'subscription')
+        .limit(1)
+        .get();
+    
+    if (snap.docs.isNotEmpty) {
+      _pendingPayment = PaymentProofModel.fromMap(snap.docs.first.id, snap.docs.first.data());
+    } else {
+      _pendingPayment = null;
     }
   }
 
@@ -65,6 +93,72 @@ class SubscriptionViewModel extends ChangeNotifier {
     });
   }
 
+  Future<bool> submitPaymentProof({
+    required String ceoId,
+    required String companyId,
+    required String ceoName,
+    required PlanDefinition plan,
+    required String method,
+    required double amount,
+    required XFile screenshotFile,
+  }) async {
+    if (companyId.isEmpty) {
+      error = "Invalid Company ID. Please log in again.";
+      notifyListeners();
+      return false;
+    }
+
+    _isLoading = true;
+    error = null;
+    successMessage = null;
+    notifyListeners();
+
+    try {
+      // 1. Read bytes for upload
+      final bytes = await screenshotFile.readAsBytes();
+      if (bytes.isEmpty) throw Exception("Selected file is empty.");
+
+      // 2. Upload to Cloudinary instead of Firebase Storage to bypass CORS/Storage errors
+      final url = await CloudinaryService.uploadImageBytes(
+        bytes: bytes,
+        folder: 'payment_proofs/$companyId',
+        filename: '${DateTime.now().millisecondsSinceEpoch}.jpg',
+      );
+      
+      if (url == null) throw Exception("Failed to upload screenshot to Cloudinary.");
+
+      // 3. Create Payment Proof record in Firestore
+      final proof = PaymentProofModel(
+        id: '',
+        payerId: ceoId,
+        companyId: companyId,
+        payerName: ceoName,
+        payerRole: 'CEO',
+        amount: amount,
+        method: method,
+        screenshotUrl: url,
+        status: 'pending',
+        type: 'subscription',
+        planId: plan.planKey,
+        planName: plan.name,
+        createdAt: DateTime.now(),
+      );
+
+      await FirebaseFirestore.instance.collection('payment_proofs').add(proof.toMap());
+      
+      _pendingPayment = proof;
+      successMessage = 'Payment proof submitted. Plan will be active after Admin verification.';
+      return true;
+    } catch (e) {
+      debugPrint("Upload Error: $e");
+      error = 'Failed to submit payment proof: ${e.toString()}';
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> adminGrantPlan({
     required String companyId,
     required PlanDefinition plan,
@@ -74,7 +168,7 @@ class SubscriptionViewModel extends ChangeNotifier {
     error = null;
     notifyListeners();
     try {
-      await _activateSubscription(
+      await activateSubscription(
         companyId: companyId,
         plan: plan,
         adminGranted: true,
@@ -89,7 +183,7 @@ class SubscriptionViewModel extends ChangeNotifier {
     }
   }
 
-  Future<void> _activateSubscription({
+  Future<void> activateSubscription({
     required String companyId,
     required PlanDefinition plan,
     required bool adminGranted,
@@ -132,33 +226,10 @@ class SubscriptionViewModel extends ChangeNotifier {
       'plan': plan.planKey,
       'planExpiry': expiry != null ? Timestamp.fromDate(expiry) : null,
       'aiEnabled': plan.aiUnlocked,
-      'status': 'active', // Ensure company is active if they have a valid sub
+      'status': 'active', 
     }, SetOptions(merge: true));
 
     await loadSubscription(companyId);
-  }
-
-  /// Finalizes the payment process and activates the plan in the backend.
-  Future<bool> finalizePayment(String companyId, PlanDefinition plan) async {
-    _isLoading = true;
-    error = null;
-    notifyListeners();
-    try {
-      await _activateSubscription(
-        companyId: companyId,
-        plan: plan,
-        adminGranted: false,
-        amountPaid: plan.priceRs,
-      );
-      successMessage = 'Plan ${plan.name} activated successfully!';
-      return true;
-    } catch (e) {
-      error = 'Failed to activate plan: $e';
-      return false;
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
   }
 
   Future<void> cancelSubscription(String companyId) async {
@@ -168,7 +239,6 @@ class SubscriptionViewModel extends ChangeNotifier {
     try {
       final now = DateTime.now();
       
-      // 1. Reset Subscription Doc to Free
       final cancelledSub = SubscriptionModel(
         companyId: companyId,
         plan: 'free',
@@ -178,7 +248,6 @@ class SubscriptionViewModel extends ChangeNotifier {
       );
       await _firestoreService.saveSubscription(cancelledSub);
 
-      // 2. Add to history
       final historyEntry = SubscriptionHistoryEntry(
         plan: _subscription?.plan ?? 'unknown',
         action: 'cancelled',
@@ -187,7 +256,6 @@ class SubscriptionViewModel extends ChangeNotifier {
       );
       await _firestoreService.updateSubscriptionHistory(companyId, historyEntry);
 
-      // 3. Update Company Doc
       await FirebaseFirestore.instance
           .collection('companies')
           .doc(companyId)

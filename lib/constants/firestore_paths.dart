@@ -13,6 +13,9 @@ class FirestorePaths {
   static const String transactionsCol = 'transactions';
   static const String subscriptionsCol = 'subscriptions';
   static const String processedEventsCol = 'processedEvents';
+  
+  // Primary collection for Admin-wide system alerts
+  static const String adminNotificationsCol = 'admin_notifications';
 
   // User document
   static String userDoc(String uid) => '$usersCol/$uid';
@@ -39,6 +42,7 @@ class FirestorePaths {
   static String companyOrdersCol(String companyId) =>
     '$companiesCol/$companyId/orders';
 
+  // Company order document
   static String companyOrderDoc(String companyId, String orderId) =>
     '$companiesCol/$companyId/orders/$orderId';
 
@@ -70,4 +74,7 @@ class FirestorePaths {
 
   static String supplierEarningsCol(String supplierUid) =>
     '$suppliersCol/$supplierUid/earnings';
+
+  static String supplierNotificationsCol(String supplierUid) =>
+    '$suppliersCol/$supplierUid/notifications';
 }

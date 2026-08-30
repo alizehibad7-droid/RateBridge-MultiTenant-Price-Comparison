@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../../theme/admin_theme.dart';
 import '../../viewmodels/admin_viewmodel.dart';
 import '../../widgets/admin/admin_widgets.dart';
+import '../../models/payment_proof_model.dart';
 
 class AdminPaymentQueueView extends StatefulWidget {
   final bool embedded;
@@ -16,124 +17,125 @@ class AdminPaymentQueueView extends StatefulWidget {
   State<AdminPaymentQueueView> createState() => _AdminPaymentQueueViewState();
 }
 
-class _AdminPaymentQueueViewState extends State<AdminPaymentQueueView> {
-  String _filterStatus = 'pending';
+class _AdminPaymentQueueViewState extends State<AdminPaymentQueueView> with SingleTickerProviderStateMixin {
+  late TabController _tabController;
 
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 2, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      // Data is now streamed via AdminViewModel listener
+      context.read<AdminViewModel>().loadPaymentQueue();
     });
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final adminVM = context.watch<AdminViewModel>();
-    
-    // Support both 'rejected' and legacy 'failed' in the Rejected tab
-    final transactions = adminVM.transactions.where((t) {
-      if (_filterStatus == 'all') return true;
-      if (_filterStatus == 'rejected') {
-        return t.status == 'rejected' || t.status == 'failed';
-      }
-      return t.status == _filterStatus;
-    }).toList();
 
-    final filterBar = SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Row(
-        children: ['pending', 'confirmed', 'rejected', 'all'].map((status) {
-          final isSelected = _filterStatus == status;
-          final colors = AdminTheme.statusColors(
-            status == 'all' ? 'active' : status,
-          );
-          
-          String label = status.toUpperCase();
-          if (status == 'rejected') label = 'REJECTED/FINAL';
-
-          return Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: FilterChip(
-              label: Text(
-                label,
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                  color: isSelected ? colors.fg : AdminColors.textGrey,
-                ),
+    return Column(
+      children: [
+        Container(
+          color: Colors.white,
+          child: TabBar(
+            controller: _tabController,
+            labelColor: AdminColors.navy,
+            unselectedLabelColor: AdminColors.textGrey,
+            indicatorColor: AdminColors.amber,
+            indicatorWeight: 3,
+            labelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 13),
+            unselectedLabelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w500, fontSize: 13),
+            tabs: const [
+              Tab(
+                icon: Icon(Icons.pending_rounded, size: 20),
+                text: 'Pending Verification',
               ),
-              selected: isSelected,
-              selectedColor: colors.bg,
-              backgroundColor: Colors.white,
-              side: BorderSide(
-                color: isSelected ? colors.fg : AdminColors.border,
+              Tab(
+                icon: Icon(Icons.history_rounded, size: 20),
+                text: 'Payment History',
               ),
-              onSelected: (_) => setState(() => _filterStatus = status),
-            ),
-          );
-        }).toList(),
-      ),
-    );
-
-    final body = adminVM.isLoading && adminVM.transactions.isEmpty
-        ? const Center(child: CircularProgressIndicator())
-        : transactions.isEmpty
-            ? Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(40.0),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.receipt_long_outlined, size: 48, color: AdminColors.textGrey.withValues(alpha: 0.3)),
-                      const SizedBox(height: 16),
-                      Text(
-                        'No $_filterStatus transactions found.',
-                        style: AdminTheme.mutedStyle(),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                  ),
-                ),
-              )
-            : ListView.builder(
-                padding: const EdgeInsets.all(16),
-                itemCount: transactions.length,
-                itemBuilder: (context, index) {
-                  final tx = transactions[index];
-                  return _buildTransactionCard(tx, adminVM);
-                },
-              );
-
-    if (widget.embedded) {
-      return Column(
-        children: [
-          filterBar,
-          Expanded(child: body),
-        ],
-      );
-    }
-
-    return Scaffold(
-      backgroundColor: AdminColors.screenBg,
-      appBar: AdminAppBar(
-        title: 'Payment Verification Queue',
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(50),
-          child: filterBar,
+            ],
+          ),
         ),
-      ),
-      body: body,
+        Expanded(
+          child: TabBarView(
+            controller: _tabController,
+            children: [
+              _buildPaymentList(
+                adminVM.pendingPayments.where((p) => p.type == 'subscription').toList(), 
+                adminVM, 
+                isPending: true
+              ),
+              _buildPaymentList(adminVM.confirmedPayments, adminVM, isPending: false),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
-  Widget _buildTransactionCard(PlatformTransaction tx, AdminViewModel vm) {
-    final isPending = tx.status == 'pending';
-    final isRejected = tx.status == 'rejected' || tx.status == 'failed';
+  Widget _buildPaymentList(List<PaymentProofModel> payments, AdminViewModel vm, {required bool isPending}) {
+    if (vm.isLoading && payments.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (payments.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: AdminColors.navy.withValues(alpha: 0.05),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                isPending ? Icons.fact_check_rounded : Icons.payments_rounded, 
+                size: 64, 
+                color: AdminColors.textGrey.withValues(alpha: 0.5)
+              ),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              isPending ? 'No pending verifications' : 'No payment history yet',
+              style: AdminTheme.titleStyle(size: 18).copyWith(color: AdminColors.textGrey),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              isPending ? 'All subscription payments are up to date' : 'Confirmed payments will appear here',
+              style: AdminTheme.mutedStyle(),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: () => vm.loadPaymentQueue(),
+      color: AdminColors.amber,
+      child: ListView.separated(
+        padding: const EdgeInsets.all(16),
+        itemCount: payments.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 12),
+        itemBuilder: (context, index) {
+          return _buildPaymentCard(payments[index], vm, isPending);
+        },
+      ),
+    );
+  }
+
+  Widget _buildPaymentCard(PaymentProofModel payment, AdminViewModel vm, bool isPending) {
+    final isSettled = payment.status == 'settled';
+    final isConfirmed = payment.status == 'confirmed' || payment.status == 'approved';
 
     return AdminCard(
-      margin: const EdgeInsets.only(bottom: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -142,140 +144,154 @@ class _AdminPaymentQueueViewState extends State<AdminPaymentQueueView> {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: AdminColors.navy.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
+                  color: AdminColors.navy.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(
-                  tx.type == 'subscription'
-                      ? Icons.workspace_premium
-                      : Icons.account_balance_wallet,
+                  payment.type == 'subscription' ? Icons.workspace_premium_rounded : Icons.account_balance_wallet_rounded,
                   color: AdminColors.navy,
-                  size: 20,
+                  size: 24,
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      tx.companyName,
+                      payment.payerName,
                       style: GoogleFonts.plusJakartaSans(
                         fontWeight: FontWeight.w700,
-                        fontSize: 15,
+                        fontSize: 16,
                         color: AdminColors.navy,
                       ),
                     ),
                     Row(
                       children: [
-                        Text(
-                          tx.type.toUpperCase(),
-                          style: AdminTheme.mutedStyle(size: 10),
-                        ),
-                        if (tx.payerRole.isNotEmpty) ...[
-                          const SizedBox(width: 4),
-                          Text('•', style: AdminTheme.mutedStyle(size: 10)),
-                          const SizedBox(width: 4),
-                          Text(
-                            tx.payerRole.toUpperCase(),
-                            style: AdminTheme.mutedStyle(size: 10),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AdminColors.amber.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(4),
                           ),
-                        ],
+                          child: Text(
+                            payment.type.toUpperCase(),
+                            style: GoogleFonts.plusJakartaSans(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w800,
+                              color: AdminColors.darkAmber,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          '• ${payment.payerRole}',
+                          style: AdminTheme.mutedStyle(size: 11),
+                        ),
                       ],
                     ),
                   ],
                 ),
               ),
-              Text(
-                'Rs ${tx.amount.toStringAsFixed(0)}',
-                style: GoogleFonts.plusJakartaSans(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 16,
-                  color: AdminColors.navy,
-                ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    'Rs ${payment.amount.toStringAsFixed(0)}',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 18,
+                      color: AdminColors.navy,
+                    ),
+                  ),
+                  if (!isPending)
+                    StatusChip(status: payment.status),
+                ],
               ),
             ],
           ),
-          
-          if (tx.screenshotUrl != null && tx.screenshotUrl!.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            const Text('Payment Proof:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AdminColors.textGrey)),
-            const SizedBox(height: 8),
-            InkWell(
-              onTap: () => _showFullImage(context, tx.screenshotUrl!),
+          const SizedBox(height: 20),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AdminColors.screenBg,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AdminColors.border),
+            ),
+            child: Column(
+              children: [
+                if (payment.type == 'subscription')
+                  _buildInfoRow(Icons.auto_awesome_rounded, 'Plan', payment.planName ?? 'N/A'),
+                _buildInfoRow(Icons.account_balance_rounded, 'Method', payment.method.toUpperCase()),
+                _buildInfoRow(Icons.calendar_today_rounded, 'Submitted', DateFormat('MMM dd, yyyy · HH:mm').format(payment.createdAt)),
+                if (!isPending && payment.confirmedAt != null)
+                  _buildInfoRow(Icons.verified_rounded, isSettled ? 'Settled On' : 'Confirmed On', DateFormat('MMM dd, yyyy').format(payment.confirmedAt!), valueColor: AdminColors.green),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              const Icon(Icons.image_search_rounded, size: 14, color: AdminColors.textGrey),
+              const SizedBox(width: 8),
+              Text('RECEIPT PROOF', style: AdminTheme.sectionHeaderStyle().copyWith(fontSize: 10, letterSpacing: 0.5)),
+            ],
+          ),
+          const SizedBox(height: 8),
+          InkWell(
+            onTap: () => _showFullImage(context, payment.screenshotUrl),
+            child: Container(
+              height: 160,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AdminColors.border),
+                image: DecorationImage(
+                  image: NetworkImage(payment.screenshotUrl),
+                  fit: BoxFit.cover,
+                ),
+              ),
               child: Container(
-                height: 120,
-                width: double.infinity,
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AdminColors.border),
-                  image: DecorationImage(
-                    image: NetworkImage(tx.screenshotUrl!),
-                    fit: BoxFit.cover,
-                  ),
+                  borderRadius: BorderRadius.circular(12),
+                  color: Colors.black12,
                 ),
                 child: Center(
                   child: Container(
-                    padding: const EdgeInsets.all(8),
+                    padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.5),
+                      color: Colors.black54,
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.zoom_in, color: Colors.white, size: 20),
+                    child: const Icon(Icons.zoom_in_rounded, color: Colors.white, size: 28),
                   ),
                 ),
               ),
             ),
-          ],
-
-          if (isRejected && tx.rejectionReason != null) ...[
-            const SizedBox(height: 12),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AdminColors.red.withValues(alpha: 0.05),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AdminColors.red.withValues(alpha: 0.1)),
-              ),
-              child: Text(
-                'Rejection Reason: ${tx.rejectionReason}',
-                style: const TextStyle(fontSize: 12, color: AdminColors.red, fontWeight: FontWeight.w500),
-              ),
-            ),
-          ],
-
-          const Divider(height: 32),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                tx.date != null
-                    ? DateFormat('MMM dd, yyyy • HH:mm').format(tx.date!)
-                    : 'Unknown Date',
-                style: AdminTheme.mutedStyle(size: 11),
-              ),
-              StatusChip(status: tx.status),
-            ],
           ),
-          
+
           if (isPending) ...[
-            const SizedBox(height: 16),
+            const SizedBox(height: 24),
             Row(
               children: [
                 Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => _showRejectDialog(context, tx.id, vm),
-                    style: AdminTheme.destructiveButtonStyle(height: 46),
-                    child: const Text('Reject'),
+                  child: OutlinedButton.icon(
+                    onPressed: () => _showRejectDialog(context, payment, vm),
+                    icon: const Icon(Icons.close_rounded, size: 18),
+                    label: const Text('REJECT'),
+                    style: AdminTheme.destructiveButtonStyle(height: 48),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: ElevatedButton(
-                    onPressed: () => _confirmApproval(context, tx, vm),
-                    style: AdminTheme.primaryButtonStyle(height: 46),
-                    child: const Text('Confirm'),
+                  child: ElevatedButton.icon(
+                    onPressed: () => _confirmApproval(context, payment, vm),
+                    icon: const Icon(Icons.check_rounded, size: 18),
+                    label: const Text('CONFIRM PAYMENT'),
+                    style: AdminTheme.primaryButtonStyle(height: 48).copyWith(
+                      backgroundColor: WidgetStateProperty.all(AdminColors.green),
+                    ),
                   ),
                 ),
               ],
@@ -286,82 +302,139 @@ class _AdminPaymentQueueViewState extends State<AdminPaymentQueueView> {
     );
   }
 
+  Widget _buildInfoRow(IconData icon, String label, String value, {Color? valueColor}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(icon, size: 14, color: AdminColors.textGrey),
+          const SizedBox(width: 10),
+          Text(label, style: AdminTheme.mutedStyle(size: 13)),
+          const Spacer(),
+          Text(value, style: GoogleFonts.plusJakartaSans(fontSize: 13, fontWeight: FontWeight.w700, color: valueColor ?? AdminColors.navy)),
+        ],
+      ),
+    );
+  }
+
   void _showFullImage(BuildContext context, String url) {
     showDialog(
       context: context,
       builder: (context) => Dialog(
         insetPadding: const EdgeInsets.all(16),
-        child: Stack(
-          children: [
-            InteractiveViewer(child: Image.network(url)),
-            Positioned(
-              top: 10, right: 10,
-              child: IconButton(
-                icon: const CircleAvatar(backgroundColor: Colors.black54, child: Icon(Icons.close, color: Colors.white)),
-                onPressed: () => Navigator.pop(context),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _confirmApproval(BuildContext context, PlatformTransaction tx, AdminViewModel vm) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Confirm Payment?'),
-        content: Text('Confirming this payment will ${tx.type == 'subscription' ? 'activate the company subscription' : 'settle the supplier commission'} for Rs ${tx.amount.toStringAsFixed(0)}.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('CANCEL')),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('CONFIRM', style: TextStyle(fontWeight: FontWeight.bold))),
-        ],
-      ),
-    );
-
-    if (confirmed == true) {
-      await vm.markTransaction(tx.id, 'confirmed');
-    }
-  }
-
-  Future<void> _showRejectDialog(BuildContext context, String transactionId, AdminViewModel vm) async {
-    final controller = TextEditingController();
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Reject Payment Proof'),
-        content: Column(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('Please provide a reason for rejection. This will be shown to the user.', style: TextStyle(fontSize: 13)),
-            const SizedBox(height: 16),
-            TextField(
-              controller: controller,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                hintText: 'e.g. Transaction ID not found or screenshot blurry',
-                border: OutlineInputBorder(),
+            Container(
+              padding: const EdgeInsets.all(8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Payment Receipt', style: TextStyle(fontWeight: FontWeight.bold)),
+                  IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close_rounded)),
+                ],
+              ),
+            ),
+            Flexible(
+              child: ClipRRect(
+                borderRadius: const BorderRadius.vertical(bottom: Radius.circular(16)),
+                child: InteractiveViewer(child: Image.network(url, fit: BoxFit.contain)),
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Future<void> _confirmApproval(BuildContext context, PaymentProofModel payment, AdminViewModel vm) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.verified_rounded, color: AdminColors.green),
+            const SizedBox(width: 10),
+            const Text('Confirm Payment'),
+          ],
+        ),
+        content: Text('Confirming this Rs ${payment.amount.toStringAsFixed(0)} payment will manually activate the ${payment.planName ?? 'subscription'} for ${payment.payerName}.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('CANCEL')),
-          ElevatedButton(
-            onPressed: () {
-              if (controller.text.trim().isEmpty) return;
-              Navigator.pop(context, true);
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: AdminColors.red),
-            child: const Text('REJECT PAYMENT'),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.pop(context, true),
+            icon: const Icon(Icons.check_rounded),
+            label: const Text('CONFIRM'),
+            style: ElevatedButton.styleFrom(backgroundColor: AdminColors.green),
           ),
         ],
       ),
     );
 
     if (confirmed == true) {
-      await vm.markTransaction(transactionId, 'rejected', reason: controller.text.trim());
+      await vm.confirmPayment(payment);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            behavior: SnackBarBehavior.floating,
+            content: Text('Payment confirmed and subscription activated.'))
+        );
+      }
+    }
+  }
+
+  Future<void> _showRejectDialog(BuildContext context, PaymentProofModel payment, AdminViewModel vm) async {
+    final controller = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.cancel_outlined, color: AdminColors.red),
+            const SizedBox(width: 10),
+            const Text('Reject Payment Proof'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Explain why this proof was rejected. The user will see this message.', style: TextStyle(fontSize: 13, color: AdminColors.textGrey)),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              maxLines: 3,
+              decoration: AdminTheme.inputDecoration(
+                hintText: 'e.g. Transaction ID not found, screenshot is blurred...',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('CANCEL')),
+          ElevatedButton.icon(
+            onPressed: () {
+              if (controller.text.trim().isEmpty) return;
+              Navigator.pop(context, true);
+            },
+            icon: const Icon(Icons.close_rounded),
+            label: const Text('REJECT PROOF'),
+            style: ElevatedButton.styleFrom(backgroundColor: AdminColors.red, foregroundColor: Colors.white),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await vm.rejectPayment(payment, controller.text.trim());
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            behavior: SnackBarBehavior.floating,
+            content: Text('Payment proof rejected.'))
+        );
+      }
     }
   }
 }

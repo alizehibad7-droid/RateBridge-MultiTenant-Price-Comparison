@@ -21,6 +21,7 @@ class AdminColors {
   static const textGrey = Color(0xFF888888);
   static const green = Color(0xFF1D9E75);
   static const red = Color(0xFFE25730);
+  static const purple = Color(0xFF6B46C1);
 }
 
 class AdminTheme {
@@ -78,6 +79,11 @@ class AdminTheme {
           bg: AdminColors.green.withValues(alpha: 0.15),
           fg: AdminColors.green,
         );
+      case 'settled':
+        return (
+          bg: AdminColors.purple.withValues(alpha: 0.15),
+          fg: AdminColors.purple,
+        );
       case 'rejected':
       case 'failed':
         return (
@@ -132,6 +138,7 @@ class AdminTheme {
     String? hintText,
     Widget? prefixIcon,
     Widget? suffixIcon,
+    bool isDense = false,
   }) {
     final border = OutlineInputBorder(
       borderRadius: BorderRadius.circular(10),
@@ -142,6 +149,7 @@ class AdminTheme {
       hintText: hintText,
       prefixIcon: prefixIcon,
       suffixIcon: suffixIcon,
+      isDense: isDense,
       filled: true,
       fillColor: AdminColors.screenBg,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -321,7 +329,7 @@ class AdminAppBar extends StatelessWidget implements PreferredSizeWidget {
     this.actions,
     this.bottom,
     this.automaticallyImplyLeading = true,
-    this.showNotificationIcon = false, // Changed from true to false to exclude the bell icon
+    this.showNotificationIcon = true,
   });
 
   @override

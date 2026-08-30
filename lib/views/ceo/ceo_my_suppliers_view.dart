@@ -51,9 +51,6 @@ class _CeoMySuppliersViewState extends State<CeoMySuppliersView>
       List<Map<String, dynamic>> all, String selectedCity) {
     var result = all;
     
-    // 1. Filter by City (only if not 'All')
-    // Correct Logic: Only connected suppliers (already in 'all' list) 
-    // are filtered by their existing city field.
     if (selectedCity != 'All') {
       result = result.where((s) {
         final supplierCity = (s['city'] ?? '').toString().trim().toLowerCase();
@@ -62,7 +59,6 @@ class _CeoMySuppliersViewState extends State<CeoMySuppliersView>
       }).toList();
     }
     
-    // 2. Filter by Search Query
     if (_searchQuery.isNotEmpty) {
       result = result
           .where((s) => (s['name'] ?? '')
@@ -82,23 +78,49 @@ class _CeoMySuppliersViewState extends State<CeoMySuppliersView>
     return Scaffold(
       backgroundColor: CeoColors.screenBg,
       appBar: CeoAppBar(
-        title: 'My Suppliers',
+        title: 'Partner Directory',
         bottom: TabBar(
           controller: _cityTabController,
           isScrollable: true,
+          indicatorColor: CeoColors.amber,
+          indicatorWeight: 3,
+          labelColor: CeoColors.navy,
+          unselectedLabelColor: CeoColors.textGrey,
+          labelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 13),
+          unselectedLabelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w500, fontSize: 13),
           tabs: _citiesAll.map((c) => Tab(text: c)).toList(),
         ),
       ),
       body: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          Container(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.03),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
             child: TextField(
               controller: _searchController,
               onChanged: (v) => setState(() => _searchQuery = v),
+              style: GoogleFonts.plusJakartaSans(fontSize: 14),
               decoration: CeoTheme.inputDecoration(
-                hintText: 'Search suppliers...',
-                prefixIcon: const Icon(Icons.search, color: CeoColors.textGrey),
+                hintText: 'Search by business name...',
+                prefixIcon: const Icon(Icons.search_rounded, color: CeoColors.navy, size: 22),
+                suffixIcon: _searchQuery.isNotEmpty 
+                  ? IconButton(
+                      icon: const Icon(Icons.cancel_rounded, size: 20, color: CeoColors.textGrey),
+                      onPressed: () {
+                        _searchController.clear();
+                        setState(() => _searchQuery = '');
+                      },
+                    )
+                  : null,
               ),
             ),
           ),
@@ -122,14 +144,26 @@ class _CeoMySuppliersViewState extends State<CeoMySuppliersView>
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                const Icon(Icons.store_outlined,
-                                    size: 40, color: CeoColors.textGrey),
-                                const SizedBox(height: 12),
+                                Container(
+                                  padding: const EdgeInsets.all(20),
+                                  decoration: BoxDecoration(
+                                    color: CeoColors.navy.withValues(alpha: 0.05),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Icon(
+                                    _searchQuery.isNotEmpty ? Icons.search_off_rounded : Icons.store_rounded,
+                                    size: 48, 
+                                    color: CeoColors.textGrey,
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
                                 Text(
-                                  city == 'All'
-                                      ? 'No suppliers linked yet'
-                                      : 'No suppliers in $city',
-                                  style: CeoTheme.mutedStyle(),
+                                  _searchQuery.isNotEmpty 
+                                    ? 'No matches found'
+                                    : (city == 'All'
+                                        ? 'No partners linked yet'
+                                        : 'No partners in $city'),
+                                  style: CeoTheme.titleStyle(size: 16).copyWith(color: CeoColors.textGrey),
                                 ),
                               ],
                             ),
@@ -162,31 +196,38 @@ class _CeoMySuppliersViewState extends State<CeoMySuppliersView>
     final name = supplier['name'] as String? ?? 'Supplier';
     final city = supplier['city'] as String? ?? '';
     final materialType = supplier['materialType'] as String? ?? '';
-    final status = supplier['status'] as String? ?? 'active';
-    final isActive = status == 'active';
+    final status = (supplier['status'] as String? ?? 'active').toLowerCase();
+    final isActive = status == 'active' || status == 'approved';
     final linkedAt = supplier['linkedAt'];
 
     return AdminCard(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
-              CircleAvatar(
-                radius: 20,
-                backgroundColor: isActive
-                    ? CeoColors.navy.withValues(alpha: 0.12)
-                    : CeoColors.red.withValues(alpha: 0.12),
-                child: Text(
-                  name.isNotEmpty ? name[0].toUpperCase() : 'S',
-                  style: GoogleFonts.plusJakartaSans(
-                    color: isActive ? CeoColors.navy : CeoColors.red,
-                    fontWeight: FontWeight.w700,
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: isActive
+                      ? CeoColors.navy.withValues(alpha: 0.08)
+                      : CeoColors.red.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Center(
+                  child: Text(
+                    name.isNotEmpty ? name[0].toUpperCase() : 'S',
+                    style: GoogleFonts.plusJakartaSans(
+                      color: isActive ? CeoColors.navy : CeoColors.red,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 20,
+                    ),
                   ),
                 ),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -194,69 +235,116 @@ class _CeoMySuppliersViewState extends State<CeoMySuppliersView>
                     Text(
                       name,
                       style: GoogleFonts.plusJakartaSans(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16,
                         color: CeoColors.navy,
                       ),
                     ),
-                    Text('$city · $materialType',
-                        style: CeoTheme.mutedStyle(size: 12)),
+                    Row(
+                      children: [
+                        const Icon(Icons.location_on_outlined, size: 12, color: CeoColors.textGrey),
+                        const SizedBox(width: 4),
+                        Text('$city · $materialType',
+                            style: CeoTheme.mutedStyle(size: 12)),
+                      ],
+                    ),
                     if (linkedAt != null)
-                      Text(
-                        'Linked: ${_formatTimestamp(linkedAt)}',
-                        style: CeoTheme.mutedStyle(size: 11),
+                      Row(
+                        children: [
+                          const Icon(Icons.link_rounded, size: 12, color: CeoColors.textGrey),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Joined ${_formatTimestamp(linkedAt)}',
+                            style: CeoTheme.mutedStyle(size: 11),
+                          ),
+                        ],
                       ),
                   ],
                 ),
               ),
-              CeoStatusBadge(
-                  status: isActive ? 'active' : 'deactivated'),
+              CeoStatusBadge(status: isActive ? 'active' : 'deactivated'),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
           const Divider(height: 1),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
           Wrap(
             spacing: 8,
             runSpacing: 8,
             children: [
               isActive
-                  ? OutlinedButton.icon(
+                  ? _actionButton(
                       onPressed: () => _confirmToggle(
                           context, vm, supplierId, companyId,
                           activate: false),
-                      icon: const Icon(Icons.block, size: 16),
-                      label: const Text('Deactivate'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: CeoColors.darkAmber,
-                        side: const BorderSide(color: CeoColors.darkAmber),
-                      ),
+                      icon: Icons.block_rounded,
+                      label: 'Deactivate',
+                      color: CeoColors.darkAmber,
+                      isOutlined: true,
                     )
-                  : ElevatedButton.icon(
+                  : _actionButton(
                       onPressed: () => _confirmToggle(
                           context, vm, supplierId, companyId,
                           activate: true),
-                      icon: const Icon(Icons.check_circle_outline,
-                          size: 16),
-                      label: const Text('Activate'),
-                      style: CeoTheme.primaryButtonStyle(height: 40),
+                      icon: Icons.check_circle_rounded,
+                      label: 'Reactivate',
+                      color: CeoColors.green,
+                      isOutlined: false,
                     ),
-              OutlinedButton.icon(
+              _actionButton(
                 onPressed: () => _showProfileSheet(context, supplier),
-                icon: const Icon(Icons.person_outline, size: 16),
-                label: const Text('Profile'),
-                style: CeoTheme.secondaryButtonStyle(height: 40),
+                icon: Icons.analytics_outlined,
+                label: 'Performance',
+                color: CeoColors.navy,
+                isOutlined: true,
               ),
-              OutlinedButton.icon(
+              _actionButton(
                 onPressed: () =>
                     _confirmRemove(context, vm, supplierId, name),
-                icon: const Icon(Icons.link_off, size: 16),
-                label: const Text('Remove'),
-                style: CeoTheme.destructiveButtonStyle(height: 40),
+                icon: Icons.link_off_rounded,
+                label: 'Remove',
+                color: CeoColors.red,
+                isOutlined: true,
               ),
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _actionButton({
+    required VoidCallback onPressed,
+    required IconData icon,
+    required String label,
+    required Color color,
+    required bool isOutlined,
+  }) {
+    if (isOutlined) {
+      return OutlinedButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icon, size: 16),
+        label: Text(label),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: color,
+          side: BorderSide(color: color.withValues(alpha: 0.5)),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          textStyle: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w600),
+        ),
+      );
+    }
+    return ElevatedButton.icon(
+      onPressed: onPressed,
+      icon: Icon(icon, size: 16),
+      label: Text(label),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: color,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        textStyle: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w700),
       ),
     );
   }
@@ -267,16 +355,23 @@ class _CeoMySuppliersViewState extends State<CeoMySuppliersView>
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(activate ? 'Activate supplier?' : 'Deactivate supplier?'),
+        title: Row(
+          children: [
+            Icon(activate ? Icons.bolt_rounded : Icons.block_rounded, 
+                 color: activate ? CeoColors.green : CeoColors.amber),
+            const SizedBox(width: 10),
+            Text(activate ? 'Reactivate Supplier?' : 'Deactivate Supplier?'),
+          ],
+        ),
         content: Text(
           activate
-              ? 'This supplier will be able to receive orders again.'
-              : 'This supplier will no longer receive new orders from your company.',
+              ? 'This supplier will regain access to your material inventory and can receive orders.'
+              : 'This supplier will no longer receive new orders. Existing orders are not affected.',
         ),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel')),
+              child: const Text('CANCEL')),
           ElevatedButton(
             style: activate
                 ? CeoTheme.primaryButtonStyle(height: 40)
@@ -288,7 +383,7 @@ class _CeoMySuppliersViewState extends State<CeoMySuppliersView>
               Navigator.pop(ctx);
               vm.toggleSupplierStatus(supplierId, companyId, activate);
             },
-            child: Text(activate ? 'Activate' : 'Deactivate'),
+            child: Text(activate ? 'ACTIVATE' : 'DEACTIVATE'),
           ),
         ],
       ),
@@ -300,21 +395,28 @@ class _CeoMySuppliersViewState extends State<CeoMySuppliersView>
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Remove partnership?'),
-        content: const Text(
-          'Are you sure? This supplier\'s materials will no longer be visible to your field team.',
+        title: Row(
+          children: [
+            const Icon(Icons.warning_rounded, color: CeoColors.red),
+            const SizedBox(width: 10),
+            const Text('Remove Partnership?'),
+          ],
+        ),
+        content: Text(
+          'Are you sure you want to remove $name? This will break the link, and their materials will be hidden from your field engineers.',
         ),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel')),
-          OutlinedButton(
+              child: const Text('CANCEL')),
+          OutlinedButton.icon(
             style: CeoTheme.destructiveButtonStyle(height: 40),
             onPressed: () {
               Navigator.pop(ctx);
               vm.removeSupplier(supplierId);
             },
-            child: const Text('Remove Partnership'),
+            icon: const Icon(Icons.link_off_rounded, size: 18),
+            label: const Text('REMOVE PERMANENTLY'),
           ),
         ],
       ),
@@ -331,13 +433,13 @@ class _CeoMySuppliersViewState extends State<CeoMySuppliersView>
       backgroundColor: CeoColors.screenBg,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.all(20),
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Center(
               child: Container(
@@ -348,39 +450,65 @@ class _CeoMySuppliersViewState extends State<CeoMySuppliersView>
                     borderRadius: BorderRadius.circular(2)),
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                const Icon(Icons.analytics_rounded, color: CeoColors.navy, size: 24),
+                const SizedBox(width: 12),
+                Text('Partner Insights',
+                    style: CeoTheme.titleStyle(size: 20)),
+              ],
+            ),
+            const SizedBox(height: 4),
             Text(supplier['name'] ?? 'Supplier',
-                style: CeoTheme.titleStyle(size: 18)),
-            const SizedBox(height: 12),
+                style: CeoTheme.mutedStyle(size: 14)),
+            const SizedBox(height: 24),
             SupplierPerformanceScorecard(
               supplierId: supplier['id'] ?? '',
               companyId: companyId,
               averageRating: rating,
             ),
-            const SizedBox(height: 20),
-            _profileRow(Icons.location_city_outlined,
-                supplier['city'] ?? '—'),
-            _profileRow(Icons.category_outlined,
-                supplier['materialType'] ?? '—'),
-            _profileRow(Icons.info_outline,
-                'Status: ${supplier['status'] ?? '—'}'),
-            const SizedBox(height: 20),
+            const SizedBox(height: 24),
+            const CeoSectionLabel('Business Details'),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: CeoTheme.cardDecoration(),
+              child: Column(
+                children: [
+                  _profileRow(Icons.location_on_rounded, 'Location',
+                      supplier['city'] ?? '—'),
+                  const Divider(height: 16),
+                  _profileRow(Icons.category_rounded, 'Category',
+                      supplier['materialType'] ?? '—'),
+                  const Divider(height: 16),
+                  _profileRow(Icons.info_outline_rounded, 'Status',
+                      (supplier['status'] ?? 'active').toString().toUpperCase()),
+                ],
+              ),
+            ),
+            const SizedBox(height: 32),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx),
+              style: CeoTheme.primaryButtonStyle(height: 52),
+              child: const Text('CLOSE'),
+            ),
+            const SizedBox(height: 16),
           ],
         ),
       ),
     );
   }
 
-  Widget _profileRow(IconData icon, String text) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          Icon(icon, size: 16, color: CeoColors.textGrey),
-          const SizedBox(width: 10),
-          Text(text, style: CeoTheme.bodyStyle()),
-        ],
-      ),
+  Widget _profileRow(IconData icon, String label, String text) {
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: CeoColors.textGrey),
+        const SizedBox(width: 12),
+        Text(label, style: CeoTheme.mutedStyle(size: 14)),
+        const Spacer(),
+        Text(text, style: CeoTheme.bodyStyle().copyWith(fontWeight: FontWeight.w600)),
+      ],
     );
   }
 

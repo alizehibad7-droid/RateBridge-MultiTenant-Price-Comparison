@@ -1,17 +1,16 @@
-// MVVM: View — no business logic
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../theme/supplier_theme.dart';
 import '../../models/transaction_model.dart';
+import '../../models/payment_proof_model.dart';
 import '../../utils/app_theme.dart';
 import '../../utils/currency_formatter.dart';
 import '../../viewmodels/supplier_viewmodel.dart';
 import '../../widgets/supplier/supplier_async_states.dart';
 import '../../widgets/supplier_nav_bar.dart';
-import '../payment/payment_method_view.dart';
-import '../../models/payment_proof_model.dart';
+import 'commission_payment_view.dart';
 
 class SupplierEarningsView extends StatefulWidget {
   const SupplierEarningsView({super.key});
@@ -24,13 +23,7 @@ class _SupplierEarningsViewState extends State<SupplierEarningsView> {
   DateTime _currentMonth = DateTime.now();
 
   String get _monthLabel => DateFormat('MMMM yyyy').format(_currentMonth);
-
   String get _monthKey => DateFormat('yyyy-MM').format(_currentMonth);
-
-  bool get _isCurrentMonth {
-    final now = DateTime.now();
-    return _currentMonth.month == now.month && _currentMonth.year == now.year;
-  }
 
   @override
   void initState() {
@@ -40,195 +33,115 @@ class _SupplierEarningsViewState extends State<SupplierEarningsView> {
     });
   }
 
-  void _goToPreviousMonth() {
-    setState(() {
-      _currentMonth = DateTime(_currentMonth.year, _currentMonth.month - 1);
-    });
-    context.read<SupplierViewModel>().changeMonth(_monthKey);
-  }
-
-  void _goToNextMonth() {
-    if (_isCurrentMonth) return;
-    setState(() {
-      _currentMonth = DateTime(_currentMonth.year, _currentMonth.month + 1);
-    });
-    context.read<SupplierViewModel>().changeMonth(_monthKey);
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: FieldColors.screenBackground,
-      appBar: const SupplierAppBar(title: 'Earnings'),
+      appBar: const SupplierAppBar(title: 'Earnings & Commissions'),
       bottomNavigationBar: const SupplierNavBar(currentIndex: 4),
       body: Consumer<SupplierViewModel>(
         builder: (context, viewModel, child) {
-          if (viewModel.isLoading && viewModel.transactions.isEmpty) {
-            return const SupplierListSkeleton(itemCount: 5, itemHeight: 72);
-          }
-
-          if (viewModel.error != null && viewModel.transactions.isEmpty) {
-            return SupplierEmptyState(
-              icon: Icons.error_outline,
-              title: 'Could not load earnings',
-              subtitle: viewModel.error!,
-            );
-          }
-
-          final unsettledTransactions = viewModel.unsettledTransactions;
-          final unsettledCommission = unsettledTransactions.fold<double>(
-            0,
-            (sum, t) => sum + t.commissionAmount,
-          );
-          final monthTransactions = viewModel.transactions;
+          final commissionOwed = viewModel.commissionOwed;
+          final totalPaid = viewModel.totalCommissionPaid;
+          final grossSales = viewModel.grossSalesForMonth(_monthKey);
+          final netEarnings = viewModel.netEarningsForMonth(_monthKey);
+          final recentTransactions = viewModel.transactions;
+          final paymentHistory = viewModel.paymentHistory;
 
           return ListView(
             padding: const EdgeInsets.all(24),
             children: [
-              // Month selection and other cards...
+              // Commission Owed Card
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: commissionOwed > 0 ? FieldColors.statusDanger : FieldColors.statusSuccess,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 10, offset: const Offset(0, 4))],
+                ),
+                child: Column(
+                  children: [
+                    Text(
+                      commissionOwed > 0 ? 'TOTAL COMMISSION OWED' : 'COMMISSION FULLY SETTLED',
+                      style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold)
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      CurrencyFormatter.formatPKR(commissionOwed),
+                      style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.w900)
+                    ),
+                    if (commissionOwed > 0) ...[
+                      const SizedBox(height: 20),
+                      ElevatedButton(
+                        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CommissionPaymentView())),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: FieldColors.statusDanger,
+                          minimumSize: const Size(double.infinity, 50),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        child: const Text('PAY NOW', style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                    ] else ...[
+                      const SizedBox(height: 12),
+                      const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.check_circle_outline, color: Colors.white70, size: 16),
+                          SizedBox(width: 8),
+                          Text('All payments are up to date', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(height: 32),
+
+              // Monthly Summary
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  IconButton(
-                    icon: const Icon(Icons.chevron_left),
-                    onPressed: _goToPreviousMonth,
-                  ),
-                  Text(_monthLabel, style: AppTextStyles.h3),
-                  IconButton(
-                    icon: Icon(
-                      Icons.chevron_right,
-                      color: _isCurrentMonth
-                          ? FieldColors.textSecondary.withValues(alpha: 0.35)
-                          : null,
-                    ),
-                    onPressed: _isCurrentMonth ? null : _goToNextMonth,
+                  Text('Summary: $_monthLabel', style: AppTextStyles.h3),
+                  TextButton(
+                    onPressed: () => _selectMonth(context),
+                    child: const Text('Change Month'),
                   ),
                 ],
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 12),
+              _buildStatsRow('Gross Sales', CurrencyFormatter.formatPKR(grossSales)),
+              _buildStatsRow('Net (After 2% Comm.)', CurrencyFormatter.formatPKR(netEarnings)),
+              _buildStatsRow('Total Commission Paid', CurrencyFormatter.formatPKR(totalPaid), isSettled: true),
               
-              if (unsettledCommission > 0)
-                Container(
-                  margin: const EdgeInsets.only(bottom: 24),
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: FieldColors.statusDanger.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(AppRadius.lg),
-                    border: Border.all(color: FieldColors.statusDanger.withValues(alpha: 0.3)),
-                  ),
-                  child: Column(
-                    children: [
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+              const SizedBox(height: 32),
+              
+              // Tabs for History
+              DefaultTabController(
+                length: 2,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TabBar(
+                      isScrollable: true,
+                      tabAlignment: TabAlignment.start,
+                      labelColor: FieldColors.primaryNavy,
+                      indicatorColor: FieldColors.primaryNavy,
+                      tabs: const [Tab(text: 'Orders & Comm.'), Tab(text: 'Payment History')],
+                    ),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      height: 400,
+                      child: TabBarView(
                         children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Unsettled Commission',
-                                  style: TextStyle(
-                                    color: FieldColors.statusDanger,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                Text(
-                                  CurrencyFormatter.formatPKR(unsettledCommission),
-                                  style: AppTextStyles.h2.copyWith(
-                                    color: FieldColors.statusDanger,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          ElevatedButton(
-                            onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => PaymentMethodView(
-                                    amount: unsettledCommission,
-                                    type: PaymentType.commission,
-                                    relatedTransactionIds: unsettledTransactions
-                                        .map((t) => t.txId)
-                                        .toList(),
-                                  ),
-                                ),
-                              );
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: FieldColors.statusDanger,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 12,
-                              ),
-                            ),
-                            child: const Text('PAY NOW'),
-                          ),
+                          _buildOrderList(recentTransactions),
+                          _buildPaymentList(paymentHistory),
                         ],
                       ),
-                      const SizedBox(height: 12),
-                      const Text(
-                        'Please clear your outstanding balance to avoid account suspension.',
-                        style: TextStyle(fontSize: 11, color: FieldColors.statusDanger),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-
-              _buildStatsCard(
-                'Total Gross Earnings',
-                CurrencyFormatter.formatPKR(viewModel.totalEarnings),
-                Colors.white,
-                FieldColors.textPrimary,
               ),
-              const SizedBox(height: 12),
-              _buildStatsCard(
-                'Net Earnings (98%)',
-                CurrencyFormatter.formatPKR(viewModel.netEarnings),
-                FieldColors.primaryNavy,
-                Colors.white,
-              ),
-              const SizedBox(height: 12),
-              _buildStatsCard(
-                'Commission Owed (2%)',
-                CurrencyFormatter.formatPKR(unsettledCommission),
-                Colors.white,
-                FieldColors.textPrimary,
-              ),
-              const SizedBox(height: 12),
-              _buildStatsCard(
-                'Completed Orders',
-                '${viewModel.completedThisMonth} orders',
-                Colors.white,
-                FieldColors.textPrimary,
-              ),
-              const SizedBox(height: 32),
-              Text('Monthly Performance', style: AppTextStyles.h3),
-              const SizedBox(height: 16),
-              if (viewModel.monthlyEarnings.isEmpty)
-                const SupplierEmptyState(
-                  icon: Icons.bar_chart_outlined,
-                  title: 'No monthly data yet',
-                  subtitle:
-                      'Monthly performance charts will appear as you complete orders',
-                )
-              else
-                ...viewModel.monthlyEarnings.map(_buildMonthlyCard),
-              const SizedBox(height: 32),
-              Text('Recent Transactions', style: AppTextStyles.h3),
-              const SizedBox(height: 16),
-              if (monthTransactions.isEmpty)
-                SupplierEmptyState(
-                  icon: Icons.receipt_long_outlined,
-                  title: 'No transactions yet',
-                  subtitle:
-                      'Transactions for $_monthLabel will appear here after orders are confirmed',
-                )
-              else
-                ...monthTransactions.map(_buildTransactionItem),
             ],
           );
         },
@@ -236,159 +149,128 @@ class _SupplierEarningsViewState extends State<SupplierEarningsView> {
     );
   }
 
-  Widget _buildStatsCard(
-    String label,
-    String value,
-    Color bg,
-    Color text,
-  ) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        border: Border.all(color: FieldColors.borderSubtle),
-      ),
+  Widget _buildStatsRow(String label, String value, {bool isSettled = false}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Expanded(
-            child: Text(
-              label,
-              style: AppTextStyles.body.copyWith(
-                color: text.withValues(alpha: 0.75),
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
+          Text(label, style: AppTextStyles.body.copyWith(color: FieldColors.textSecondary)),
           Text(
-            value,
-            style: AppTextStyles.h3.copyWith(color: text),
+            value, 
+            style: AppTextStyles.body.copyWith(
+              fontWeight: FontWeight.bold,
+              color: isSettled ? FieldColors.statusSuccess : null,
+            )
           ),
         ],
       ),
     );
   }
 
-  Widget _buildMonthlyCard(MonthlyEarning earning) {
-    final monthDate = DateTime.tryParse('${earning.month}-01');
-    final monthLabel = monthDate != null
-        ? DateFormat('MMM yyyy').format(monthDate)
-        : earning.month;
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: SupplierTheme.cardDecoration(),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildOrderList(List<TransactionModel> txs) {
+    if (txs.isEmpty) return const Center(child: Text('No order commissions this month.'));
+    return ListView.builder(
+      itemCount: txs.length,
+      itemBuilder: (context, i) {
+        final tx = txs[i];
+        final settled = tx.status == 'settled' || tx.status == 'confirmed';
+        
+        return Card(
+          margin: const EdgeInsets.only(bottom: 8),
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: FieldColors.borderSubtle),
+          ),
+          child: ListTile(
+            title: Text('Order #${tx.orderId.substring(tx.orderId.length - 6).toUpperCase()}', style: const TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: Row(
               children: [
-                Text(monthLabel, style: AppTextStyles.h3),
-                const SizedBox(height: 4),
-                Text(
-                  '${earning.orderCount} ${earning.orderCount == 1 ? 'order' : 'orders'}',
-                  style: AppTextStyles.caption,
+                Text(DateFormat('MMM dd').format(tx.createdAt)),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: settled ? FieldColors.statusSuccess.withValues(alpha: 0.1) : FieldColors.statusDanger.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    settled ? 'SETTLED' : 'UNSETTLED',
+                    style: TextStyle(
+                      fontSize: 9, 
+                      fontWeight: FontWeight.bold,
+                      color: settled ? FieldColors.statusSuccess : FieldColors.statusDanger,
+                    ),
+                  ),
                 ),
               ],
             ),
+            trailing: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  CurrencyFormatter.formatPKR(tx.commissionAmount), 
+                  style: TextStyle(
+                    color: settled ? FieldColors.statusSuccess : FieldColors.statusDanger, 
+                    fontWeight: FontWeight.bold
+                  )
+                ),
+                const Text('Commission', style: TextStyle(fontSize: 10)),
+              ],
+            ),
           ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                CurrencyFormatter.formatPKR(earning.net),
-                style: AppTextStyles.h3.copyWith(color: FieldColors.statusSuccess),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                'Net earnings',
-                style: AppTextStyles.caption,
-              ),
-            ],
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
-  Widget _buildTransactionItem(TransactionModel tx) {
-    final orderSuffix = tx.orderId.length >= 6
-        ? tx.orderId.substring(tx.orderId.length - 6)
-        : tx.orderId;
-    final statusLabel = tx.status.isNotEmpty
-        ? tx.status[0].toUpperCase() + tx.status.substring(1).toLowerCase()
-        : '';
+  Widget _buildPaymentList(List<PaymentProofModel> payments) {
+    if (payments.isEmpty) return const Center(child: Text('No payment history found.'));
+    return ListView.builder(
+      itemCount: payments.length,
+      itemBuilder: (context, i) {
+        final p = payments[i];
+        final isSettled = p.status == 'settled' || p.status == 'confirmed' || p.status == 'approved';
+        final isRejected = p.status == 'rejected';
+        final isPending = p.status == 'pending';
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Card(
-        margin: EdgeInsets.zero,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppRadius.md),
-          side: const BorderSide(color: FieldColors.borderSubtle),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Order #$orderSuffix', style: AppTextStyles.body),
-                    const SizedBox(height: 4),
-                    Text(
-                      DateFormat('MMM dd, yyyy').format(tx.createdAt),
-                      style: AppTextStyles.caption,
-                    ),
-                    if (statusLabel.isNotEmpty) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        statusLabel,
-                        style: AppTextStyles.caption.copyWith(
-                          color: tx.isUnsettled
-                              ? FieldColors.statusWarning
-                              : FieldColors.statusSuccess,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    CurrencyFormatter.formatPKR(tx.supplierEarning),
-                    style: AppTextStyles.h3.copyWith(
-                      color: FieldColors.statusSuccess,
-                      fontSize: 15,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Gross ${CurrencyFormatter.formatPKR(tx.totalAmount)}',
-                    style: AppTextStyles.caption.copyWith(fontSize: 11),
-                    textAlign: TextAlign.end,
-                  ),
-                  Text(
-                    '-${(tx.commissionRate * 100).toStringAsFixed(0)}% comm.',
-                    style: const TextStyle(color: FieldColors.statusDanger, fontSize: 10),
-                    textAlign: TextAlign.end,
-                  ),
-                ],
-              ),
-            ],
+        return Card(
+          margin: const EdgeInsets.only(bottom: 8),
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: FieldColors.borderSubtle),
           ),
-        ),
-      ),
+          child: ListTile(
+            leading: CircleAvatar(
+              backgroundColor: isSettled ? FieldColors.statusSuccess.withValues(alpha: 0.1) : (isRejected ? Colors.red.withValues(alpha: 0.1) : Colors.orange.withValues(alpha: 0.1)),
+              child: Icon(
+                isSettled ? Icons.check_circle : (isRejected ? Icons.cancel : Icons.hourglass_top), 
+                color: isSettled ? FieldColors.statusSuccess : (isRejected ? Colors.red : Colors.orange),
+                size: 20,
+              ),
+            ),
+            title: Text('Payment: ${CurrencyFormatter.formatPKR(p.amount)}', style: const TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: Text('${DateFormat('MMM dd, yyyy').format(p.createdAt)} • ${p.status.toUpperCase()}'),
+            trailing: const Icon(Icons.chevron_right, size: 16, color: FieldColors.textMuted),
+          ),
+        );
+      },
     );
+  }
+
+  void _selectMonth(BuildContext context) async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _currentMonth,
+      firstDate: DateTime(2023),
+      lastDate: DateTime.now(),
+    );
+    if (picked != null) {
+      setState(() => _currentMonth = picked);
+      context.read<SupplierViewModel>().changeMonth(DateFormat('yyyy-MM').format(picked));
+    }
   }
 }
