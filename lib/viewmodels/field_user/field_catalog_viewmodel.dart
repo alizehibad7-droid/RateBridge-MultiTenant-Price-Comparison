@@ -28,6 +28,7 @@ class FieldCatalogViewModel extends ChangeNotifier {
   final MaterialRepository _materialRepo;
 
   bool _isLoading = false;
+  bool _catalogReady = false;
   String? _errorMessage;
   List<MaterialModel> _materials = [];
   List<MaterialModel> _filteredMaterials = [];
@@ -51,6 +52,10 @@ class FieldCatalogViewModel extends ChangeNotifier {
 
   void _watchCompanyMaterials(String companyId) {
     if (_watchingCompanyId == companyId && _materialsSubscription != null) {
+      _catalogReady = true;
+      _isLoading = false;
+      _applyFilters();
+      notifyListeners();
       return;
     }
     _materialsSubscription?.cancel();
@@ -64,16 +69,20 @@ class FieldCatalogViewModel extends ChangeNotifier {
           _materials =
               await _materialRepo.getPopularMaterials(companyId: companyId);
         }
-        _applyFilters();
-        _isLoading = false;
-        _notifyAfterFrame();
+        _completeCatalogLoad();
       },
       onError: (Object e) {
         _errorMessage = e.toString();
-        _isLoading = false;
-        _notifyAfterFrame();
+        _completeCatalogLoad();
       },
     );
+  }
+
+  void _completeCatalogLoad() {
+    _catalogReady = true;
+    _isLoading = false;
+    _applyFilters();
+    _notifyAfterFrame();
   }
 
   void _notifyAfterFrame() {
@@ -84,6 +93,9 @@ class FieldCatalogViewModel extends ChangeNotifier {
   }
 
   bool get isLoading => _isLoading;
+  /// True only while the first catalog snapshot has not arrived yet.
+  /// Category/filter changes are local and must not keep the shimmer up.
+  bool get isCatalogLoading => _isLoading && !_catalogReady;
   String? get errorMessage => _errorMessage;
   List<MaterialModel> get materials => _filteredMaterials;
   List<MaterialModel> get catalogMaterials => _materials;

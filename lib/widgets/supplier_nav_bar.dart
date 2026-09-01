@@ -117,7 +117,7 @@ class _SupplierNavBarState extends State<SupplierNavBar> {
                   badgeCount: badgeCount,
                   onTap: () {
                     if (index == widget.currentIndex) return;
-                    context.go(SupplierNavBar._routes[index]);
+                    context.push(SupplierNavBar._routes[index]);
                   },
                 ),
               );

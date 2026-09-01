@@ -62,26 +62,39 @@ class CeoRfqListView extends StatelessWidget {
                   );
                 },
               ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () async {
-          final effectivePlan = await PlanLimitService.companyPlan(
-            FirebaseFirestore.instance,
-            companyId,
-          );
-          if (!context.mounted) return;
-          if (effectivePlan.planKey != 'premium') {
-            _showPremiumRequiredDialog(context);
-          } else {
-            context.push(
-              fieldUser ? RouteNames.fieldCreateRfq : RouteNames.ceoCreateRfq,
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.only(right: 4, bottom: 4),
+        child: FloatingActionButton.extended(
+          onPressed: () async {
+            final effectivePlan = await PlanLimitService.companyPlan(
+              FirebaseFirestore.instance,
+              companyId,
             );
-          }
-        },
-        backgroundColor: CeoColors.navy,
-        icon: const Icon(Icons.add_circle_rounded, color: Colors.white),
-        label: Text(
-          'CREATE RFQ',
-          style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w800, letterSpacing: 0.5),
+            if (!context.mounted) return;
+            if (effectivePlan.planKey != 'premium') {
+              _showPremiumRequiredDialog(context);
+            } else {
+              context.push(
+                fieldUser ? RouteNames.fieldCreateRfq : RouteNames.ceoCreateRfq,
+              );
+            }
+          },
+          elevation: 5,
+          highlightElevation: 8,
+          backgroundColor: CeoColors.navy,
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          icon: const Icon(Icons.add_circle_rounded, color: Colors.white),
+          label: Text(
+            'CREATE RFQ',
+            style: GoogleFonts.plusJakartaSans(
+              color: Colors.white,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.5,
+            ),
+          ),
         ),
       ),
       bottomNavigationBar: fieldUser ? null : const CeoNavBar(currentIndex: 2),
@@ -89,59 +102,19 @@ class CeoRfqListView extends StatelessWidget {
   }
 
   Widget _buildEmptyState(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: CeoColors.navy.withValues(alpha: 0.05),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.request_quote_rounded,
-              size: 64,
-              color: CeoColors.textGrey,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: const Padding(
+              padding: EdgeInsets.fromLTRB(32, 32, 32, 104),
+              child: _RfqEmptyState(),
             ),
           ),
-          const SizedBox(height: 24),
-          Text('No active RFQs', style: CeoTheme.titleStyle(size: 20)),
-          const SizedBox(height: 8),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 40),
-            child: Text(
-              'Get competitive bulk pricing by requesting quotes from multiple suppliers at once.',
-              textAlign: TextAlign.center,
-              style: CeoTheme.mutedStyle(),
-            ),
-          ),
-          const SizedBox(height: 32),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            decoration: BoxDecoration(
-              color: CeoColors.amber.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: CeoColors.amber.withValues(alpha: 0.3)),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.auto_awesome_rounded, color: CeoColors.darkAmber, size: 16),
-                const SizedBox(width: 8),
-                Text(
-                  'Premium Feature',
-                  style: GoogleFonts.plusJakartaSans(
-                    color: CeoColors.darkAmber,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 12,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -182,6 +155,126 @@ class CeoRfqListView extends StatelessWidget {
   }
 }
 
+class _RfqEmptyState extends StatelessWidget {
+  const _RfqEmptyState();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Container(
+          width: 120,
+          height: 120,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                CeoColors.amber.withValues(alpha: 0.42),
+                CeoColors.navy.withValues(alpha: 0.16),
+              ],
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: CeoColors.amber.withValues(alpha: 0.28),
+                blurRadius: 28,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: Center(
+            child: Container(
+              width: 72,
+              height: 72,
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.request_quote_rounded,
+                size: 36,
+                color: CeoColors.navy,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 28),
+        Text(
+          'No active RFQs',
+          textAlign: TextAlign.center,
+          style: CeoTheme.titleStyle(size: 22).copyWith(
+            fontWeight: FontWeight.w800,
+            letterSpacing: -0.3,
+            height: 1.25,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Text(
+          'Get competitive bulk pricing by requesting quotes from multiple suppliers at once.',
+          textAlign: TextAlign.center,
+          style: CeoTheme.mutedStyle(size: 14).copyWith(
+            height: 1.55,
+            color: const Color(0xFF6B7396),
+          ),
+        ),
+        const SizedBox(height: 24),
+        const _PremiumFeatureBadge(),
+      ],
+    );
+  }
+}
+
+class _PremiumFeatureBadge extends StatelessWidget {
+  const _PremiumFeatureBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 7, 14, 7),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(24),
+        gradient: LinearGradient(
+          colors: [
+            CeoColors.amber.withValues(alpha: 0.28),
+            CeoColors.amber.withValues(alpha: 0.10),
+          ],
+        ),
+        border: Border.all(color: CeoColors.amber.withValues(alpha: 0.5)),
+        boxShadow: [
+          BoxShadow(
+            color: CeoColors.amber.withValues(alpha: 0.22),
+            blurRadius: 14,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(
+            Icons.auto_awesome_rounded,
+            color: CeoColors.darkAmber,
+            size: 15,
+          ),
+          const SizedBox(width: 6),
+          Text(
+            'Premium Feature',
+            style: GoogleFonts.plusJakartaSans(
+              color: CeoColors.darkAmber,
+              fontWeight: FontWeight.w800,
+              fontSize: 12,
+              height: 1.15,
+              letterSpacing: 0.1,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _RfqTile extends StatelessWidget {
   final RfqModel rfq;
   final String detailRoute;
@@ -192,10 +285,15 @@ class _RfqTile extends StatelessWidget {
     final isOpen = rfq.status == 'open';
     final statusColor = isOpen ? CeoColors.green : CeoColors.textGrey;
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: CeoTheme.cardDecoration(),
-      child: ListTile(
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Material(
+        color: Colors.white,
+        elevation: 1,
+        shadowColor: Colors.black.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(12),
+        clipBehavior: Clip.antiAlias,
+        child: ListTile(
         contentPadding: const EdgeInsets.all(16),
         leading: Container(
           padding: const EdgeInsets.all(10),
@@ -274,6 +372,7 @@ class _RfqTile extends StatelessWidget {
         ),
         trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: CeoColors.textGrey),
         onTap: () => context.push(detailRoute.replaceFirst(':rfqId', rfq.id)),
+        ),
       ),
     );
   }

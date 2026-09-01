@@ -137,6 +137,29 @@ class MaterialModel {
     };
   }
 
+  /// Reads the material photo URL from Firestore, including older field names.
+  static String? imageUrlFromMap(Map<String, dynamic> map) {
+    String? from(dynamic value) {
+      if (value is String) {
+        final trimmed = value.trim();
+        return trimmed.isEmpty ? null : trimmed;
+      }
+      return null;
+    }
+
+    final direct = from(map['profileImageUrl']) ??
+        from(map['imageUrl']) ??
+        from(map['photoUrl']) ??
+        from(map['image']);
+    if (direct != null) return direct;
+
+    final images = map['images'];
+    if (images is List && images.isNotEmpty) {
+      return from(images.first);
+    }
+    return null;
+  }
+
   factory MaterialModel.fromMap(Map<String, dynamic> map) {
     return MaterialModel(
       id: (map['id'] ?? '') as String,
@@ -150,7 +173,7 @@ class MaterialModel {
       supplierName: (map['supplierName'] ?? '') as String,
       isCertified: (map['isCertified'] ?? false) as bool,
       originCity: (map['originCity'] ?? '') as String,
-      profileImageUrl: map['profileImageUrl'] as String?,
+      profileImageUrl: imageUrlFromMap(map),
       brand: map['brand'] as String?,
       stockStatus: map['stockStatus'] as String?,
       minOrderQuantity: (map['minOrderQuantity'] as num?)?.toDouble(),

@@ -6,6 +6,7 @@ import '../../constants/app_colors.dart';
 import '../../constants/route_names.dart';
 import '../../viewmodels/auth_viewmodel.dart';
 import '../../widgets/auth/auth_widgets.dart';
+import '../../utils/app_navigation.dart';
 
 class LoginView extends StatefulWidget {
   const LoginView({super.key});
@@ -91,7 +92,7 @@ class _LoginViewState extends State<LoginView> {
         }
         break;
       default:
-        context.go(RouteNames.roleSelection);
+        context.push(RouteNames.roleSelection);
     }
   }
 
@@ -104,6 +105,12 @@ class _LoginViewState extends State<LoginView> {
     return Scaffold(
       backgroundColor: AppColors.screenBg,
       resizeToAvoidBottomInset: true,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        automaticallyImplyLeading: false,
+        leading: AppNavigation.leading(context),
+      ),
       body: DecoratedBox(
         decoration: BoxDecoration(
           color: AppColors.screenBg,

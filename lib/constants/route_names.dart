@@ -49,6 +49,7 @@ class RouteNames {
   static const String supplierPending = '/supplier/pending';
   static const String supplierAppeal = '/supplier/appeal';
   static const String supplierMaterials = '/supplier/materials';
+  static const String supplierMaterialDetail = '/supplier/materials/:matId';
   static const String supplierAddMaterial = '/supplier/add-material';
   static const String supplierEditMaterial = '/supplier/edit-material/:matId';
   static const String supplierOrders = '/supplier/orders';
@@ -89,4 +90,25 @@ class RouteNames {
   static const String fieldRfqs = '/field/rfqs';
   static const String fieldCreateRfq = '/field/rfqs/create';
   static const String fieldRfqDetail = '/field/rfqs/:rfqId';
+
+  static String encodeParam(String value) => Uri.encodeComponent(value);
+
+  /// GoRouter already decodes path params. Decoding again throws on names
+  /// like "Cement 10%" ("Illegal percent encoding in URI").
+  static String decodeParam(String value) {
+    if (value.isEmpty || !value.contains('%')) return value;
+    try {
+      return Uri.decodeComponent(value);
+    } on ArgumentError {
+      return value;
+    }
+  }
+
+  static String pathParam(String? raw, [Object? extra]) {
+    if (extra is String && extra.trim().isNotEmpty) return extra;
+    return decodeParam(raw ?? '');
+  }
+
+  static String fieldCompareOf(String materialName) =>
+      fieldCompare.replaceFirst(':materialId', encodeParam(materialName));
 }

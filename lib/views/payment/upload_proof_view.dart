@@ -10,6 +10,7 @@ import '../../models/payment_proof_model.dart';
 import '../../models/subscription_model.dart';
 import '../../viewmodels/subscription_viewmodel.dart';
 import '../../viewmodels/supplier_viewmodel.dart';
+import '../../utils/app_navigation.dart';
 
 class UploadProofView extends StatefulWidget {
   final double amount;
@@ -148,7 +149,11 @@ class _UploadProofViewState extends State<UploadProofView> {
 
     return Scaffold(
       backgroundColor: Colors.white,
-      appBar: AppBar(title: const Text('Confirm Payment')),
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        leading: AppNavigation.leading(context),
+        title: const Text('Confirm Payment'),
+      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Column(

@@ -92,20 +92,34 @@ async function generateWithGroq(prompt, apiKey) {
 
 async function generateText(prompt) {
   const groqKey = readGroqKey();
+  const apiKey = readGeminiKey();
+  console.log('AI providers available:', {
+    groq: Boolean(groqKey),
+    gemini: Boolean(apiKey),
+    vertex: true,
+  });
+
   if (groqKey) {
     try {
       const text = await generateWithGroq(prompt, groqKey);
-      if (text) return text;
+      if (text) {
+        console.log('AI provider used: groq');
+        return text;
+      }
+      console.warn('Groq returned an empty response');
     } catch (error) {
       console.warn('Groq path failed:', error.message || error);
     }
   }
 
-  const apiKey = readGeminiKey();
   if (apiKey) {
     try {
       const text = await generateWithApiKey(prompt, apiKey);
-      if (text) return text;
+      if (text) {
+        console.log('AI provider used: gemini-api-key');
+        return text;
+      }
+      console.warn('Gemini API key path returned an empty response');
     } catch (error) {
       console.warn('Gemini API key path failed, trying Vertex:', error.message || error);
     }
@@ -115,13 +129,40 @@ async function generateText(prompt) {
   for (const model of VERTEX_MODELS) {
     try {
       const text = await generateWithVertex(prompt, model);
-      if (text) return text;
+      if (text) {
+        console.log('AI provider used: vertex', model);
+        return text;
+      }
+      console.warn(`Vertex model ${model} returned an empty response`);
     } catch (error) {
       lastError = error;
       console.warn(`Vertex model ${model} failed:`, error.message || error);
     }
   }
   throw lastError || new Error('AI returned an empty response.');
+}
+
+function publicAiError(error) {
+  const raw = String(error?.message || error || 'AI request failed.');
+  const lower = raw.toLowerCase();
+  if (
+    lower.includes('api key') ||
+    lower.includes('unauthenticated') ||
+    lower.includes('401') ||
+    lower.includes('permission')
+  ) {
+    return 'AI provider authentication failed. Set GROQ_API_KEY or GEMINI_KEY for the Cloud Function.';
+  }
+  if (lower.includes('429') || lower.includes('rate limit') || lower.includes('resource exhausted')) {
+    return 'AI provider rate limit reached. Try again shortly.';
+  }
+  if (lower.includes('timeout') || lower.includes('etimedout') || lower.includes('deadline')) {
+    return 'The AI provider timed out. Please try again.';
+  }
+  if (lower.includes('empty response')) {
+    return 'The assistant returned an empty response.';
+  }
+  return raw.slice(0, 280);
 }
 
 // Firestore trigger — no public HTTP/IAM. Flutter writes ai_jobs/{id} and
@@ -152,7 +193,7 @@ exports.onAiJobCreated = functions
       console.error('onAiJobCreated error:', error);
       await snap.ref.update({
         status: 'error',
-        error: 'AI request failed.',
+        error: publicAiError(error),
       });
     }
   });
@@ -179,7 +220,7 @@ exports.generateAiText = onCall(
       return { text };
     } catch (error) {
       console.error('generateAiText error:', error);
-      throw new HttpsError('internal', 'AI request failed.');
+      throw new HttpsError('internal', publicAiError(error));
     }
   },
 );

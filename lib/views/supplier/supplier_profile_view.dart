@@ -1,5 +1,4 @@
 // MVVM: View — no business logic
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -11,10 +10,12 @@ import '../../constants/route_names.dart';
 import '../../models/user_model.dart';
 import '../../services/cloudinary_service.dart';
 import '../../theme/supplier_theme.dart';
+import '../../utils/app_navigation.dart';
 import '../../utils/app_theme.dart';
 import '../../utils/chat_image_utils.dart';
 import '../../viewmodels/auth_viewmodel.dart';
 import '../../viewmodels/supplier_viewmodel.dart';
+import '../../widgets/app_network_image.dart';
 import '../../widgets/supplier_nav_bar.dart';
 import 'supplier_change_password_sheet.dart';
 import 'supplier_notification_prefs_sheet.dart';
@@ -321,8 +322,8 @@ class _SupplierProfileViewState extends State<SupplierProfileView> {
                 materialsCount: materialsCount,
                 avgRating: avgRating,
                 ordersDone: ordersDone,
-                onMaterialsTap: () => context.go(RouteNames.supplierMaterials),
-                onOrdersTap: () => context.go(RouteNames.supplierOrders),
+                onMaterialsTap: () => context.push(RouteNames.supplierMaterials),
+                onOrdersTap: () => context.push(RouteNames.supplierOrders),
               ),
             ),
             const SizedBox(height: 16),
@@ -401,6 +402,8 @@ class _SupplierProfileViewState extends State<SupplierProfileView> {
       backgroundColor: Colors.transparent,
       elevation: 0,
       scrolledUnderElevation: 0,
+      automaticallyImplyLeading: false,
+      leading: AppNavigation.leading(context, color: Colors.white),
       systemOverlayStyle: SystemUiOverlayStyle.light,
       title: Text(
         'My Profile',
@@ -492,14 +495,15 @@ class _ProfileHeader extends StatelessWidget {
                         ],
                       ),
                       child: ClipOval(
-                        child: imageUrl != null && imageUrl!.isNotEmpty
-                            ? CachedNetworkImage(
-                                imageUrl: imageUrl!,
-                                fit: BoxFit.cover,
-                                placeholder: (_, __) => _initialsAvatar(),
-                                errorWidget: (_, __, ___) => _initialsAvatar(),
-                              )
-                            : _initialsAvatar(),
+                        child: AppNetworkImage(
+                          url: imageUrl,
+                          fit: BoxFit.cover,
+                          width: 96,
+                          height: 96,
+                          debugLabel: 'supplier-avatar',
+                          loading: _initialsAvatar(),
+                          fallback: _initialsAvatar(),
+                        ),
                       ),
                     ),
                     if (isUploadingImage)

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../viewmodels/ai_viewmodel.dart';
 import '../../constants/app_colors.dart';
+import '../../utils/app_navigation.dart';
 
 class PredictiveAiAnalyticsView extends StatefulWidget {
   const PredictiveAiAnalyticsView({super.key});
@@ -34,6 +35,8 @@ class _PredictiveAiAnalyticsViewState extends State<PredictiveAiAnalyticsView> {
     return Scaffold(
       backgroundColor: AppColors.screenBg,
       appBar: AppBar(
+        automaticallyImplyLeading: false,
+        leading: AppNavigation.leading(context),
         title: const Text('Gemini Analytics'),
       ),
       body: SingleChildScrollView(

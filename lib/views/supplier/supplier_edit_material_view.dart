@@ -13,6 +13,7 @@ import '../../utils/material_form_defaults.dart';
 import '../../viewmodels/auth_viewmodel.dart';
 import '../../viewmodels/material_viewmodel.dart';
 import '../../viewmodels/supplier_viewmodel.dart';
+import '../../widgets/app_network_image.dart';
 
 class SupplierEditMaterialView extends StatefulWidget {
   final MaterialModel material;
@@ -27,6 +28,7 @@ class SupplierEditMaterialView extends StatefulWidget {
 class _SupplierEditMaterialViewState extends State<SupplierEditMaterialView> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _nameController;
+  late final TextEditingController _descriptionController;
   late final TextEditingController _priceController;
   late final TextEditingController _brandController;
   late final TextEditingController _gradeController;
@@ -56,6 +58,8 @@ class _SupplierEditMaterialViewState extends State<SupplierEditMaterialView> {
     super.initState();
     final material = widget.material;
     _nameController = TextEditingController(text: material.name);
+    _descriptionController =
+        TextEditingController(text: material.description ?? '');
     _priceController =
         TextEditingController(text: material.pricePerUnit.toString());
     _brandController = TextEditingController(text: material.brand ?? '');
@@ -85,6 +89,7 @@ class _SupplierEditMaterialViewState extends State<SupplierEditMaterialView> {
   @override
   void dispose() {
     _nameController.dispose();
+    _descriptionController.dispose();
     _priceController.dispose();
     _brandController.dispose();
     _gradeController.dispose();
@@ -213,6 +218,17 @@ class _SupplierEditMaterialViewState extends State<SupplierEditMaterialView> {
             ),
             const SizedBox(height: 16),
             TextFormField(
+              controller: _descriptionController,
+              maxLines: 3,
+              maxLength: 200,
+              decoration: const InputDecoration(
+                labelText: 'Description (optional)',
+                alignLabelWithHint: true,
+              ),
+              style: AppTextStyles.body,
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
               controller: _priceController,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
               decoration: const InputDecoration(
@@ -308,19 +324,19 @@ class _SupplierEditMaterialViewState extends State<SupplierEditMaterialView> {
                           gaplessPlayback: true,
                         ),
                       )
-                    : widget.material.profileImageUrl != null
-                        ? ClipRRect(
+                    : ClipRRect(
                             borderRadius: BorderRadius.circular(16),
-                            child: Image.network(
-                              widget.material.profileImageUrl!,
+                            child: AppNetworkImage(
+                              url: widget.material.profileImageUrl,
                               fit: BoxFit.cover,
                               width: double.infinity,
                               height: 120,
+                              debugLabel: 'edit:${widget.material.id}',
+                              fallback: const Icon(
+                                Icons.add_a_photo_outlined,
+                                color: FieldColors.textSecondary,
+                              ),
                             ),
-                          )
-                        : const Icon(
-                            Icons.add_a_photo_outlined,
-                            color: FieldColors.textSecondary,
                           ),
               ),
             ),
@@ -355,6 +371,7 @@ class _SupplierEditMaterialViewState extends State<SupplierEditMaterialView> {
                         widget.material.id,
                         {
                           'name': _nameController.text.trim(),
+                          'description': _descriptionController.text.trim(),
                           'price': _priceController.text.trim(),
                           'brand': _brandValue ?? '',
                           'grade': _gradeValue ?? '',
@@ -368,7 +385,7 @@ class _SupplierEditMaterialViewState extends State<SupplierEditMaterialView> {
                       );
                       if (!mounted) return;
                       if (materialVM.isSuccess) {
-                        Navigator.pop(context);
+                        Navigator.pop(context, true);
                       }
                     },
               child: materialVM.isLoading

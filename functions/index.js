@@ -19,7 +19,7 @@ const {
   onAppealCreated 
 } = require('./notifications');
 const { verifyPaymentScreenshot } = require('./payment_verification');
-const { createRfq, submitRfqBid, awardRfq } = require('./rfq');
+const { createRfq, submitRfqBid, awardRfq, onRfqJobCreated } = require('./rfq');
 const { raiseDispute, updateDispute } = require('./disputes');
 const { generateAiText, onAiJobCreated } = require('./ai_assistant');
 
@@ -43,6 +43,7 @@ exports.verifyPaymentScreenshot = verifyPaymentScreenshot;
 exports.createRfq = createRfq;
 exports.submitRfqBid = submitRfqBid;
 exports.awardRfq = awardRfq;
+exports.onRfqJobCreated = onRfqJobCreated;
 exports.raiseDispute = raiseDispute;
 exports.updateDispute = updateDispute;
 exports.generateAiText = generateAiText;

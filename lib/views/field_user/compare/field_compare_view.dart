@@ -8,6 +8,7 @@ import '../../../models/material_listing.dart';
 import '../../../services/ai_context_service.dart';
 import '../../../services/recently_viewed_service.dart';
 import '../../../theme/field_theme.dart';
+import '../../../utils/app_navigation.dart';
 import '../../../utils/currency_formatter.dart';
 import '../../../viewmodels/field_user/field_compare_viewmodel.dart';
 import '../../../viewmodels/field_user/field_session_viewmodel.dart';
@@ -159,6 +160,8 @@ class _FieldCompareViewState extends State<FieldCompareView> {
         appBar: AppBar(
           backgroundColor: _appBarNavy,
           foregroundColor: Colors.white,
+          automaticallyImplyLeading: false,
+          leading: AppNavigation.leading(context, color: Colors.white),
           iconTheme: const IconThemeData(color: Colors.white),
           title: Text(
             widget.materialName,
@@ -197,6 +200,14 @@ class _FieldCompareViewState extends State<FieldCompareView> {
                                   selectedCity: vm.cityFilter,
                                   onCityChanged: vm.setCityFilter,
                                 ),
+                              if (vm.isAiLoading ||
+                                  (vm.aiSummary != null &&
+                                      vm.aiSummary!.isNotEmpty))
+                                _CompareAiInsightBanner(
+                                  text: vm.isAiLoading
+                                      ? 'Comparing suppliers…'
+                                      : vm.aiSummary!,
+                                ),
                               Expanded(
                                 child: vm.results.isEmpty
                                     ? _CompareFilteredEmptyState(
@@ -225,7 +236,8 @@ class _FieldCompareViewState extends State<FieldCompareView> {
                                                 child: _SupplierCompareCard(
                                                   listing: listing,
                                                   badge: vm.badgeFor(listing),
-                                                  aiInsightLine: null,
+                                                  aiInsightLine:
+                                                      vm.insightLineFor(listing),
                                                   onOrder: () =>
                                                       _openPlaceOrder(listing),
                                                   onViewProfile: () =>
@@ -248,6 +260,51 @@ class _FieldCompareViewState extends State<FieldCompareView> {
                               ),
                             ],
                           ),
+      ),
+    );
+  }
+}
+
+class _CompareAiInsightBanner extends StatelessWidget {
+  const _CompareAiInsightBanner({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
+        decoration: BoxDecoration(
+          color: FieldColors.accentAmber.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(12),
+          border: const Border(
+            left: BorderSide(color: FieldColors.accentAmber, width: 3),
+          ),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Icon(
+              Icons.auto_awesome,
+              size: 16,
+              color: FieldColors.accentAmber,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                text,
+                style: FieldTypography.bodyMedium.copyWith(
+                  fontSize: 12,
+                  color: FieldColors.primaryNavy,
+                  height: 1.45,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

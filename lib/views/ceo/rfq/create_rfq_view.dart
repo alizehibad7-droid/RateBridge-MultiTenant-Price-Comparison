@@ -9,6 +9,7 @@ import '../../../constants/pakistan_cities.dart';
 import '../../../constants/route_names.dart';
 import '../../../services/plan_limit_service.dart';
 import '../../../theme/ceo_theme.dart';
+import '../../../utils/app_navigation.dart';
 import '../../../viewmodels/auth_viewmodel.dart';
 import '../../../viewmodels/ceo_viewmodel.dart';
 import '../../../viewmodels/rfq_viewmodel.dart';
@@ -67,7 +68,8 @@ class _CreateRfqViewState extends State<CreateRfqView> {
     final user = context.read<AuthViewModel>().user;
     final rfqVM = context.read<RfqViewModel>();
     final companyId = company?.id ?? user?.companyId ?? '';
-    if (companyId.isEmpty) {
+    final uid = user?.uid ?? '';
+    if (companyId.isEmpty || uid.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Company account could not be resolved.')),
       );
@@ -75,6 +77,7 @@ class _CreateRfqViewState extends State<CreateRfqView> {
     }
 
     await rfqVM.createRfq(
+      uid: uid,
       companyId: companyId,
       companyName: company?.name ?? '',
       category: _selectedCategory!,
@@ -85,21 +88,27 @@ class _CreateRfqViewState extends State<CreateRfqView> {
       requiredByDate: _requiredDate!,
     );
 
-    if (mounted) {
-      if (rfqVM.error != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(rfqVM.error!), backgroundColor: CeoColors.red),
-        );
-      } else {
-        context.pop();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Quote request published to suppliers!'),
-            backgroundColor: CeoColors.green,
-          ),
-        );
-      }
+    if (!mounted) return;
+    if (rfqVM.error != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(rfqVM.error!), backgroundColor: CeoColors.red),
+      );
+      return;
     }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Quote request published to suppliers!'),
+        backgroundColor: CeoColors.green,
+      ),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 700));
+    if (!mounted) return;
+    _leaveScreen();
+  }
+
+  void _leaveScreen() {
+    AppNavigation.pop(context);
   }
 
   @override
@@ -157,8 +166,8 @@ class _CreateRfqViewState extends State<CreateRfqView> {
                     ElevatedButton(
                       onPressed:
                           widget.fieldUser
-                              ? () => context.pop()
-                              : () => context.go(RouteNames.ceoSubscription),
+                              ? () => AppNavigation.pop(context)
+                              : () => context.push(RouteNames.ceoSubscription),
                       child: Text(widget.fieldUser ? 'GO BACK' : 'VIEW PLANS'),
                     ),
                   ],
@@ -279,21 +288,24 @@ class _CreateRfqViewState extends State<CreateRfqView> {
                     children: [
                       const CeoSectionLabel('Timeline'),
                       const SizedBox(height: 16),
-                      ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('Required By Date'),
-                        subtitle: Text(
-                          _requiredDate == null
-                              ? 'Not selected'
-                              : DateFormat(
-                                'MMM dd, yyyy',
-                              ).format(_requiredDate!),
+                      Material(
+                        color: Colors.transparent,
+                        child: ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('Required By Date'),
+                          subtitle: Text(
+                            _requiredDate == null
+                                ? 'Not selected'
+                                : DateFormat(
+                                  'MMM dd, yyyy',
+                                ).format(_requiredDate!),
+                          ),
+                          trailing: const Icon(
+                            Icons.calendar_today,
+                            color: CeoColors.amber,
+                          ),
+                          onTap: _pickDate,
                         ),
-                        trailing: const Icon(
-                          Icons.calendar_today,
-                          color: CeoColors.amber,
-                        ),
-                        onTap: _pickDate,
                       ),
                     ],
                   ),

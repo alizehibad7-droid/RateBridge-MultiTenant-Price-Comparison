@@ -1,7 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../theme/field_theme.dart';
 import '../services/ai_context_service.dart';
+import '../utils/app_exception.dart';
+import '../viewmodels/ai_viewmodel.dart';
 
 class _ChatMsg {
   final String text;
@@ -60,15 +63,25 @@ class _AiAssistantSheetState extends State<AiAssistantSheet> {
     });
     _scrollToBottom();
 
-    // AI Service Removed
-    await Future.delayed(const Duration(seconds: 1));
+    String reply;
+    try {
+      final ctx = context.read<AiContextService>();
+      reply = await context.read<AiViewModel>().askAssistant(
+            question: question.trim(),
+            screenName: ctx.currentScreenName,
+            screenData: ctx.currentScreenData,
+          );
+    } catch (e, st) {
+      debugPrint('AI assistant request failed: $e');
+      debugPrint('$st');
+      reply = e is AppException
+          ? e.message
+          : 'The assistant could not answer that just now. Please try again.';
+    }
 
     if (!mounted) return;
     setState(() {
-      _messages.add(_ChatMsg(
-        "AI Assistant is currently unavailable.",
-        false,
-      ));
+      _messages.add(_ChatMsg(reply, false));
       _isResponding = false;
     });
     _scrollToBottom();

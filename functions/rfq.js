@@ -30,21 +30,23 @@ function requireValue(value, label) {
 }
 
 /**
- * Returns the effective plan ID based on subscription status and expiry.
- * Hierarchy: advanced > premium > basic > free
+ * Matches PlanLimitService.companyPlan: company.plan is the default,
+ * and a subscription plan only wins when that subscription is active.
  */
 function effectivePlan(companyData, subscriptionData) {
-  const rawPlan = subscriptionData ? (normalize(subscriptionData.plan) || 'free') : (normalize(companyData.plan) || 'free');
-  
-  if (!subscriptionData) return rawPlan;
+  const companyPlan = normalize(companyData?.plan) || 'free';
+  if (!subscriptionData) return companyPlan;
 
   const status = normalize(subscriptionData.status);
   const expiresAt = subscriptionData.expiresAt?.toDate?.();
   const active =
     (status === 'active' || status === 'admin_granted') &&
     (!expiresAt || expiresAt.getTime() >= Date.now());
-    
-  return active ? rawPlan : 'free';
+
+  if (active && subscriptionData.plan) {
+    return normalize(subscriptionData.plan) || companyPlan;
+  }
+  return companyPlan;
 }
 
 /**
@@ -59,6 +61,7 @@ function hasAccess(plan, requiredPlan) {
 }
 
 function isActiveSupplier(supplier) {
+  if (!supplier) return false;
   const status = normalize(supplier.status);
   return status === 'active' || status === 'approved';
 }
@@ -74,6 +77,7 @@ function stringList(value) {
 }
 
 function supplierMatches(supplier, category, city) {
+  if (!supplier) return false;
   const categories = stringList(
     supplier.declaredCategories?.length
       ? supplier.declaredCategories
@@ -88,13 +92,46 @@ function supplierMatches(supplier, category, city) {
 function notificationData(userId, type, title, body, data) {
   return {
     userId,
+    recipientUserId: userId,
     type,
     title,
     body,
+    message: body,
     data,
     isRead: false,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
   };
+}
+
+function unwrapCallable(data, context) {
+  const looksLikeRequest =
+    data &&
+    typeof data === 'object' &&
+    data.data != null &&
+    typeof data.data === 'object' &&
+    !Array.isArray(data.data) &&
+    (Object.prototype.hasOwnProperty.call(data, 'auth') ||
+      Object.prototype.hasOwnProperty.call(data, 'rawRequest'));
+  if (looksLikeRequest) {
+    return { payload: data.data, auth: data.auth || null };
+  }
+  return { payload: data || {}, auth: (context && context.auth) || null };
+}
+
+function isHttpsError(error) {
+  if (!error) return false;
+  if (error instanceof functions.https.HttpsError) return true;
+  return typeof error.code === 'string' && error.httpErrorCode != null;
+}
+
+function rethrowHttps(error, fallbackMessage) {
+  if (isHttpsError(error)) throw error;
+  console.error(fallbackMessage, error);
+  const detail = error && error.message ? String(error.message) : '';
+  throw new functions.https.HttpsError(
+    'unknown',
+    detail ? `${fallbackMessage} (${detail})` : fallbackMessage,
+  );
 }
 
 async function authenticatedUser(context) {
@@ -118,111 +155,172 @@ async function authenticatedUser(context) {
   return { uid: context.auth.uid, user };
 }
 
+async function performCreateRfq({ uid, user, payload }) {
+    const role = normalizeRole(user.role);
+    if (role !== 'ceo' && role !== 'fielduser') {
+      throw new functions.https.HttpsError(
+        'permission-denied',
+        'Only company users can create quote requests.',
+      );
+    }
+
+    const companyId = requireValue(payload.companyId, 'Company');
+    if (String(user.companyId || '').trim() !== companyId) {
+      throw new functions.https.HttpsError(
+        'permission-denied',
+        'You cannot create a quote request for another company.',
+      );
+    }
+
+    const companyRef = db.collection('companies').doc(companyId);
+    const [companyDoc, subscriptionDoc] = await Promise.all([
+      companyRef.get(),
+      db.collection('subscriptions').doc(companyId).get(),
+    ]);
+    if (!companyDoc.exists) {
+      throw new functions.https.HttpsError('not-found', 'Company not found.');
+    }
+    const company = companyDoc.data();
+    const plan = effectivePlan(
+      company,
+      subscriptionDoc.exists ? subscriptionDoc.data() : null,
+    );
+
+    if (!hasAccess(plan, 'premium')) {
+      throw new functions.https.HttpsError(
+        'failed-precondition',
+        'Bulk Quote Requests are available on Premium and Advanced plans. Please upgrade to continue.',
+      );
+    }
+
+    const category = requireValue(payload.category, 'Category');
+    const materialDescription = requireValue(
+      payload.materialDescription,
+      'Material description',
+    );
+    const unit = requireValue(payload.unit, 'Unit');
+    const city = requireValue(payload.city, 'Delivery city');
+    const quantity = Number(payload.quantity);
+    const requiredByMillis = Number(payload.requiredByMillis);
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      throw new functions.https.HttpsError(
+        'invalid-argument',
+        'Quantity must be greater than zero.',
+      );
+    }
+    if (!Number.isFinite(requiredByMillis)) {
+      throw new functions.https.HttpsError(
+        'invalid-argument',
+        'A valid required-by date is required.',
+      );
+    }
+
+    const rfqRef = db.collection('rfqs').doc();
+    await rfqRef.set({
+      companyId,
+      companyName: company.name || company.companyName || payload.companyName || 'Company',
+      category,
+      materialDescription,
+      quantity,
+      unit,
+      city,
+      requiredByDate: admin.firestore.Timestamp.fromMillis(requiredByMillis),
+      status: 'open',
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdByUid: uid,
+      createdByName: user.name || company.name || 'Company user',
+    });
+
+    let matchedSupplierCount = 0;
+    try {
+      const suppliers = await db.collection('suppliers').get();
+      const matches = suppliers.docs.filter((doc) => {
+        const supplier = doc.data();
+        return canSupplierBid(supplier) && supplierMatches(supplier, category, city);
+      });
+      matchedSupplierCount = matches.length;
+
+      if (matches.length > 0) {
+        const writer = db.bulkWriter();
+        for (const supplierDoc of matches) {
+          writer.set(
+            db.collection('notifications').doc(),
+            notificationData(
+              supplierDoc.id,
+              'rfq',
+              'New RFQ Available',
+              `${company.name || 'A company'} is looking for ${category}. Submit your bid now!`,
+              {
+                rfqId: rfqRef.id,
+                companyName: company.name || 'Company',
+              },
+            ),
+          );
+        }
+        await writer.close();
+      }
+    } catch (notifyError) {
+      console.error('RFQ supplier notifications failed (non-fatal):', notifyError);
+    }
+
+    return { rfqId: rfqRef.id, matchedSupplierCount };
+}
+
 exports.createRfq = functions.https.onCall(async (data, context) => {
-  const { uid, user } = await authenticatedUser(context);
-  const role = normalizeRole(user.role);
-  if (role !== 'ceo' && role !== 'fielduser') {
-    throw new functions.https.HttpsError(
-      'permission-denied',
-      'Only company users can create quote requests.',
-    );
+  try {
+    const { payload, auth } = unwrapCallable(data, context);
+    const { uid, user } = await authenticatedUser({ auth });
+    return await performCreateRfq({ uid, user, payload });
+  } catch (error) {
+    rethrowHttps(error, 'Could not publish the quote request. Please try again.');
   }
-
-  const companyId = requireValue(data.companyId, 'Company');
-  if (user.companyId !== companyId) {
-    throw new functions.https.HttpsError(
-      'permission-denied',
-      'You cannot create a quote request for another company.',
-    );
-  }
-
-  const companyRef = db.collection('companies').doc(companyId);
-  const [companyDoc, subscriptionDoc] = await Promise.all([
-    companyRef.get(),
-    db.collection('subscriptions').doc(companyId).get(),
-  ]);
-  if (!companyDoc.exists) {
-    throw new functions.https.HttpsError('not-found', 'Company not found.');
-  }
-  const company = companyDoc.data();
-  const plan = effectivePlan(
-    company,
-    subscriptionDoc.exists ? subscriptionDoc.data() : null,
-  );
-  
-  // RFQ requires Premium or Advanced
-  if (!hasAccess(plan, 'premium')) {
-    throw new functions.https.HttpsError(
-      'failed-precondition',
-      'Bulk Quote Requests are available on Premium and Advanced plans. Please upgrade to continue.',
-    );
-  }
-
-  const category = requireValue(data.category, 'Category');
-  const materialDescription = requireValue(
-    data.materialDescription,
-    'Material description',
-  );
-  const unit = requireValue(data.unit, 'Unit');
-  const city = requireValue(data.city, 'Delivery city');
-  const quantity = Number(data.quantity);
-  const requiredByMillis = Number(data.requiredByMillis);
-  if (!Number.isFinite(quantity) || quantity <= 0) {
-    throw new functions.https.HttpsError(
-      'invalid-argument',
-      'Quantity must be greater than zero.',
-    );
-  }
-  if (!Number.isFinite(requiredByMillis)) {
-    throw new functions.https.HttpsError(
-      'invalid-argument',
-      'A valid required-by date is required.',
-    );
-  }
-
-  const rfqRef = db.collection('rfqs').doc();
-  await rfqRef.set({
-    companyId,
-    companyName: company.name || company.companyName || 'Company',
-    category,
-    materialDescription,
-    quantity,
-    unit,
-    city,
-    requiredByDate: admin.firestore.Timestamp.fromMillis(requiredByMillis),
-    status: 'open',
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    createdByUid: uid,
-    createdByName: user.name || company.name || 'Company user',
-  });
-
-  const suppliers = await db.collection('suppliers').get();
-  const matches = suppliers.docs.filter((doc) => {
-    const supplier = doc.data();
-    return canSupplierBid(supplier) && supplierMatches(supplier, category, city);
-  });
-
-  const writer = db.bulkWriter();
-  for (const supplierDoc of matches) {
-    const notificationRef = db.collection('notifications').doc();
-    writer.set(
-      notificationRef,
-      notificationData(
-        supplierDoc.id,
-        'rfq',
-        'New RFQ Available',
-        `${company.name || 'A company'} is looking for ${category}. Submit your bid now!`,
-        {
-          rfqId: rfqRef.id,
-          companyName: company.name || 'Company',
-        },
-      ),
-    );
-  }
-  await writer.close();
-
-  return { rfqId: rfqRef.id, matchedSupplierCount: matches.length };
 });
+
+// Firestore trigger — no public HTTP/IAM. Flutter web callables return
+// code=internal/details=null (403 invoker) on this project; see onAiJobCreated.
+exports.onRfqJobCreated = functions.firestore
+  .document('rfq_jobs/{jobId}')
+  .onCreate(async (snap) => {
+    const job = snap.data() || {};
+    if (job.status && job.status !== 'pending') return null;
+
+    try {
+      const uid = requireValue(job.uid, 'User');
+      const userDoc = await db.collection('users').doc(uid).get();
+      if (!userDoc.exists) {
+        throw new functions.https.HttpsError(
+          'permission-denied',
+          'User profile not found.',
+        );
+      }
+      const user = userDoc.data();
+      if (normalize(user.status) !== 'active') {
+        throw new functions.https.HttpsError(
+          'permission-denied',
+          'Your account is not active.',
+        );
+      }
+
+      const result = await performCreateRfq({ uid, user, payload: job });
+      await snap.ref.update({
+        status: 'complete',
+        rfqId: result.rfqId,
+        matchedSupplierCount: result.matchedSupplierCount || 0,
+        completedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    } catch (error) {
+      console.error('onRfqJobCreated failed:', error);
+      await snap.ref.update({
+        status: 'error',
+        error:
+          (isHttpsError(error) && error.message) ||
+          error.message ||
+          'Could not publish the quote request. Please try again.',
+        completedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    }
+    return null;
+  });
 
 exports.submitRfqBid = functions.https.onCall(async (data, context) => {
   const { uid, user } = await authenticatedUser(context);

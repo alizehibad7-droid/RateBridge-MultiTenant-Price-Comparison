@@ -1,26 +1,35 @@
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import '../../constants/app_constants.dart';
 import '../../models/price_history_model.dart';
 import '../../models/subscription_model.dart';
 import '../../repositories/company_repository.dart';
 import '../../repositories/material_repository.dart';
+import '../../services/firestore_service.dart';
 
 /// Price history charts for field users.
 class FieldTrendsViewModel extends ChangeNotifier {
   final MaterialRepository _materialRepo;
   final CompanyRepository _companyRepo;
+  final FirestoreService _firestore;
 
   bool _isLoading = false;
+  bool _isAiLoading = false;
   String? _errorMessage;
   List<PriceHistoryModel> _history = [];
   String _trendDirection = 'stable';
   String? _materialName;
   String? _supplierName;
+  String? _aiInsight;
+  int _aiGeneration = 0;
 
   FieldTrendsViewModel(
     this._materialRepo,
     this._companyRepo,
+    this._firestore,
   );
 
   bool get isLoading => _isLoading;
@@ -30,16 +39,17 @@ class FieldTrendsViewModel extends ChangeNotifier {
   String? get materialName => _materialName;
   String? get supplierName => _supplierName;
 
-  bool get showAiCard => false;
-  bool get isAiLoading => false;
-  String? get aiInsight => null;
+  bool get showAiCard =>
+      (_aiInsight != null && _aiInsight!.isNotEmpty) || _isAiLoading;
+  bool get isAiLoading => _isAiLoading;
+  String? get aiInsight => _aiInsight;
 
   int get distinctMonthCount => _history
       .map((h) => '${h.timestamp.year}-${h.timestamp.month.toString().padLeft(2, '0')}')
       .toSet()
       .length;
 
-  bool get hasEnoughDataForAi => false;
+  bool get hasEnoughDataForAi => chartPoints.length >= 3;
 
   List<PriceHistoryModel> get chartPoints {
     final monthly = _monthlyAverages(_history);
@@ -91,6 +101,9 @@ class FieldTrendsViewModel extends ChangeNotifier {
     _trendDirection = 'stable';
     _materialName = null;
     _supplierName = null;
+    _aiInsight = null;
+    _isAiLoading = false;
+    _aiGeneration++;
     notifyListeners();
 
     try {
@@ -148,6 +161,7 @@ class FieldTrendsViewModel extends ChangeNotifier {
       }
 
       _computeTrendDirection();
+      _requestAiInsight();
     } catch (e) {
       _errorMessage = e.toString();
     } finally {
@@ -170,6 +184,63 @@ class FieldTrendsViewModel extends ChangeNotifier {
       _trendDirection = 'down';
     } else {
       _trendDirection = 'stable';
+    }
+  }
+
+  Future<void> _requestAiInsight() async {
+    final gen = ++_aiGeneration;
+    if (!hasEnoughDataForAi) {
+      _aiInsight = null;
+      _isAiLoading = false;
+      notifyListeners();
+      return;
+    }
+
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null || uid.isEmpty) {
+      debugPrint('Trend AI skipped: user is signed out');
+      return;
+    }
+
+    _isAiLoading = true;
+    notifyListeners();
+
+    final points = chartPoints;
+    final dateFmt = DateFormat('MMM yyyy');
+    final series = points
+        .map(
+          (p) =>
+              '${dateFmt.format(p.timestamp)}: PKR ${p.price.toStringAsFixed(0)}',
+        )
+        .join('\n');
+    final material = _materialName ?? 'this material';
+    final supplier = _supplierName ?? 'suppliers';
+    final prompt = '''
+You are RateBridge Assistant for a Pakistan construction-materials buyer.
+
+Material: $material
+Supplier: $supplier
+Computed trend: $_trendDirection
+Price history (PKR):
+$series
+
+Write 2 short sentences for a field user: what the trend means and whether buying now or waiting is more reasonable. Use only this data. Do not invent prices.
+''';
+
+    try {
+      final text = await _firestore.generateAiText(uid: uid, prompt: prompt);
+      if (gen != _aiGeneration) return;
+      _aiInsight = text.trim();
+      debugPrint('Trend AI complete (${_aiInsight!.length} chars)');
+    } catch (e) {
+      debugPrint('Trend AI failed: $e');
+      if (gen != _aiGeneration) return;
+      _aiInsight = null;
+    } finally {
+      if (gen == _aiGeneration) {
+        _isAiLoading = false;
+        notifyListeners();
+      }
     }
   }
 

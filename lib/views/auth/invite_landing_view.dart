@@ -7,6 +7,7 @@ import '../../viewmodels/invite_viewmodel.dart';
 import '../../services/firestore_service.dart';
 import '../../constants/route_names.dart';
 import '../../constants/app_colors.dart';
+import '../../utils/app_navigation.dart';
 
 class InviteLandingView extends StatefulWidget {
   final String companyId;
@@ -122,6 +123,8 @@ class _InviteLandingViewState extends State<InviteLandingView> {
     return Scaffold(
       backgroundColor: AppColors.screenBg,
       appBar: AppBar(
+        automaticallyImplyLeading: false,
+        leading: AppNavigation.leading(context),
         title: const Text('Team Invitation'),
       ),
       body: Center(

@@ -99,7 +99,7 @@ void main() async {
           ),
           ChangeNotifierProvider<AiViewModel>(
             create: (context) => AiViewModel(
-              context.read<CloudFunctionService>(),
+              context.read<FirestoreService>(),
             ),
           ),
           Provider<VoiceSearchService>(create: (_) => VoiceSearchService()),
@@ -299,32 +299,36 @@ void main() async {
                     previous ?? FieldCatalogViewModel(mat),
           ),
 
-          ChangeNotifierProxyProvider<
+          ChangeNotifierProxyProvider2<
             MaterialRepository,
+            FirestoreService,
             FieldCompareViewModel
           >(
             create:
                 (context) => FieldCompareViewModel(
                   context.read<MaterialRepository>(),
+                  context.read<FirestoreService>(),
                 ),
             update:
-                (context, mat, previous) =>
-                    previous ?? FieldCompareViewModel(mat),
+                (context, mat, firestore, previous) =>
+                    previous ?? FieldCompareViewModel(mat, firestore),
           ),
 
-          ChangeNotifierProxyProvider2<
+          ChangeNotifierProxyProvider3<
             MaterialRepository,
             CompanyRepository,
+            FirestoreService,
             FieldTrendsViewModel
           >(
             create:
                 (context) => FieldTrendsViewModel(
                   context.read<MaterialRepository>(),
                   context.read<CompanyRepository>(),
+                  context.read<FirestoreService>(),
                 ),
             update:
-                (context, mat, comp, previous) =>
-                    previous ?? FieldTrendsViewModel(mat, comp),
+                (context, mat, comp, firestore, previous) =>
+                    previous ?? FieldTrendsViewModel(mat, comp, firestore),
           ),
 
           ChangeNotifierProxyProvider4<

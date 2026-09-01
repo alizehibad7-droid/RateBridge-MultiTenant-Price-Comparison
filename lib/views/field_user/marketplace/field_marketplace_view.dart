@@ -12,6 +12,7 @@ import '../../../theme/field_theme.dart';
 import '../../../utils/currency_formatter.dart';
 import '../../../viewmodels/field_user/field_catalog_viewmodel.dart';
 import '../../../viewmodels/field_user/field_session_viewmodel.dart';
+import '../../../widgets/app_network_image.dart';
 import '../widgets/field_material_card.dart';
 
 class FieldMarketplaceView extends StatefulWidget {
@@ -90,10 +91,8 @@ class _FieldMarketplaceViewState extends State<FieldMarketplaceView> {
   void _openCompare(MaterialModel material) {
     context.read<RecentlyViewedService>().persistView(material.id);
     context.push(
-      RouteNames.fieldCompare.replaceFirst(
-        ':materialId',
-        Uri.encodeComponent(material.name),
-      ),
+      RouteNames.fieldCompareOf(material.name),
+      extra: material.name,
     );
   }
 
@@ -193,16 +192,20 @@ class _FieldMarketplaceViewState extends State<FieldMarketplaceView> {
               ),
             ),
             Expanded(
-              child: catalog.errorMessage != null && catalog.materials.isEmpty
+              child: catalog.errorMessage != null &&
+                      catalog.catalogMaterials.isEmpty
                   ? _MarketplaceErrorState(
                       message: catalog.errorMessage!,
                       onRetry: _load,
                     )
-                  : catalog.isLoading && catalog.materials.isEmpty
+                  : catalog.isCatalogLoading
                       ? const _MarketplaceGridSkeleton()
                       : catalog.materials.isEmpty
                           ? _MarketplaceEmptyState(
-                              onClearFilters: catalog.clearFilters,
+                              categoryName: catalog.categoryFilter,
+                              onClearFilters: catalog.categoryFilter != null
+                                  ? catalog.clearFilters
+                                  : null,
                             )
                           : RefreshIndicator(
                               color: FieldColors.primaryNavy,
@@ -632,16 +635,13 @@ class _MaterialImageArea extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final url = material.profileImageUrl;
-    if (url != null && url.isNotEmpty) {
-      return Image.network(
-        url,
-        fit: BoxFit.cover,
-        width: double.infinity,
-        errorBuilder: (_, __, ___) => _fallback(),
-      );
-    }
-    return _fallback();
+    return AppNetworkImage(
+      url: material.profileImageUrl,
+      fit: BoxFit.cover,
+      width: double.infinity,
+      debugLabel: 'marketplace:${material.id}',
+      fallback: _fallback(),
+    );
   }
 
   Widget _fallback() {
@@ -856,12 +856,19 @@ class _MarketplaceErrorState extends StatelessWidget {
 }
 
 class _MarketplaceEmptyState extends StatelessWidget {
-  final VoidCallback onClearFilters;
+  final String? categoryName;
+  final VoidCallback? onClearFilters;
 
-  const _MarketplaceEmptyState({required this.onClearFilters});
+  const _MarketplaceEmptyState({
+    this.categoryName,
+    this.onClearFilters,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final category = categoryName?.trim();
+    final hasCategory = category != null && category.isNotEmpty;
+
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(FieldSpacing.xl),
@@ -869,13 +876,16 @@ class _MarketplaceEmptyState extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              Icons.search_off_outlined,
+              Icons.inventory_2_outlined,
               size: 64,
               color: FieldColors.textMuted.withValues(alpha: 0.7),
             ),
             const SizedBox(height: FieldSpacing.md),
             Text(
-              'No materials found',
+              hasCategory
+                  ? 'No materials available in this category'
+                  : 'No materials available',
+              textAlign: TextAlign.center,
               style: FieldTypography.titleMedium.copyWith(
                 color: FieldColors.primaryNavy,
                 fontWeight: FontWeight.w700,
@@ -883,21 +893,25 @@ class _MarketplaceEmptyState extends StatelessWidget {
             ),
             const SizedBox(height: FieldSpacing.sm),
             Text(
-              'Try a different category or check back later',
+              hasCategory
+                  ? 'There are no listings for $category yet. Try another category or check back later.'
+                  : 'Materials will appear here once suppliers add them.',
               textAlign: TextAlign.center,
               style: FieldTypography.bodyMedium.copyWith(
                 color: FieldColors.textSecondary,
               ),
             ),
-            const SizedBox(height: FieldSpacing.lg),
-            FilledButton(
-              onPressed: onClearFilters,
-              style: FilledButton.styleFrom(
-                backgroundColor: FieldColors.accentAmber,
-                foregroundColor: FieldColors.primaryNavy,
+            if (onClearFilters != null) ...[
+              const SizedBox(height: FieldSpacing.lg),
+              FilledButton(
+                onPressed: onClearFilters,
+                style: FilledButton.styleFrom(
+                  backgroundColor: FieldColors.accentAmber,
+                  foregroundColor: FieldColors.primaryNavy,
+                ),
+                child: const Text('View all materials'),
               ),
-              child: const Text('Clear filters'),
-            ),
+            ],
           ],
         ),
       ),

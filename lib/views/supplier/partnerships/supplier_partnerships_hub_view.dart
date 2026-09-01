@@ -7,6 +7,7 @@ import '../../../constants/route_names.dart';
 import '../../../models/company_model.dart';
 import '../../../models/partnership_request_model.dart';
 import '../../../theme/supplier_theme.dart';
+import '../../../utils/app_navigation.dart';
 import '../../../utils/currency_formatter.dart';
 import '../../../viewmodels/supplier_viewmodel.dart';
 import '../../../widgets/supplier/supplier_async_states.dart';
@@ -57,6 +58,8 @@ class _SupplierPartnershipsHubViewState
     return Scaffold(
       backgroundColor: FieldColors.screenBackground,
       appBar: AppBar(
+        automaticallyImplyLeading: false,
+        leading: AppNavigation.leading(context),
         title: const Text('Companies & Partnerships'),
         bottom: TabBar(
           controller: _tabController,
@@ -264,7 +267,7 @@ class _ActivePartnerCard extends StatelessWidget {
                 child: OutlinedButton(
                   onPressed: () {
                     vm.openCompanyContext(company.id);
-                    context.go(RouteNames.supplierOrders);
+                    context.push(RouteNames.supplierOrders);
                   },
                   style: OutlinedButton.styleFrom(
                     minimumSize: const Size(0, 36),
@@ -278,7 +281,7 @@ class _ActivePartnerCard extends StatelessWidget {
                 child: OutlinedButton(
                   onPressed: () {
                     vm.openCompanyContext(company.id);
-                    context.go(RouteNames.supplierChat);
+                    context.push(RouteNames.supplierChat);
                   },
                   style: OutlinedButton.styleFrom(
                     minimumSize: const Size(0, 36),

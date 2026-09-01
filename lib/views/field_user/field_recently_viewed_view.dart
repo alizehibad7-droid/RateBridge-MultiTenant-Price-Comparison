@@ -66,10 +66,8 @@ class _FieldRecentlyViewedViewState extends State<FieldRecentlyViewedView> {
   void _openCompare(MaterialModel material) {
     context.read<RecentlyViewedService>().persistView(material.id);
     context.push(
-      RouteNames.fieldCompare.replaceFirst(
-        ':materialId',
-        Uri.encodeComponent(material.name),
-      ),
+      RouteNames.fieldCompareOf(material.name),
+      extra: material.name,
     );
   }
 

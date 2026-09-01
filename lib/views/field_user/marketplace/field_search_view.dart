@@ -11,6 +11,7 @@ import '../../../models/category_model.dart';
 import '../../../models/material_model.dart';
 import '../../../services/recently_viewed_service.dart';
 import '../../../theme/field_theme.dart';
+import '../../../utils/app_navigation.dart';
 import '../../../viewmodels/field_user/field_catalog_viewmodel.dart';
 import '../../../viewmodels/field_user/field_session_viewmodel.dart';
 import '../widgets/field_material_card.dart';
@@ -100,10 +101,8 @@ class _FieldSearchViewState extends State<FieldSearchView> {
   void _openCompare(MaterialModel material) {
     context.read<RecentlyViewedService>().persistView(material.id);
     context.push(
-      RouteNames.fieldCompare.replaceFirst(
-        ':materialId',
-        Uri.encodeComponent(material.name),
-      ),
+      RouteNames.fieldCompareOf(material.name),
+      extra: material.name,
     );
   }
 
@@ -144,11 +143,7 @@ class _FieldSearchViewState extends State<FieldSearchView> {
                 ),
                 child: Row(
                   children: [
-                    IconButton(
-                      onPressed: () => context.pop(),
-                      icon: const Icon(Icons.arrow_back),
-                      color: FieldColors.primaryNavy,
-                    ),
+                    AppBackButton(color: FieldColors.primaryNavy),
                     Expanded(
                       child: TextField(
                         controller: _controller,

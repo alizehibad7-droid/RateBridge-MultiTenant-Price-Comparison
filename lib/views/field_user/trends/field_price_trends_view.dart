@@ -12,6 +12,7 @@ import '../../../models/price_history_model.dart';
 import '../../../repositories/material_repository.dart';
 import '../../../services/ai_context_service.dart';
 import '../../../theme/field_theme.dart';
+import '../../../utils/app_navigation.dart';
 import '../../../utils/currency_formatter.dart';
 import '../../../utils/firestore_seed.dart';
 import '../../../viewmodels/field_user/field_session_viewmodel.dart';
@@ -258,19 +259,13 @@ class _FieldPriceTrendsViewState extends State<FieldPriceTrendsView> {
   void _openCompare(FieldTrendsViewModel vm) {
     final materialName = vm.materialName ?? widget.materialId;
     context.push(
-      RouteNames.fieldCompare.replaceFirst(
-        ':materialId',
-        Uri.encodeComponent(materialName),
-      ),
+      RouteNames.fieldCompareOf(materialName),
+      extra: materialName,
     );
   }
 
   void _browseMaterials() {
-    if (context.canPop()) {
-      context.pop();
-    } else {
-      context.push(RouteNames.fieldMarketplace);
-    }
+    context.push(RouteNames.fieldMarketplace);
   }
 
   Future<void> _seedTrendData() async {
@@ -393,6 +388,8 @@ class _FieldPriceTrendsViewState extends State<FieldPriceTrendsView> {
           foregroundColor: Colors.white,
           elevation: 0,
           scrolledUnderElevation: 0,
+          automaticallyImplyLeading: false,
+          leading: AppNavigation.leading(context, color: Colors.white),
           iconTheme: const IconThemeData(color: Colors.white),
           title: Text(
             materialLabel,
@@ -448,10 +445,9 @@ class _FieldPriceTrendsViewState extends State<FieldPriceTrendsView> {
                                 rangeLabel: _selectedRange.displayLabel,
                                 points: chartPoints,
                                 showInsightWarning: chartPoints.length < 3,
-                                insightText: vm.hasEnoughDataForAi &&
-                                        vm.showAiCard
-                                    ? vm.aiInsight
-                                    : null,
+                                insightText: vm.isAiLoading
+                                    ? 'Analyzing this trend…'
+                                    : vm.aiInsight,
                               ),
                               _PriceStatisticsCard(
                                 stats: stats,

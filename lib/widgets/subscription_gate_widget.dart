@@ -123,7 +123,7 @@ class SubscriptionGateWidget extends StatelessWidget {
                                 borderRadius: BorderRadius.circular(12),
                               ),
                             ),
-                            onPressed: () => context.go(RouteNames.ceoSubscription),
+                            onPressed: () => context.push(RouteNames.ceoSubscription),
                             child: const Text('Upgrade Now'),
                           ),
                         )

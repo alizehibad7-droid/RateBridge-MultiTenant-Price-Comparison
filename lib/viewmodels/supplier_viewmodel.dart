@@ -212,6 +212,19 @@ class SupplierViewModel extends ChangeNotifier {
     return sorted.take(3).toList();
   }
 
+  MaterialModel? materialById(String id) {
+    if (id.isEmpty) return null;
+    for (final material in _materials) {
+      if (material.id == id) return material;
+    }
+    return null;
+  }
+
+  Future<MaterialModel?> fetchMaterialById(String id) {
+    if (id.isEmpty) return Future.value(null);
+    return _materialRepo.getMaterialById(id);
+  }
+
   double get monthlyEarningsTotal => netEarningsForMonth(monthKey());
   int get completedThisMonth => _orders.where((o) => o.status == 'confirmed' && o.createdAt.month == DateTime.now().month).length;
 
@@ -609,7 +622,16 @@ class SupplierViewModel extends ChangeNotifier {
     _materialsSubscription = _db.collection('companies').doc(companyId).collection('materials').where('supplierId', isEqualTo: _supplierUid).snapshots().listen((snap) {
           _materials = snap.docs.map((d) {
             final data = Map<String, dynamic>.from(d.data())..putIfAbsent('id', () => d.id);
-            return MaterialModel.fromMap(data);
+            final material = MaterialModel.fromMap(data);
+            assert(() {
+              debugPrint(
+                '[Materials] id=${material.id} name=${material.name} '
+                'raw.profileImageUrl=${data['profileImageUrl']} '
+                'parsed=${material.profileImageUrl}',
+              );
+              return true;
+            }());
+            return material;
           }).toList();
           _materialsInitialized = true; _checkDashboardReady(); notifyListeners();
         });

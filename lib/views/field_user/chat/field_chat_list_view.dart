@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../../../constants/route_names.dart';
 import '../../../models/chat_thread_model.dart';
 import '../../../theme/field_theme.dart';
+import '../../../utils/app_navigation.dart';
 import '../../../viewmodels/field_user/field_chat_viewmodel.dart';
 import '../../../viewmodels/field_user/field_session_viewmodel.dart';
 import '../widgets/field_async_states.dart';
@@ -62,7 +63,12 @@ class _FieldChatListViewState extends State<FieldChatListView> {
       data: FieldTheme.theme,
       child: Scaffold(
         backgroundColor: FieldColors.screenBackground,
-        appBar: const FieldAppBar(title: 'Messages'),
+        appBar: AppBar(
+          automaticallyImplyLeading: false,
+          leading: AppNavigation.leading(context),
+          titleSpacing: AppNavigation.canPop(context) ? 4 : 20,
+          title: const Text('Messages'),
+        ),
         body: vm.errorMessage != null && vm.threads.isEmpty
             ? FieldErrorState(
                 title: 'Could not load messages',

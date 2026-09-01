@@ -105,7 +105,7 @@ class _SupplierOrdersViewState extends State<SupplierOrdersView>
           }
         }).toList();
 
-    if (viewModel.isLoading && filteredOrders.isEmpty) {
+    if (viewModel.isLoading && viewModel.orders.isEmpty) {
       return const SupplierListSkeleton(itemCount: 4, itemHeight: 160);
     }
 

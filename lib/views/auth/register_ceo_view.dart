@@ -8,6 +8,7 @@ import '../../constants/ceo_registration_options.dart';
 import '../../constants/pakistan_cities.dart';
 import '../../constants/route_names.dart';
 import '../../utils/app_theme.dart';
+import '../../utils/app_navigation.dart';
 import '../../utils/chat_image_utils.dart';
 import '../../utils/pakistan_validators.dart';
 import '../../viewmodels/auth_viewmodel.dart';
@@ -219,17 +220,13 @@ class _RegisterCeoViewState extends State<RegisterCeoView> {
     return Scaffold(
       backgroundColor: AppColors.screenBg,
       appBar: AppBar(
-        leading: BackButton(
+        leading: AppBackButton(
           onPressed: () {
             if (_currentStep > 0) {
               _previousStep();
               return;
             }
-            if (context.canPop()) {
-              context.pop();
-            } else {
-              context.go(RouteNames.roleSelection);
-            }
+            AppNavigation.pop(context);
           },
         ),
         title: Text('Step ${_currentStep + 1} of $_totalSteps'),

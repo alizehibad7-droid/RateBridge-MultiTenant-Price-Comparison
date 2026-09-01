@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../viewmodels/chat_viewmodel.dart';
 import '../widgets/chat_bubble_widget.dart';
+import '../utils/app_navigation.dart';
 
 class ChatThreadView extends StatefulWidget {
   final String orderId;
@@ -46,6 +47,8 @@ class _ChatThreadViewState extends State<ChatThreadView> {
     return Scaffold(
       backgroundColor: const Color(0xFF0F172A),
       appBar: AppBar(
+        automaticallyImplyLeading: false,
+        leading: AppNavigation.leading(context, color: Colors.white),
         backgroundColor: const Color(0xFF1E293B),
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

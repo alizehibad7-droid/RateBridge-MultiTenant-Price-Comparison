@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../services/firebase_auth_service.dart';
 import '../../constants/app_colors.dart';
 import '../../widgets/auth/auth_widgets.dart';
+import '../../utils/app_navigation.dart';
 
 class ForgotPasswordView extends StatefulWidget {
   const ForgotPasswordView({super.key});
@@ -65,6 +66,8 @@ class _ForgotPasswordViewState extends State<ForgotPasswordView> {
     return Scaffold(
       backgroundColor: AppColors.screenBg,
       appBar: AppBar(
+        automaticallyImplyLeading: false,
+        leading: AppNavigation.leading(context),
         title: const Text('Reset Credentials'),
       ),
       body: SafeArea(

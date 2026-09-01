@@ -3,6 +3,8 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
+import 'app_navigation.dart';
+
 /// In-memory image selected for chat upload (works on web and mobile).
 class PendingChatImage {
   final Uint8List bytes;
@@ -101,6 +103,8 @@ class _ChatFullscreenImagePage extends StatelessWidget {
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
+        automaticallyImplyLeading: false,
+        leading: AppNavigation.leading(context, color: Colors.white),
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
         elevation: 0,

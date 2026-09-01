@@ -34,7 +34,7 @@ class CeoNavBar extends StatelessWidget {
         currentIndex: currentIndex,
         onTap: (i) {
           if (i == currentIndex) return;
-          context.go(_routes[i]);
+          context.push(_routes[i]);
         },
         type: BottomNavigationBarType.fixed,
         selectedItemColor: AdminColors.navy,

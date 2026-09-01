@@ -10,6 +10,7 @@ import '../../theme/supplier_theme.dart';
 import '../../constants/route_names.dart';
 import '../../utils/currency_formatter.dart';
 import '../../utils/app_theme.dart';
+import '../../widgets/app_network_image.dart';
 import '../../widgets/supplier_nav_bar.dart';
 import '../../widgets/supplier/supplier_async_states.dart';
 
@@ -110,117 +111,135 @@ class _SupplierMaterialsViewState extends State<SupplierMaterialsView> {
     final stock = _stockStyle(material.stockStatus);
     final imageUrl = material.profileImageUrl;
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(12),
-      decoration: SupplierTheme.cardDecoration(),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 56,
-            height: 56,
-            decoration: BoxDecoration(
-              color: FieldColors.screenBackground,
-              borderRadius: BorderRadius.circular(AppRadius.sm),
-              border: Border.all(color: FieldColors.borderSubtle),
-            ),
-            clipBehavior: Clip.antiAlias,
-            child: imageUrl != null && imageUrl.isNotEmpty
-                ? Image.network(
-                    imageUrl,
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Material(
+        color: FieldColors.surfaceWhite,
+        elevation: 0,
+        clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(FieldRadius.card),
+          side: const BorderSide(color: FieldColors.borderSubtle),
+        ),
+        child: InkWell(
+          onTap: () {
+            context.push(
+              RouteNames.supplierMaterialDetail
+                  .replaceFirst(':matId', material.id),
+              extra: material,
+            );
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    color: FieldColors.screenBackground,
+                    borderRadius: BorderRadius.circular(AppRadius.sm),
+                    border: Border.all(color: FieldColors.borderSubtle),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: AppNetworkImage(
+                    url: imageUrl,
                     fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => Icon(
+                    width: 56,
+                    height: 56,
+                    debugLabel: 'materials:${material.id}',
+                    fallback: Icon(
                       _categoryIcon(material.category),
                       color: FieldColors.primaryNavy,
                     ),
-                  )
-                : Icon(
-                    _categoryIcon(material.category),
-                    color: FieldColors.primaryNavy,
                   ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  material.name,
-                  style: AppTextStyles.body.copyWith(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 15,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    Text(
-                      CurrencyFormatter.formatPKR(material.pricePerUnit),
-                      style: AppTextStyles.body.copyWith(
-                        color: FieldColors.primaryNavy,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 15,
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      '/ ${material.unit}',
-                      style: AppTextStyles.caption,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: stock.$1,
-                        borderRadius: BorderRadius.circular(AppRadius.pill),
-                      ),
-                      child: Text(
-                        stock.$3,
-                        style: AppTextStyles.caption.copyWith(
-                          color: stock.$2,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 11,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        material.name,
+                        style: AppTextStyles.body.copyWith(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 15,
                         ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        _formatUpdatedDate(material),
-                        style: AppTextStyles.caption.copyWith(
-                          color: FieldColors.textMuted,
-                          fontSize: 11,
-                        ),
+                        maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Text(
+                            CurrencyFormatter.formatPKR(material.pricePerUnit),
+                            style: AppTextStyles.body.copyWith(
+                              color: FieldColors.primaryNavy,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 15,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '/ ${material.unit}',
+                            style: AppTextStyles.caption,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: stock.$1,
+                              borderRadius: BorderRadius.circular(AppRadius.pill),
+                            ),
+                            child: Text(
+                              stock.$3,
+                              style: AppTextStyles.caption.copyWith(
+                                color: stock.$2,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              _formatUpdatedDate(material),
+                              style: AppTextStyles.caption.copyWith(
+                                color: FieldColors.textMuted,
+                                fontSize: 11,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  onPressed: () {
+                    context.push(
+                      RouteNames.supplierEditMaterial
+                          .replaceFirst(':matId', material.id),
+                      extra: material,
+                    );
+                  },
+                  icon: const Icon(Icons.edit_outlined, size: 20),
+                  color: FieldColors.textSecondary,
+                  tooltip: 'Edit material',
                 ),
               ],
             ),
           ),
-          IconButton(
-            onPressed: () {
-              context.push(
-                RouteNames.supplierEditMaterial.replaceFirst(':matId', material.id),
-                extra: material,
-              );
-            },
-            icon: const Icon(Icons.edit_outlined, size: 20),
-            color: FieldColors.textSecondary,
-            tooltip: 'Edit material',
-          ),
-        ],
+        ),
       ),
     );
   }

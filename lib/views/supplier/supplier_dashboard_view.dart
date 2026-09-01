@@ -1,4 +1,3 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -16,6 +15,7 @@ import '../../utils/currency_formatter.dart';
 import '../../viewmodels/auth_viewmodel.dart';
 import '../../viewmodels/notification_viewmodel.dart';
 import '../../viewmodels/supplier_viewmodel.dart';
+import '../../widgets/app_network_image.dart';
 import '../../widgets/notification_badge_icon.dart';
 import '../../widgets/status_badge.dart';
 import '../../widgets/supplier_nav_bar.dart';
@@ -374,7 +374,7 @@ class _SupplierDashboardViewState extends State<SupplierDashboardView> {
                                 _UrgentBanner(
                                   pendingCount: pendingCount,
                                   onReview: () =>
-                                      context.go(RouteNames.supplierOrders),
+                                      context.push(RouteNames.supplierOrders),
                                 ),
                                 const SizedBox(height: 16),
                               ],
@@ -421,7 +421,7 @@ class _SupplierDashboardViewState extends State<SupplierDashboardView> {
                                 title: 'Recent Orders',
                                 actionLabel: 'View all',
                                 onAction: () =>
-                                    context.go(RouteNames.supplierOrders),
+                                    context.push(RouteNames.supplierOrders),
                               ),
                               const SizedBox(height: 12),
                               if (waitingForCompanies || loading)
@@ -1278,12 +1278,16 @@ class _RecentOrderCard extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Material(
-        color: Colors.transparent,
+        color: FieldColors.surfaceWhite,
+        elevation: 0,
+        clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(FieldRadius.card),
+          side: const BorderSide(color: FieldColors.borderSubtle),
+        ),
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(FieldRadius.card),
-          child: Ink(
-            decoration: SupplierTheme.cardDecoration(),
+          child: Padding(
             padding: const EdgeInsets.all(12),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1399,83 +1403,91 @@ class _MaterialsCarousel extends StatelessWidget {
         separatorBuilder: (_, __) => const SizedBox(width: 12),
         itemBuilder: (context, index) {
           final m = materials[index];
-          return Container(
-            width: 150,
-            decoration: SupplierTheme.cardDecoration(),
+          final imageUrl = m.profileImageUrl;
+          return Material(
+            color: FieldColors.surfaceWhite,
+            elevation: 0,
             clipBehavior: Clip.antiAlias,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SizedBox(
-                  height: 80,
-                  width: double.infinity,
-                  child: m.profileImageUrl != null &&
-                          m.profileImageUrl!.isNotEmpty
-                      ? CachedNetworkImage(
-                          imageUrl: m.profileImageUrl!,
-                          fit: BoxFit.cover,
-                          placeholder: (_, __) => Container(
-                            color: FieldColors.borderSubtle,
-                            child: const Center(
-                              child: Icon(Icons.image_outlined, size: 28),
-                            ),
-                          ),
-                          errorWidget: (_, __, ___) => _categoryFallback(m),
-                        )
-                      : _categoryFallback(m),
-                ),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.all(10),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          m.name,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            color: FieldColors.primaryNavy,
-                          ),
-                        ),
-                        const Spacer(),
-                        Text(
-                          CurrencyFormatter.formatPKR(m.pricePerUnit),
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w800,
-                            color: FieldColors.accentAmber,
-                          ),
-                        ),
-                        Row(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(FieldRadius.card),
+              side: const BorderSide(color: FieldColors.borderSubtle),
+            ),
+            child: InkWell(
+              onTap: () => context.push(
+                RouteNames.supplierMaterialDetail.replaceFirst(':matId', m.id),
+                extra: m,
+              ),
+              child: SizedBox(
+                width: 150,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      height: 80,
+                      width: double.infinity,
+                      child: AppNetworkImage(
+                        url: imageUrl,
+                        fit: BoxFit.cover,
+                        width: 150,
+                        height: 80,
+                        debugLabel: 'dashboard:${m.id}',
+                        fallback: _categoryFallback(m),
+                      ),
+                    ),
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.all(10),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Expanded(
-                              child: Text(
-                                m.unit,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: AppTextStyles.caption.copyWith(
-                                  fontSize: 11,
-                                ),
+                            Text(
+                              m.name,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: FieldColors.primaryNavy,
                               ),
                             ),
-                            Container(
-                              width: 8,
-                              height: 8,
-                              decoration: BoxDecoration(
-                                color: _stockDotColor(m.stockStatus),
-                                shape: BoxShape.circle,
+                            const Spacer(),
+                            Text(
+                              CurrencyFormatter.formatPKR(m.pricePerUnit),
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w800,
+                                color: FieldColors.accentAmber,
                               ),
+                            ),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    m.unit,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: AppTextStyles.caption.copyWith(
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ),
+                                Container(
+                                  width: 8,
+                                  height: 8,
+                                  decoration: BoxDecoration(
+                                    color: _stockDotColor(m.stockStatus),
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         ),
-                      ],
+                      ),
                     ),
-                  ),
+                  ],
                 ),
-              ],
+              ),
             ),
           );
         },
@@ -1652,7 +1664,7 @@ class _QuickActionsGrid extends StatelessWidget {
       (
         'View Orders',
         Icons.shopping_bag_outlined,
-        () => context.go(RouteNames.supplierOrders),
+        () => context.push(RouteNames.supplierOrders),
       ),
       (
         'Messages',
@@ -1701,15 +1713,17 @@ class _QuickActionTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: FieldColors.surfaceWhite,
-      borderRadius: BorderRadius.circular(FieldRadius.card),
+      elevation: 0,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(FieldRadius.card),
+        side: const BorderSide(color: FieldColors.borderSubtle),
+      ),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(FieldRadius.card),
         splashColor: FieldColors.accentAmber.withValues(alpha: 0.25),
         highlightColor: FieldColors.accentAmber.withValues(alpha: 0.12),
-        child: Ink(
-          decoration: SupplierTheme.cardDecoration(),
-          child: Column(
+        child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(icon, size: 28, color: FieldColors.primaryNavy),
@@ -1720,7 +1734,6 @@ class _QuickActionTile extends StatelessWidget {
                 textAlign: TextAlign.center,
               ),
             ],
-          ),
         ),
       ),
     );
@@ -1758,8 +1771,14 @@ class _RfqBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: SupplierTheme.cardDecoration(),
+    return Material(
+      color: FieldColors.surfaceWhite,
+      elevation: 0,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(FieldRadius.card),
+        side: const BorderSide(color: FieldColors.borderSubtle),
+      ),
       child: ListTile(
         leading: Container(
           width: 40, height: 40,

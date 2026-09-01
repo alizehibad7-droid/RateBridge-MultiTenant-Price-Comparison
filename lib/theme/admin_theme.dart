@@ -8,6 +8,7 @@ import '../viewmodels/notification_viewmodel.dart';
 import '../viewmodels/auth_viewmodel.dart';
 import '../widgets/notification_badge_icon.dart';
 import '../constants/route_names.dart';
+import '../utils/app_navigation.dart';
 
 /// RateBridge design system for the Admin panel.
 class AdminColors {
@@ -322,6 +323,7 @@ class AdminAppBar extends StatelessWidget implements PreferredSizeWidget {
   final PreferredSizeWidget? bottom;
   final bool automaticallyImplyLeading;
   final bool showNotificationIcon;
+  final Widget? leading;
 
   const AdminAppBar({
     super.key,
@@ -330,6 +332,7 @@ class AdminAppBar extends StatelessWidget implements PreferredSizeWidget {
     this.bottom,
     this.automaticallyImplyLeading = true,
     this.showNotificationIcon = true,
+    this.leading,
   });
 
   @override
@@ -358,7 +361,11 @@ class AdminAppBar extends StatelessWidget implements PreferredSizeWidget {
     }
 
     return AppBar(
-      automaticallyImplyLeading: automaticallyImplyLeading,
+      automaticallyImplyLeading: false,
+      leading: leading ??
+          (automaticallyImplyLeading
+              ? AppNavigation.leading(context)
+              : null),
       title: title != null ? Text(title!) : null,
       actions: allActions,
       bottom: bottom,

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../utils/app_navigation.dart';
 import 'field_theme.dart';
 
 export 'field_theme.dart' show FieldColors, FieldRadius, FieldSpacing, FieldTypography;
@@ -224,7 +225,10 @@ class SupplierAppBar extends StatelessWidget implements PreferredSizeWidget {
   @override
   Widget build(BuildContext context) {
     return AppBar(
-      automaticallyImplyLeading: automaticallyImplyLeading,
+      automaticallyImplyLeading: false,
+      leading: automaticallyImplyLeading
+          ? AppNavigation.leading(context)
+          : null,
       title: titleWidget ?? Text(title!),
       actions: actions,
       bottom: bottom,

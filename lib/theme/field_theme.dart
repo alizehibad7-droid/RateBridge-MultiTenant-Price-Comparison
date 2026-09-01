@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../utils/app_navigation.dart';
+
 /// Field User Panel design system — isolated from app-wide AppColors.
 class FieldColors {
   FieldColors._();
@@ -340,7 +342,12 @@ class FieldAppBar extends StatelessWidget implements PreferredSizeWidget {
   @override
   Widget build(BuildContext context) {
     return AppBar(
-      automaticallyImplyLeading: automaticallyImplyLeading,
+      automaticallyImplyLeading: false,
+      leadingWidth: 52,
+      titleSpacing: 4,
+      leading: automaticallyImplyLeading
+          ? AppNavigation.leading(context)
+          : null,
       title: titleWidget ?? Text(title!),
       actions: actions,
       bottom: bottom,

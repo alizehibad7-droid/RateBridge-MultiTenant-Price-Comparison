@@ -8,6 +8,7 @@ import '../../../constants/route_names.dart';
 import '../../../models/order_model.dart';
 import '../../../services/ai_context_service.dart';
 import '../../../theme/field_theme.dart';
+import '../../../utils/app_navigation.dart';
 import '../../../utils/currency_formatter.dart';
 import '../../../viewmodels/field_user/field_orders_viewmodel.dart';
 import '../../../viewmodels/field_user/field_session_viewmodel.dart';
@@ -127,6 +128,7 @@ class _FieldOrdersViewState extends State<FieldOrdersView> {
           backgroundColor: _appBarNavy,
           foregroundColor: Colors.white,
           automaticallyImplyLeading: false,
+          leading: AppNavigation.leading(context, color: Colors.white),
           title: Text(
             'My Orders',
             style: FieldTypography.titleMedium.copyWith(

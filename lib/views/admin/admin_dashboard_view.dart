@@ -6,13 +6,13 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../constants/route_names.dart';
 import '../../theme/admin_theme.dart';
+import '../../utils/app_navigation.dart';
 import '../../viewmodels/auth_viewmodel.dart';
 import '../../viewmodels/admin_viewmodel.dart';
 import '../../viewmodels/notification_viewmodel.dart';
 import '../../repositories/user_repository.dart';
 import '../../services/cloudinary_service.dart';
 
-import 'admin_categories_view.dart';
 import 'admin_finance_view.dart';
 import 'admin_ceo_management_view.dart';
 import 'admin_supplier_management_view.dart';
@@ -25,12 +25,10 @@ class AdminDashboardView extends StatefulWidget {
 }
 
 class _AdminDashboardViewState extends State<AdminDashboardView> {
-  int _currentIndex = 0;
+  final TabHistory _tabHistory = TabHistory();
 
   void _onTabTapped(int index) {
-    setState(() {
-      _currentIndex = index;
-    });
+    if (_tabHistory.select(index)) setState(() {});
   }
 
   late final List<Widget> _screens;
@@ -51,11 +49,15 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
   Widget build(BuildContext context) {
     final isLoading = context.watch<AdminViewModel>().isLoading;
 
-    return Scaffold(
+    return TabHistoryPopScope(
+      history: _tabHistory,
+      onChanged: () => setState(() {}),
+      child: Scaffold(
       backgroundColor: AdminColors.screenBg,
       appBar: AdminAppBar(
         title: 'RateBridge Admin',
         showNotificationIcon: true,
+        automaticallyImplyLeading: false,
         bottom: isLoading
             ? const PreferredSize(
                 preferredSize: Size.fromHeight(2),
@@ -70,7 +72,7 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
       body: SafeArea(
         top: false,
         child: IndexedStack(
-          index: _currentIndex,
+          index: _tabHistory.index,
           children: _screens,
         ),
       ),
@@ -86,7 +88,7 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
           ],
         ),
         child: BottomNavigationBar(
-          currentIndex: _currentIndex,
+          currentIndex: _tabHistory.index,
           onTap: _onTabTapped,
           type: BottomNavigationBarType.fixed,
           selectedItemColor: AdminColors.navy,
@@ -122,6 +124,7 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
           ],
         ),
       ),
+    ),
     );
   }
 }
@@ -266,15 +269,7 @@ class _AdminHomeOverview extends StatelessWidget {
                     _buildActionCard(
                       'Manage\nTaxonomy',
                       Icons.category_rounded,
-                      () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) =>
-                                AdminTheme.wrap(const AdminCategoriesView()),
-                          ),
-                        );
-                      },
+                      () => context.push(RouteNames.adminCategories),
                     ),
                   ],
                 ),
@@ -570,12 +565,7 @@ class _AdminProfileViewState extends State<_AdminProfileView> {
               'Taxonomy',
               'Categories',
               Icons.grid_view_rounded,
-              () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => AdminTheme.wrap(const AdminCategoriesView()),
-                ),
-              ),
+              () => context.push(RouteNames.adminCategories),
             ),
           ],
         ),

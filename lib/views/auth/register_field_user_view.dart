@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../constants/app_colors.dart';
 import '../../constants/field_user_registration_options.dart';
 import '../../constants/route_names.dart';
+import '../../utils/app_navigation.dart';
 import '../../utils/pakistan_validators.dart';
 import '../../viewmodels/auth_viewmodel.dart';
 import '../../widgets/auth/auth_text_field.dart';
@@ -158,15 +159,7 @@ class _RegisterFieldUserViewState extends State<RegisterFieldUserView> {
     return Scaffold(
       backgroundColor: AppColors.screenBg,
       appBar: AppBar(
-        leading: BackButton(
-          onPressed: () {
-            if (context.canPop()) {
-              context.pop();
-            } else {
-              context.go(RouteNames.roleSelection);
-            }
-          },
-        ),
+        leading: const AppBackButton(),
         title: const Text('Step 1 of 1'),
       ),
       body: SafeArea(

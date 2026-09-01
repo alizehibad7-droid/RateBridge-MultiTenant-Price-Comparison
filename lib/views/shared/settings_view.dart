@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../constants/app_colors.dart';
+import '../../utils/app_navigation.dart';
 
 class SettingsView extends StatelessWidget {
   const SettingsView({super.key});
@@ -10,7 +11,11 @@ class SettingsView extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.screenBg,
-      appBar: AppBar(title: const Text('System configurations')),
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        leading: AppNavigation.leading(context),
+        title: const Text('System configurations'),
+      ),
       body: Padding(
         padding: const EdgeInsets.all(24.0),
         child: Column(

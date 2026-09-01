@@ -58,10 +58,17 @@ class _SupplierRfqTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: SupplierTheme.cardDecoration(),
-      child: ListTile(
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Material(
+        color: FieldColors.surfaceWhite,
+        elevation: 0,
+        clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(FieldRadius.card),
+          side: const BorderSide(color: FieldColors.borderSubtle),
+        ),
+        child: ListTile(
         contentPadding: const EdgeInsets.all(16),
         title: Text(rfq.category, style: FieldTypography.titleMedium),
         subtitle: Column(
@@ -83,6 +90,7 @@ class _SupplierRfqTile extends StatelessWidget {
         ),
         trailing: const Icon(Icons.chevron_right),
         onTap: () => context.push(RouteNames.supplierSubmitBid.replaceFirst(':rfqId', rfq.id)),
+        ),
       ),
     );
   }

@@ -18,6 +18,7 @@ class RfqViewModel extends ChangeNotifier {
   String? get error => _error;
 
   Future<void> createRfq({
+    required String uid,
     required String companyId,
     required String companyName,
     required String category,
@@ -32,16 +33,17 @@ class RfqViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      await _cloudFunctions.callFunction('createRfq', {
-        'companyId': companyId,
-        'companyName': companyName,
-        'category': category,
-        'materialDescription': materialDescription,
-        'quantity': quantity,
-        'unit': unit,
-        'city': city,
-        'requiredByMillis': requiredByDate.millisecondsSinceEpoch,
-      });
+      await _firestoreService.createRfqJob(
+        uid: uid,
+        companyId: companyId,
+        companyName: companyName,
+        category: category,
+        materialDescription: materialDescription,
+        quantity: quantity,
+        unit: unit,
+        city: city,
+        requiredByDate: requiredByDate,
+      );
     } catch (e) {
       _error = e is AppException ? e.message : e.toString();
     } finally {

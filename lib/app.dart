@@ -72,6 +72,7 @@ import 'views/supplier/supplier_dashboard_view.dart';
 import 'views/supplier/supplier_pending_view.dart';
 import 'views/supplier/supplier_appeal_view.dart';
 import 'views/supplier/supplier_materials_view.dart';
+import 'views/supplier/supplier_material_detail_view.dart';
 import 'views/supplier/supplier_add_material_view.dart';
 import 'views/supplier/supplier_edit_material_view.dart';
 import 'views/supplier/supplier_orders_view.dart';
@@ -111,6 +112,11 @@ class _RateBridgeAppState extends State<RateBridgeApp> {
   @override
   void initState() {
     super.initState();
+
+    // Imperative push/pop keep their own stack. Reflecting them into the
+    // browser URL makes GoRouter rebuild from that URL as a single page, so
+    // Back can no longer return to the previous screen.
+    GoRouter.optionURLReflectsImperativeAPIs = false;
 
     _router = GoRouter(
       initialLocation: RouteNames.splash,
@@ -284,8 +290,8 @@ class _RateBridgeAppState extends State<RateBridgeApp> {
         GoRoute(
           path: RouteNames.fieldCategory,
           pageBuilder: (context, state) {
-            final categoryName = Uri.decodeComponent(
-              state.pathParameters['categoryName'] ?? '',
+            final categoryName = RouteNames.pathParam(
+              state.pathParameters['categoryName'],
             );
             return fieldTransitionPage(
               key: state.pageKey,
@@ -320,8 +326,10 @@ class _RateBridgeAppState extends State<RateBridgeApp> {
         GoRoute(
           path: RouteNames.fieldCompare,
           pageBuilder: (context, state) {
-            final raw = state.pathParameters['materialId'] ?? '';
-            final materialName = Uri.decodeComponent(raw);
+            final materialName = RouteNames.pathParam(
+              state.pathParameters['materialId'],
+              state.extra,
+            );
             return fieldTransitionPage(
               key: state.pageKey,
               child: FieldCompareView(materialName: materialName),
@@ -331,11 +339,11 @@ class _RateBridgeAppState extends State<RateBridgeApp> {
         GoRoute(
           path: RouteNames.fieldTrend,
           pageBuilder: (context, state) {
-            final materialId = Uri.decodeComponent(
-              state.pathParameters['matId'] ?? '',
+            final materialId = RouteNames.pathParam(
+              state.pathParameters['matId'],
             );
-            final supplierUid = Uri.decodeComponent(
-              state.pathParameters['supplierUid'] ?? '',
+            final supplierUid = RouteNames.pathParam(
+              state.pathParameters['supplierUid'],
             );
             return fieldTransitionPage(
               key: state.pageKey,
@@ -349,8 +357,9 @@ class _RateBridgeAppState extends State<RateBridgeApp> {
         GoRoute(
           path: RouteNames.fieldPriceTrends,
           pageBuilder: (context, state) {
-            final materialName = Uri.decodeComponent(
-              state.pathParameters['materialName'] ?? '',
+            final materialName = RouteNames.pathParam(
+              state.pathParameters['materialName'],
+              state.extra,
             );
             return fieldTransitionPage(
               key: state.pageKey,
@@ -492,6 +501,18 @@ class _RateBridgeAppState extends State<RateBridgeApp> {
           builder:
               (context, state) =>
                   SupplierTheme.wrap(const SupplierMaterialsView()),
+        ),
+        GoRoute(
+          path: RouteNames.supplierMaterialDetail,
+          builder: (context, state) {
+            final extra = state.extra;
+            return SupplierTheme.wrap(
+              SupplierMaterialDetailView(
+                materialId: state.pathParameters['matId'] ?? '',
+                initialMaterial: extra is MaterialModel ? extra : null,
+              ),
+            );
+          },
         ),
         GoRoute(
           path: RouteNames.supplierAddMaterial,

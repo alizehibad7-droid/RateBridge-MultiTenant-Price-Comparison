@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../models/notification_model.dart';
 import '../theme/field_theme.dart';
+import '../utils/app_navigation.dart';
 import '../utils/notification_utils.dart';
 import '../viewmodels/notification_viewmodel.dart';
 
@@ -61,6 +62,8 @@ class AppNotificationsScaffold extends StatelessWidget {
     return Scaffold(
       backgroundColor: backgroundColor ?? FieldColors.screenBackground,
       appBar: AppBar(
+        automaticallyImplyLeading: false,
+        leading: AppNavigation.leading(context),
         title: Row(
           children: [
             const Icon(Icons.notifications_active_rounded, size: 22),

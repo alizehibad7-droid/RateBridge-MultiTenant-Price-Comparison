@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../constants/app_colors.dart';
 import '../../constants/route_names.dart';
+import '../../utils/app_navigation.dart';
 
 class _RoleOption {
   final IconData icon;
@@ -86,11 +87,7 @@ class _RoleSelectionViewState extends State<RoleSelectionView>
   }
 
   void _onBack() {
-    if (Navigator.of(context).canPop()) {
-      Navigator.of(context).pop();
-    } else {
-      context.go(RouteNames.login);
-    }
+    AppNavigation.pop(context);
   }
 
   @override
@@ -119,18 +116,19 @@ class _RoleSelectionViewState extends State<RoleSelectionView>
                     bottom: false,
                     child: Stack(
                       children: [
-                        Positioned(
-                          left: 4,
-                          top: 0,
-                          child: IconButton(
-                            icon: const Icon(
-                              Icons.arrow_back_ios_new_rounded,
-                              color: Colors.white,
-                              size: 20,
+                        if (AppNavigation.canPop(context))
+                          Positioned(
+                            left: 4,
+                            top: 0,
+                            child: IconButton(
+                              icon: const Icon(
+                                Icons.arrow_back_ios_new_rounded,
+                                color: Colors.white,
+                                size: 20,
+                              ),
+                              onPressed: _onBack,
                             ),
-                            onPressed: _onBack,
                           ),
-                        ),
                         Align(
                           alignment: Alignment.bottomCenter,
                           child: Padding(

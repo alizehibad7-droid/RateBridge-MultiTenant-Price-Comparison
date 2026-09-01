@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import '../models/rfq_model.dart';
 import '../models/rfq_bid_model.dart';
 import '../models/dispute_model.dart';
@@ -20,6 +21,7 @@ import '../models/join_request_model.dart';
 import '../models/notification_model.dart';
 import '../models/category_model.dart';
 import '../utils/seed_data_guard.dart';
+import '../utils/app_exception.dart';
 
 class FirestoreService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -1170,6 +1172,113 @@ class FirestoreService {
   }
 
   // --- Bulk Quote / RFQ ---
+  Future<String> createRfqJob({
+    required String uid,
+    required String companyId,
+    required String companyName,
+    required String category,
+    required String materialDescription,
+    required double quantity,
+    required String unit,
+    required String city,
+    required DateTime requiredByDate,
+  }) async {
+    final ref = _db.collection('rfq_jobs').doc();
+    await ref.set({
+      'uid': uid,
+      'companyId': companyId,
+      'companyName': companyName,
+      'category': category,
+      'materialDescription': materialDescription,
+      'quantity': quantity,
+      'unit': unit,
+      'city': city,
+      'requiredByMillis': requiredByDate.millisecondsSinceEpoch,
+      'status': 'pending',
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+
+    final done = await ref.snapshots().firstWhere((snap) {
+      final status = snap.data()?['status']?.toString();
+      return status == 'complete' || status == 'error';
+    }).timeout(
+      const Duration(seconds: 60),
+      onTimeout: () {
+        throw AppException(
+          'Publishing timed out. Please try again.',
+          'deadline-exceeded',
+        );
+      },
+    );
+
+    final data = done.data() ?? {};
+    if (data['status'] == 'error') {
+      throw AppException(
+        (data['error'] as String?)?.trim().isNotEmpty == true
+            ? data['error'] as String
+            : 'Could not publish the quote request. Please try again.',
+      );
+    }
+    return (data['rfqId'] as String?) ?? ref.id;
+  }
+
+  /// Writes a prompt to [ai_jobs] and waits for [onAiJobCreated] to fill it.
+  /// Used instead of the `generateAiText` HTTPS callable, which 403s on Flutter web.
+  Future<String> generateAiText({
+    required String uid,
+    required String prompt,
+  }) async {
+    final trimmed = prompt.trim();
+    if (trimmed.isEmpty) {
+      throw AppException('Missing prompt.', 'invalid-argument');
+    }
+    if (trimmed.length > 12000) {
+      throw AppException('Prompt is too long.', 'invalid-argument');
+    }
+
+    final ref = _db.collection('ai_jobs').doc();
+    debugPrint('AI job ${ref.id}: creating (prompt ${trimmed.length} chars)');
+    await ref.set({
+      'uid': uid,
+      'prompt': trimmed,
+      'status': 'pending',
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+
+    final done = await ref.snapshots().firstWhere((snap) {
+      final status = snap.data()?['status']?.toString();
+      return status == 'complete' || status == 'error';
+    }).timeout(
+      const Duration(seconds: 60),
+      onTimeout: () {
+        debugPrint('AI job ${ref.id}: timed out still pending');
+        throw AppException(
+          'The assistant timed out. Please try again.',
+          'deadline-exceeded',
+        );
+      },
+    );
+
+    final data = done.data() ?? {};
+    final status = data['status']?.toString();
+    if (status == 'error') {
+      final reason = (data['error'] as String?)?.trim();
+      debugPrint('AI job ${ref.id}: error ${reason ?? '(no details)'}');
+      throw AppException(
+        (reason != null && reason.isNotEmpty)
+            ? reason
+            : 'The assistant could not complete that request.',
+      );
+    }
+
+    final text = (data['text'] as String?)?.trim() ?? '';
+    debugPrint('AI job ${ref.id}: complete (${text.length} chars)');
+    if (text.isEmpty) {
+      throw AppException('The assistant returned an empty response.');
+    }
+    return text;
+  }
+
   Stream<List<RfqModel>> streamCompanyRfqs(String companyId) {
     return _db
         .collection('rfqs')

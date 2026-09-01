@@ -121,6 +121,24 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // RFQ create jobs. Clients write a pending payload; Cloud Functions
+    // create the RFQ with the Admin SDK. Avoids callable HTTP 403 on web.
+    match /rfq_jobs/{jobId} {
+      allow create: if signedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.companyId == currentUser().companyId
+        && request.resource.data.status == 'pending'
+        && request.resource.data.category is string
+        && request.resource.data.materialDescription is string
+        && request.resource.data.quantity is number
+        && request.resource.data.unit is string
+        && request.resource.data.city is string
+        && request.resource.data.requiredByMillis is number
+        && request.resource.data.createdAt is timestamp;
+      allow read: if signedIn() && resource.data.uid == request.auth.uid;
+      allow update, delete: if false;
+    }
+
     // Field-user AI jobs. Clients create a pending prompt; Cloud Functions
     // write the model response with the Admin SDK.
     match /ai_jobs/{jobId} {
@@ -150,7 +168,8 @@ service cloud.firestore {
         && collection != 'rfqs'
         && collection != 'disputes'
         && collection != 'audit_logs'
-        && collection != 'ai_jobs';
+        && collection != 'ai_jobs'
+        && collection != 'rfq_jobs';
     }
   }
 }

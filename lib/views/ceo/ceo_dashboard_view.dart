@@ -60,6 +60,7 @@ class _CeoDashboardViewState extends State<CeoDashboardView> {
           (vm) => vm.company?.name ?? 'Dashboard',
         ),
         showNotificationIcon: true,
+        automaticallyImplyLeading: false,
       ),
       body: Consumer<CeoViewModel>(
         builder: (context, vm, _) {
@@ -134,7 +135,7 @@ class _CeoDashboardViewState extends State<CeoDashboardView> {
                         const SizedBox(height: 16),
                         CeoPendingApprovalBanner(
                           count: pendingOrders,
-                          onTap: () => context.go(
+                          onTap: () => context.push(
                             '${RouteNames.ceoOrders}?tab=1',
                           ),
                         ),
@@ -205,7 +206,7 @@ class _CeoDashboardViewState extends State<CeoDashboardView> {
                               ),
                               TextButton(
                                 onPressed: () =>
-                                    context.go(RouteNames.ceoSubscription),
+                                    context.push(RouteNames.ceoSubscription),
                                 child: const Text('Renew'),
                               ),
                             ],
@@ -233,25 +234,25 @@ class _CeoDashboardViewState extends State<CeoDashboardView> {
                             context,
                             icon: Icons.store_rounded,
                             title: 'My Suppliers',
-                            onTap: () => context.go(RouteNames.ceoMySuppliers),
+                            onTap: () => context.push(RouteNames.ceoMySuppliers),
                           ),
                           _actionCard(
                             context,
                             icon: Icons.person_add_rounded,
                             title: 'Invite Suppliers',
-                            onTap: () => context.go(RouteNames.ceoInvite),
+                            onTap: () => context.push(RouteNames.ceoInvite),
                           ),
                           _actionCard(
                             context,
                             icon: Icons.groups_rounded,
                             title: 'Field Users',
-                            onTap: () => context.go(RouteNames.ceoFieldUsers),
+                            onTap: () => context.push(RouteNames.ceoFieldUsers),
                           ),
                           _actionCard(
                             context,
                             icon: Icons.receipt_long_rounded,
                             title: 'All Orders',
-                            onTap: () => context.go(RouteNames.ceoOrders),
+                            onTap: () => context.push(RouteNames.ceoOrders),
                           ),
                           _actionCard(
                             context,
@@ -437,7 +438,7 @@ class _SubscriptionCard extends StatelessWidget {
                 ],
               ),
               TextButton.icon(
-                onPressed: () => context.go(RouteNames.ceoSubscription),
+                onPressed: () => context.push(RouteNames.ceoSubscription),
                 icon: Icon(
                   isFree ? Icons.upgrade_rounded : Icons.settings_rounded,
                   size: 16,

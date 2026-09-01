@@ -212,6 +212,14 @@ class MaterialViewModel extends ChangeNotifier {
           ? deliveryTime
           : FieldValue.delete();
 
+      if (params.containsKey('description')) {
+        final description = params['description']?.toString().trim();
+        updates['description'] =
+            description != null && description.isNotEmpty
+                ? description
+                : FieldValue.delete();
+      }
+
       if (imageFile != null) {
         final bytes = await imageFile.readAsBytes();
         final imageUrl = await CloudinaryService.uploadImageBytes(

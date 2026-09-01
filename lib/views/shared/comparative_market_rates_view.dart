@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../constants/app_colors.dart';
+import '../../utils/app_navigation.dart';
 
 class ComparativeMarketRatesView extends StatelessWidget {
   const ComparativeMarketRatesView({super.key});
@@ -11,6 +12,8 @@ class ComparativeMarketRatesView extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppColors.screenBg,
       appBar: AppBar(
+        automaticallyImplyLeading: false,
+        leading: AppNavigation.leading(context),
         title: const Text('Pakistan Sourcing Market Indices'),
       ),
       body: ListView(

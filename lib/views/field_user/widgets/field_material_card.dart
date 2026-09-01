@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../../models/material_model.dart';
-
 import '../../../theme/field_theme.dart';
+import '../../../widgets/app_network_image.dart';
 
 
 
@@ -65,53 +65,23 @@ class FieldMaterialImageLead extends StatelessWidget {
 
 
   @override
-
   Widget build(BuildContext context) {
+    final image = AppNetworkImage(
+      url: material.profileImageUrl,
+      width: size,
+      height: size,
+      fit: BoxFit.cover,
+      debugLabel: 'material:${material.id}',
+      fallback: _fallbackIcon(),
+    );
 
-    final imageUrl = material.profileImageUrl;
-
-    final borderRadius =
-
-        circular ? null : BorderRadius.circular(FieldRadius.button);
-
-
-
-    if (imageUrl != null && imageUrl.isNotEmpty) {
-
-      final image = Image.network(
-
-        imageUrl,
-
-        width: size,
-
-        height: size,
-
-        fit: BoxFit.cover,
-
-        errorBuilder: (_, __, ___) => _fallbackIcon(),
-
-      );
-
-      if (circular) {
-
-        return ClipOval(child: SizedBox(width: size, height: size, child: image));
-
-      }
-
-      return ClipRRect(
-
-        borderRadius: borderRadius!,
-
-        child: SizedBox(width: size, height: size, child: image),
-
-      );
-
+    if (circular) {
+      return ClipOval(child: SizedBox(width: size, height: size, child: image));
     }
-
-
-
-    return _fallbackIcon();
-
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(FieldRadius.button),
+      child: SizedBox(width: size, height: size, child: image),
+    );
   }
 
 

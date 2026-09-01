@@ -15,6 +15,7 @@ import '../../../viewmodels/field_user/field_catalog_viewmodel.dart';
 import '../../../viewmodels/notification_viewmodel.dart';
 import '../../../viewmodels/field_user/field_orders_viewmodel.dart';
 import '../../../viewmodels/field_user/field_session_viewmodel.dart';
+import '../../../widgets/app_network_image.dart';
 import '../orders/field_order_status.dart';
 import '../shell/field_shell_view.dart';
 import '../widgets/field_async_states.dart';
@@ -150,10 +151,8 @@ class _FieldHomeViewState extends State<FieldHomeView> {
     }
     if (!mounted) return;
     context.push(
-      RouteNames.fieldCompare.replaceFirst(
-        ':materialId',
-        Uri.encodeComponent(material.name),
-      ),
+      RouteNames.fieldCompareOf(material.name),
+      extra: material.name,
     );
   }
 
@@ -218,7 +217,7 @@ class _FieldHomeViewState extends State<FieldHomeView> {
     final inProgressCount = _inProgressOrderCount(orders.orders);
     final inProgressOrders = _inProgressOrders(orders.orders);
     final isMaterialsLoading =
-        !_initialized && catalog.isLoading && catalog.recentMaterials.isEmpty;
+        !_initialized && catalog.isCatalogLoading && catalog.recentMaterials.isEmpty;
     final recentlyViewed = catalog.recentlyViewedMaterials;
 
     return ColoredBox(
@@ -247,7 +246,7 @@ class _FieldHomeViewState extends State<FieldHomeView> {
                   SliverToBoxAdapter(
                     child: _CategoryQuickAccessRow(
                       categoryNames: categoryNames,
-                      isLoading: catalog.isLoading && categoryNames.isEmpty,
+                      isLoading: catalog.isCatalogLoading && categoryNames.isEmpty,
                       onCategoryTap: _openCategory,
                       onSeeAllTap: _openAllCategories,
                       onRetry:
@@ -364,7 +363,7 @@ class _FieldHomeViewState extends State<FieldHomeView> {
                       child: _BrowseCategoryGrid(
                         categories: browseCategories,
                         isLoading:
-                            catalog.isLoading && browseCategories.isEmpty,
+                            catalog.isCatalogLoading && browseCategories.isEmpty,
                         materialCountFor: catalog.materialCountForCategory,
                         onCategoryTap: (name) => _openCategory(name),
                         onViewAll: _openAllCategories,
@@ -1106,16 +1105,13 @@ class _MaterialImageTop extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final url = material.profileImageUrl;
-    if (url != null && url.isNotEmpty) {
-      return Image.network(
-        url,
-        fit: BoxFit.cover,
-        width: double.infinity,
-        errorBuilder: (_, __, ___) => _iconFallback(),
-      );
-    }
-    return _iconFallback();
+    return AppNetworkImage(
+      url: material.profileImageUrl,
+      fit: BoxFit.cover,
+      width: double.infinity,
+      debugLabel: 'field-home:${material.id}',
+      fallback: _iconFallback(),
+    );
   }
 
   Widget _iconFallback() {

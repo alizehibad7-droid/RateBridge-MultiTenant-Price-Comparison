@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../constants/app_colors.dart';
+import '../../utils/app_navigation.dart';
 import '../../models/payment_proof_model.dart';
 import 'upload_proof_view.dart';
 
@@ -27,7 +28,11 @@ class PaymentMethodView extends StatelessWidget {
     };
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Select Payment Method')),
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        leading: AppNavigation.leading(context),
+        title: const Text('Select Payment Method'),
+      ),
       body: Padding(
         padding: const EdgeInsets.all(24.0),
         child: Column(

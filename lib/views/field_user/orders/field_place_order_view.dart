@@ -8,6 +8,7 @@ import '../../../constants/app_constants.dart';
 import '../../../constants/route_names.dart';
 import '../../../models/material_listing.dart';
 import '../../../theme/field_theme.dart';
+import '../../../utils/app_navigation.dart';
 import '../../../utils/currency_formatter.dart';
 import '../../../viewmodels/field_user/field_orders_viewmodel.dart';
 import '../../../viewmodels/field_user/field_session_viewmodel.dart';
@@ -247,6 +248,8 @@ class _FieldPlaceOrderViewState extends State<FieldPlaceOrderView> {
         appBar: AppBar(
           backgroundColor: _appBarNavy,
           foregroundColor: Colors.white,
+          automaticallyImplyLeading: false,
+          leading: AppNavigation.leading(context, color: Colors.white),
           iconTheme: const IconThemeData(color: Colors.white),
           title: Text(
             'Place Order',

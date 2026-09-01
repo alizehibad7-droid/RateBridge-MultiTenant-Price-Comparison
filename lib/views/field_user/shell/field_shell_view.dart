@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../theme/field_theme.dart';
+import '../../../utils/app_navigation.dart';
 import '../../../widgets/ai_assistant_sheet.dart';
 import '../../../viewmodels/auth_viewmodel.dart';
 import '../../../viewmodels/field_user/field_chat_viewmodel.dart';
@@ -27,7 +28,7 @@ class FieldShellView extends StatefulWidget {
 class _FieldShellViewState extends State<FieldShellView> {
   static const _tabTransition = Duration(milliseconds: 150);
 
-  late int _currentIndex;
+  late final TabHistory _tabHistory;
 
   static const _tabs = [
     _ShellTab(
@@ -60,7 +61,9 @@ class _FieldShellViewState extends State<FieldShellView> {
   @override
   void initState() {
     super.initState();
-    _currentIndex = widget.initialTabIndex.clamp(0, _tabs.length - 1);
+    _tabHistory = TabHistory(
+      initial: widget.initialTabIndex.clamp(0, _tabs.length - 1),
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) => _bootstrapSession());
   }
 
@@ -84,8 +87,7 @@ class _FieldShellViewState extends State<FieldShellView> {
   }
 
   void _onTabSelected(int index) {
-    if (_currentIndex == index) return;
-    setState(() => _currentIndex = index);
+    if (_tabHistory.select(index)) setState(() {});
   }
 
   void _openAiAssistant(BuildContext context) {
@@ -106,6 +108,8 @@ class _FieldShellViewState extends State<FieldShellView> {
     final unreadMessages =
         context.watch<FieldChatViewModel>().unreadMessageCount;
 
+    final currentIndex = _tabHistory.index;
+
     if (user == null) {
       return Theme(
         data: FieldTheme.theme,
@@ -120,7 +124,10 @@ class _FieldShellViewState extends State<FieldShellView> {
     badgeCounts[FieldShellScope.messagesTabIndex] = unreadMessages;
     badgeCounts[FieldShellScope.notificationsTabIndex] = unreadNotifications;
 
-    return Theme(
+    return TabHistoryPopScope(
+      history: _tabHistory,
+      onChanged: () => setState(() {}),
+      child: Theme(
       data: FieldTheme.theme,
       child: Scaffold(
         backgroundColor: FieldColors.screenBackground,
@@ -130,7 +137,7 @@ class _FieldShellViewState extends State<FieldShellView> {
               child: FieldShellScope(
                 switchTab: _onTabSelected,
                 child: IndexedStack(
-                  index: _currentIndex,
+                  index: currentIndex,
                   children: const [
                     FieldHomeView(),
                     FieldOrdersView(),
@@ -152,11 +159,12 @@ class _FieldShellViewState extends State<FieldShellView> {
         ),
         bottomNavigationBar: _FieldBottomNavBar(
           tabs: _tabs,
-          currentIndex: _currentIndex,
+          currentIndex: currentIndex,
           badgeCounts: badgeCounts,
           onTabSelected: _onTabSelected,
         ),
       ),
+    ),
     );
   }
 }

@@ -11,6 +11,7 @@ import '../../../models/rating_model.dart';
 import '../../../repositories/user_repository.dart';
 import '../../../services/cloudinary_service.dart';
 import '../../../theme/field_theme.dart';
+import '../../../utils/app_navigation.dart';
 import '../../../utils/chat_image_utils.dart';
 import '../../../utils/firestore_seed.dart';
 import '../../../viewmodels/auth_viewmodel.dart';
@@ -309,6 +310,7 @@ class _FieldProfileViewState extends State<FieldProfileView> {
           backgroundColor: Colors.transparent,
           elevation: 0,
           automaticallyImplyLeading: false,
+          leading: AppNavigation.leading(context, color: Colors.white),
           title: Text(
             'My Profile',
             style: FieldTypography.titleMedium.copyWith(
@@ -1215,6 +1217,8 @@ class _FieldMyRatingsScreen extends StatelessWidget {
       child: Scaffold(
         backgroundColor: FieldColors.screenBackground,
         appBar: AppBar(
+          automaticallyImplyLeading: false,
+          leading: AppNavigation.leading(context, color: Colors.white),
           backgroundColor: FieldColors.primaryNavy,
           foregroundColor: Colors.white,
           title: const Text('My Ratings'),
