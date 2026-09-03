@@ -13,7 +13,13 @@ import '../../widgets/admin/admin_widgets.dart';
 class AdminCeoManagementView extends StatefulWidget {
   final bool embedded;
 
-  const AdminCeoManagementView({super.key, this.embedded = false});
+  const AdminCeoManagementView({
+    super.key,
+    this.embedded = false,
+    @visibleForTesting this.debugFirestore,
+  });
+
+  final FirebaseFirestore? debugFirestore;
 
   @override
   State<AdminCeoManagementView> createState() => _AdminCeoManagementViewState();
@@ -25,6 +31,9 @@ class _AdminCeoManagementViewState extends State<AdminCeoManagementView>
   final Set<String> _selectedCeoUids = {};
   final Map<String, String?> _ceoToCompanyMap = {};
   bool _isBulkProcessing = false;
+
+  FirebaseFirestore get _db =>
+      widget.debugFirestore ?? FirebaseFirestore.instance;
 
   @override
   void initState() {
@@ -171,7 +180,7 @@ class _AdminCeoManagementViewState extends State<AdminCeoManagementView>
 
   Widget _buildCeoStream(String status, AdminViewModel adminVM) {
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
+      stream: _db
           .collection('users')
           .where('role', isEqualTo: 'CEO')
           .where('status', isEqualTo: status)
@@ -199,7 +208,7 @@ class _AdminCeoManagementViewState extends State<AdminCeoManagementView>
             _ceoToCompanyMap[ceo.uid] = ceo.companyId;
 
             return FutureBuilder<DocumentSnapshot>(
-              future: FirebaseFirestore.instance
+              future: _db
                   .collection('companies')
                   .doc(ceo.companyId)
                   .get(),

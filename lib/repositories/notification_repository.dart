@@ -5,9 +5,13 @@ import '../services/firestore_service.dart';
 import '../utils/app_exception.dart';
 
 class NotificationRepository {
-  final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final FirebaseFirestore _db;
 
-  NotificationRepository([FirestoreService? _]);
+  NotificationRepository([
+    FirestoreService? _,
+    FirebaseFirestore? firestore,
+  ]) : _db = firestore ?? FirebaseFirestore.instance;
+
 
   /// Watches notifications for a specific user in the root 'notifications' collection.
   Stream<List<NotificationModel>> watchNotifications(String uid) {

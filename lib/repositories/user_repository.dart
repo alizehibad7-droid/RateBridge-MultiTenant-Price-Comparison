@@ -3,13 +3,29 @@ import '../models/user_model.dart';
 import '../services/firebase_auth_service.dart';
 import '../services/firestore_service.dart';
 
+class ActiveCompanyInvite {
+  final String companyId;
+  final String? companyName;
+  final String? plan;
+
+  const ActiveCompanyInvite({
+    required this.companyId,
+    this.companyName,
+    this.plan,
+  });
+}
+
 class UserRepository {
   final FirebaseAuthService _authService;
   final FirestoreService _firestoreService;
-  final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final FirebaseFirestore _db;
   UserModel? _cachedUser;
 
-  UserRepository(this._authService, this._firestoreService);
+  UserRepository(
+    this._authService,
+    this._firestoreService, {
+    FirebaseFirestore? firestore,
+  }) : _db = firestore ?? FirebaseFirestore.instance;
 
   UserModel? get cachedUser => _cachedUser;
 
@@ -126,5 +142,51 @@ class UserRepository {
     if (_cachedUser?.uid == uid) {
       _cachedUser = null;
     }
+  }
+
+  Future<ActiveCompanyInvite?> findActiveCompanyByInviteCode(String code) async {
+    final query = await _db
+        .collection('companies')
+        .where('inviteCode', isEqualTo: code)
+        .where('status', isEqualTo: 'active')
+        .limit(1)
+        .get();
+
+    if (query.docs.isEmpty) return null;
+
+    final doc = query.docs.first;
+    final data = doc.data();
+    return ActiveCompanyInvite(
+      companyId: doc.id,
+      companyName: (data['name'] ?? data['companyName']) as String?,
+      plan: data['plan'] as String? ?? 'free',
+    );
+  }
+
+  Future<void> linkFieldUserToCompany({
+    required String companyId,
+    required String uid,
+    required String fullName,
+    required String email,
+    required String phone,
+    required String cnicNumber,
+    required String jobTitle,
+    required String assignedSite,
+  }) async {
+    await _db
+        .collection('companies')
+        .doc(companyId)
+        .collection('fieldUsers')
+        .doc(uid)
+        .set({
+      'fullName': fullName,
+      'email': email,
+      'phone': phone,
+      'cnicNumber': cnicNumber,
+      'jobTitle': jobTitle,
+      'assignedSite': assignedSite,
+      'status': 'active',
+      'joinedAt': FieldValue.serverTimestamp(),
+    });
   }
 }

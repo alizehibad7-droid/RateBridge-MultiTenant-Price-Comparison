@@ -18,7 +18,14 @@ import '../../widgets/auth/auth_widgets.dart';
 const _totalSteps = 3;
 
 class RegisterCeoView extends StatefulWidget {
-  const RegisterCeoView({super.key});
+  const RegisterCeoView({
+    super.key,
+    @visibleForTesting this.debugCnicFrontBytes,
+    @visibleForTesting this.debugCnicBackBytes,
+  });
+
+  final Uint8List? debugCnicFrontBytes;
+  final Uint8List? debugCnicBackBytes;
 
   @override
   State<RegisterCeoView> createState() => _RegisterCeoViewState();
@@ -50,6 +57,13 @@ class _RegisterCeoViewState extends State<RegisterCeoView> {
   Uint8List? _officePhotoBytes;
 
   int _currentStep = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _cnicFrontBytes = widget.debugCnicFrontBytes;
+    _cnicBackBytes = widget.debugCnicBackBytes;
+  }
 
   @override
   void dispose() {

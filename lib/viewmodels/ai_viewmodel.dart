@@ -10,8 +10,10 @@ import '../utils/app_exception.dart';
 
 class AiViewModel extends ChangeNotifier {
   final FirestoreService _firestore;
+  final FirebaseAuth _auth;
 
-  AiViewModel(this._firestore);
+  AiViewModel(this._firestore, {FirebaseAuth? auth})
+      : _auth = auth ?? FirebaseAuth.instance;
 
   String? _result;
   bool _isLoading = false;
@@ -46,7 +48,7 @@ class AiViewModel extends ChangeNotifier {
   }
 
   String _requireUid() {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final uid = _auth.currentUser?.uid;
     if (uid == null || uid.isEmpty) {
       throw AppException('Please sign in again and retry.', 'unauthenticated');
     }

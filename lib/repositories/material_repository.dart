@@ -10,8 +10,10 @@ import '../constants/app_constants.dart';
 
 class MaterialRepository {
   final FirestoreService _firestoreService;
+  final FirebaseFirestore _db;
 
-  MaterialRepository(this._firestoreService);
+  MaterialRepository(this._firestoreService, {FirebaseFirestore? firestore})
+      : _db = firestore ?? FirebaseFirestore.instance;
 
   Stream<List<MaterialModel>> getMaterials() {
     return _firestoreService.streamMaterials();
@@ -158,7 +160,7 @@ class MaterialRepository {
     MaterialModel material,
     String companyId,
   ) async {
-    final db = FirebaseFirestore.instance;
+    final db = _db;
     final batch = db.batch();
     final data = material.toMap();
     batch.set(db.collection('materials').doc(material.id), data);
@@ -174,7 +176,7 @@ class MaterialRepository {
     String companyId,
     Map<String, dynamic> data,
   ) async {
-    final db = FirebaseFirestore.instance;
+    final db = _db;
     await Future.wait([
       db.collection('materials').doc(matId).update(data),
       db

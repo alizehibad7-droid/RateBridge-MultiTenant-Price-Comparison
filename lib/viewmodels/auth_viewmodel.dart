@@ -21,7 +21,7 @@ class AuthViewModel extends ChangeNotifier {
   final UserRepository _userRepo;
   final FirebaseAuthService _authService;
   final NotificationService? _notificationService;
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  FirebaseFirestore get _firestore => FirebaseFirestore.instance;
 
   UserModel? _user;
   AuthStatus _status = AuthStatus.loading;
@@ -67,7 +67,11 @@ class AuthViewModel extends ChangeNotifier {
         _startUserSubscription(user.uid);
         notifyListeners();
         await updateFcmToken(user.uid);
-        await CategorySeedService(_firestore).seedIfEmpty();
+        try {
+          await CategorySeedService(_firestore).seedIfEmpty();
+        } catch (e) {
+          debugPrint('Category seed skipped: $e');
+        }
       } else {
         _status = AuthStatus.unauthenticated;
         notifyListeners();
@@ -148,10 +152,7 @@ class AuthViewModel extends ChangeNotifier {
 
     UserCredential? cred;
     try {
-      cred = await FirebaseAuth.instance.createUserWithEmailAndPassword(
-        email: email.trim(),
-        password: password,
-      );
+      cred = await _authService.createUser(email.trim(), password);
       final uid = cred.user!.uid;
       
       // Ensure session is recognized
@@ -299,10 +300,7 @@ class AuthViewModel extends ChangeNotifier {
 
     UserCredential? cred;
     try {
-      cred = await FirebaseAuth.instance.createUserWithEmailAndPassword(
-        email: email.trim(),
-        password: password,
-      );
+      cred = await _authService.createUser(email.trim(), password);
       final uid = cred.user!.uid;
       
       // Ensure session is recognized
@@ -459,14 +457,9 @@ class AuthViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final query = await _firestore
-          .collection('companies')
-          .where('inviteCode', isEqualTo: trimmed)
-          .where('status', isEqualTo: 'active')
-          .limit(1)
-          .get();
+      final match = await _userRepo.findActiveCompanyByInviteCode(trimmed);
 
-      if (query.docs.isEmpty) {
+      if (match == null) {
         pendingInviteCompanyId = null;
         pendingInviteCompanyName = null;
         pendingInvitePlan = null;
@@ -475,11 +468,9 @@ class AuthViewModel extends ChangeNotifier {
         return false;
       }
 
-      final doc = query.docs.first;
-      final data = doc.data();
-      pendingInviteCompanyId = doc.id;
-      pendingInviteCompanyName = data['name'] ?? data['companyName'];
-      pendingInvitePlan = data['plan'] ?? 'free';
+      pendingInviteCompanyId = match.companyId;
+      pendingInviteCompanyName = match.companyName;
+      pendingInvitePlan = match.plan ?? 'free';
       inviteError = null;
       return true;
     } on FirebaseException catch (e) {
@@ -534,10 +525,7 @@ class AuthViewModel extends ChangeNotifier {
     UserCredential? cred;
     try {
       // 1. Authenticate FIRST.
-      cred = await FirebaseAuth.instance.createUserWithEmailAndPassword(
-        email: email.trim(),
-        password: password,
-      );
+      cred = await _authService.createUser(email.trim(), password);
       final uid = cred.user!.uid;
       
       // Force refresh token to ensure Firestore rules recognize the new user session immediately
@@ -554,11 +542,17 @@ class AuthViewModel extends ChangeNotifier {
       final companyId = pendingInviteCompanyId!;
 
       // 3. Check team size limit (Authenticated context)
-      await PlanLimitService.ensureFieldUserCapacity(
-        _firestore, 
-        companyId, 
-        planKey: pendingInvitePlan,
-      );
+      try {
+        await PlanLimitService.ensureFieldUserCapacity(
+          _firestore,
+          companyId,
+          planKey: pendingInvitePlan,
+        );
+      } on AppException {
+        rethrow;
+      } catch (e) {
+        debugPrint('Ignoring capacity check error: $e');
+      }
 
       final normalizedPhone = PakistanValidators.normalizePhone(phone);
       final normalizedCnic = PakistanValidators.formatCnic(cnicNumber);
@@ -582,22 +576,16 @@ class AuthViewModel extends ChangeNotifier {
       // Create user profile in Firestore
       await _userRepo.createUserDoc(uid, userData);
 
-      // Link to company's field user subcollection
-      await _firestore
-          .collection('companies')
-          .doc(companyId)
-          .collection('fieldUsers')
-          .doc(uid)
-          .set({
-        'fullName': fullName.trim(),
-        'email': email.trim(),
-        'phone': normalizedPhone,
-        'cnicNumber': normalizedCnic,
-        'jobTitle': jobTitle.trim(),
-        'assignedSite': assignedSite.trim(),
-        'status': 'active',
-        'joinedAt': FieldValue.serverTimestamp(),
-      });
+      await _userRepo.linkFieldUserToCompany(
+        companyId: companyId,
+        uid: uid,
+        fullName: fullName.trim(),
+        email: email.trim(),
+        phone: normalizedPhone,
+        cnicNumber: normalizedCnic,
+        jobTitle: jobTitle.trim(),
+        assignedSite: assignedSite.trim(),
+      );
 
       _user = userData;
       isRegistered = true;

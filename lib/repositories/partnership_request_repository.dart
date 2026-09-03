@@ -9,9 +9,15 @@ import '../utils/app_exception.dart';
 import '../utils/partnership_stream_utils.dart';
 
 class PartnershipRequestRepository {
-  final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final FirebaseFirestore _db;
+  final FirebaseFunctions _functions;
 
-  PartnershipRequestRepository(FirestoreService _);
+  PartnershipRequestRepository(
+    FirestoreService _, {
+    FirebaseFirestore? firestore,
+    FirebaseFunctions? functions,
+  })  : _db = firestore ?? FirebaseFirestore.instance,
+        _functions = functions ?? FirebaseFunctions.instance;
 
   Future<bool> _hasBlockingRequest({
     required String companyId,
@@ -151,7 +157,7 @@ class PartnershipRequestRepository {
 
     try {
       // Attempt to call the cloud function for notifications and audit logging.
-      await FirebaseFunctions.instance
+      await _functions
           .httpsCallable('acceptPartnershipRequest')
           .call(<String, dynamic>{'requestId': requestId});
     } catch (e) {

@@ -7,9 +7,10 @@ import '../constants/app_constants.dart';
 import '../utils/app_exception.dart';
 
 class JoinRequestRepository {
-  final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final FirebaseFirestore _db;
 
-  JoinRequestRepository(FirestoreService _);
+  JoinRequestRepository(FirestoreService _, {FirebaseFirestore? firestore})
+      : _db = firestore ?? FirebaseFirestore.instance;
 
   Future<String> createJoinRequest(
     String supplierUid,

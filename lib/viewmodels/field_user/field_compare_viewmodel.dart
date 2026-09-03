@@ -13,6 +13,7 @@ enum CompareSortOption { price, rating }
 class FieldCompareViewModel extends ChangeNotifier {
   final MaterialRepository _materialRepo;
   final FirestoreService _firestore;
+  final FirebaseAuth _auth;
 
   bool _isLoading = false;
   bool _isAiLoading = false;
@@ -25,7 +26,8 @@ class FieldCompareViewModel extends ChangeNotifier {
   final Map<String, String> _aiLines = {};
   int _aiGeneration = 0;
 
-  FieldCompareViewModel(this._materialRepo, this._firestore);
+  FieldCompareViewModel(this._materialRepo, this._firestore, {FirebaseAuth? auth})
+      : _auth = auth ?? FirebaseAuth.instance;
 
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
@@ -193,7 +195,7 @@ class FieldCompareViewModel extends ChangeNotifier {
       return;
     }
 
-    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final uid = _auth.currentUser?.uid;
     if (uid == null || uid.isEmpty) {
       debugPrint('Compare AI skipped: user is signed out');
       return;

@@ -45,7 +45,12 @@ class SupplierViewModel extends ChangeNotifier {
   final PartnershipRequestRepository _partnershipRepo;
   final NotificationService _notificationService;
   final CloudFunctionService _cloudFunctions;
-  final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final FirebaseFirestore _db;
+  final Future<String?> Function({
+    required List<int> bytes,
+    required String folder,
+    String filename,
+  }) _uploadImageBytes;
 
   SupplierViewModel(
     this._materialRepo,
@@ -57,8 +62,15 @@ class SupplierViewModel extends ChangeNotifier {
     this._userRepo,
     this._companyRepo,
     this._partnershipRepo,
-    this._notificationService,
-  );
+    this._notificationService, {
+    FirebaseFirestore? firestore,
+    Future<String?> Function({
+      required List<int> bytes,
+      required String folder,
+      String filename,
+    })? uploadImageBytes,
+  })  : _db = firestore ?? FirebaseFirestore.instance,
+        _uploadImageBytes = uploadImageBytes ?? CloudinaryService.uploadImageBytes;
 
   static String monthKey([DateTime? date]) =>
       DateFormat('yyyy-MM').format(date ?? DateTime.now());
@@ -807,7 +819,7 @@ class SupplierViewModel extends ChangeNotifier {
     if (amount <= 0 || amount > commissionOwed + 0.01) { _error = "Invalid amount"; notifyListeners(); return false; }
     _isLoading = true; notifyListeners();
     try {
-      final url = await CloudinaryService.uploadImageBytes(bytes: await screenshotFile.readAsBytes(), folder: 'commission_proofs/$_supplierUid', filename: 'comm_${DateTime.now().millisecondsSinceEpoch}.jpg');
+      final url = await _uploadImageBytes(bytes: await screenshotFile.readAsBytes(), folder: 'commission_proofs/$_supplierUid', filename: 'comm_${DateTime.now().millisecondsSinceEpoch}.jpg');
       if (url == null) throw Exception("Upload failed");
 
       // Collect IDs of unsettled transactions to link them for source-of-truth updates

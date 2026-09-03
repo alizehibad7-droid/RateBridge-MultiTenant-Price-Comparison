@@ -14,7 +14,13 @@ import '../../widgets/supplier_performance_scorecard.dart';
 class AdminSupplierManagementView extends StatefulWidget {
   final bool embedded;
 
-  const AdminSupplierManagementView({super.key, this.embedded = false});
+  const AdminSupplierManagementView({
+    super.key,
+    this.embedded = false,
+    @visibleForTesting this.debugFirestore,
+  });
+
+  final FirebaseFirestore? debugFirestore;
 
   @override
   State<AdminSupplierManagementView> createState() =>
@@ -26,6 +32,9 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
   late TabController _tabController;
   final Set<String> _selectedSupplierUids = {};
   bool _isBulkProcessing = false;
+
+  FirebaseFirestore get _db =>
+      widget.debugFirestore ?? FirebaseFirestore.instance;
 
   @override
   void initState() {
@@ -171,7 +180,7 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
 
   Widget _buildSupplierList(String status, AdminViewModel adminVM) {
     return StreamBuilder<List<UserModel>>(
-      stream: FirebaseFirestore.instance
+      stream: _db
           .collection('users')
           .where('role', isEqualTo: 'Supplier')
           .where('status', isEqualTo: status)
@@ -197,7 +206,7 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
           itemBuilder: (context, index) {
             final supplier = suppliers[index];
             return FutureBuilder<DocumentSnapshot>(
-              future: FirebaseFirestore.instance
+              future: _db
                   .collection('suppliers')
                   .doc(supplier.uid)
                   .get(),

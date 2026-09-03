@@ -17,7 +17,13 @@ import '../../../viewmodels/rfq_viewmodel.dart';
 class CreateRfqView extends StatefulWidget {
   final bool fieldUser;
 
-  const CreateRfqView({super.key, this.fieldUser = false});
+  const CreateRfqView({
+    super.key,
+    this.fieldUser = false,
+    @visibleForTesting this.debugFirestore,
+  });
+
+  final FirebaseFirestore? debugFirestore;
 
   @override
   State<CreateRfqView> createState() => _CreateRfqViewState();
@@ -123,7 +129,7 @@ class _CreateRfqViewState extends State<CreateRfqView> {
     if (_checkedCompanyId != companyId) {
       _checkedCompanyId = companyId;
       _premiumAccess = PlanLimitService.companyPlan(
-        FirebaseFirestore.instance,
+        widget.debugFirestore ?? FirebaseFirestore.instance,
         companyId,
       ).then((plan) => plan.planKey == 'premium');
     }

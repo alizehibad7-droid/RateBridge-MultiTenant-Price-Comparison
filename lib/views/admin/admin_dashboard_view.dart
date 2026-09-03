@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -18,7 +19,12 @@ import 'admin_ceo_management_view.dart';
 import 'admin_supplier_management_view.dart';
 
 class AdminDashboardView extends StatefulWidget {
-  const AdminDashboardView({super.key});
+  const AdminDashboardView({
+    super.key,
+    @visibleForTesting this.debugFirestore,
+  });
+
+  final FirebaseFirestore? debugFirestore;
 
   @override
   State<AdminDashboardView> createState() => _AdminDashboardViewState();
@@ -38,9 +44,15 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
     super.initState();
     _screens = [
       _AdminHomeOverview(onAction: _onTabTapped),
-      const AdminSupplierManagementView(embedded: true),
+      AdminSupplierManagementView(
+        embedded: true,
+        debugFirestore: widget.debugFirestore,
+      ),
       const AdminFinanceView(),
-      const AdminCeoManagementView(embedded: true),
+      AdminCeoManagementView(
+        embedded: true,
+        debugFirestore: widget.debugFirestore,
+      ),
       _AdminProfileView(onAction: _onTabTapped),
     ];
   }

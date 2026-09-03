@@ -24,6 +24,13 @@ class FieldOrdersViewModel extends ChangeNotifier {
   final CompanyRepository _companyRepo;
   final MaterialRepository _materialRepo;
   final NotificationService _notificationService;
+  final Future<void> Function(String companyId) _ensureActiveOrderCapacity;
+  final void Function({
+    required String path,
+    required Map<String, String> queryParameters,
+    required MaterialListing extra,
+  })? _navigateToPlaceOrder;
+  final void Function(String message)? _showReorderError;
 
   bool _isSubmitting = false;
   bool _isLoadingOrders = false;
@@ -36,8 +43,22 @@ class FieldOrdersViewModel extends ChangeNotifier {
     this._transactionRepo,
     this._companyRepo,
     this._materialRepo,
-    this._notificationService,
-  );
+    this._notificationService, {
+    Future<void> Function(String companyId)? ensureActiveOrderCapacity,
+    FirebaseFirestore? firestore,
+    void Function({
+      required String path,
+      required Map<String, String> queryParameters,
+      required MaterialListing extra,
+    })? navigateToPlaceOrder,
+    void Function(String message)? showReorderError,
+  })  : _ensureActiveOrderCapacity = ensureActiveOrderCapacity ??
+            ((companyId) => PlanLimitService.ensureActiveOrderCapacity(
+                  firestore ?? FirebaseFirestore.instance,
+                  companyId,
+                )),
+        _navigateToPlaceOrder = navigateToPlaceOrder,
+        _showReorderError = showReorderError;
 
   bool get isSubmitting => _isSubmitting;
   bool get isLoadingOrders => _isLoadingOrders;
@@ -223,10 +244,7 @@ class FieldOrdersViewModel extends ChangeNotifier {
 
       // Count every non-terminal order across the whole company, not only
       // accepted orders belonging to the current field user.
-      await PlanLimitService.ensureActiveOrderCapacity(
-        FirebaseFirestore.instance,
-        companyId,
-      );
+      await _ensureActiveOrderCapacity(companyId);
 
       final isAutoApproved = threshold > 0 && totalAmount <= threshold;
 
@@ -465,7 +483,16 @@ class FieldOrdersViewModel extends ChangeNotifier {
       final listing = _listingFromMaterial(material, supplier);
 
       // 4. Navigate to place order screen
-      if (context.mounted) {
+      if (_navigateToPlaceOrder != null) {
+        _navigateToPlaceOrder!(
+          path: RouteNames.fieldPlaceOrder,
+          queryParameters: {
+            'address': pastOrder.deliveryAddress,
+            'quantity': pastOrder.quantity.toString(),
+          },
+          extra: listing,
+        );
+      } else if (context.mounted) {
         final uri = Uri(
           path: RouteNames.fieldPlaceOrder,
           queryParameters: {
@@ -477,7 +504,9 @@ class FieldOrdersViewModel extends ChangeNotifier {
       }
     } catch (e) {
       _errorMessage = e is AppException ? e.message : e.toString();
-      if (context.mounted) {
+      if (_showReorderError != null) {
+        _showReorderError!(_errorMessage!);
+      } else if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(_errorMessage!), backgroundColor: Colors.red),
         );

@@ -12,14 +12,24 @@ import '../../viewmodels/subscription_viewmodel.dart';
 import '../../widgets/admin/admin_widgets.dart';
 
 class AdminSubscriptionView extends StatefulWidget {
-  const AdminSubscriptionView({super.key});
+  const AdminSubscriptionView({
+    super.key,
+    @visibleForTesting this.debugFirestore,
+    @visibleForTesting this.debugLoadGate,
+  });
+
+  final FirebaseFirestore? debugFirestore;
+
+  /// When set, [_loadCompanies] waits on this future after flipping the
+  /// loading flag so widget tests can observe the spinner.
+  final Future<void>? debugLoadGate;
 
   @override
   State<AdminSubscriptionView> createState() => _AdminSubscriptionViewState();
 }
 
 class _AdminSubscriptionViewState extends State<AdminSubscriptionView> {
-  final _firestore = FirebaseFirestore.instance;
+  late final FirebaseFirestore _firestore;
   final _searchController = TextEditingController();
   Timer? _debounce;
 
@@ -31,6 +41,7 @@ class _AdminSubscriptionViewState extends State<AdminSubscriptionView> {
   @override
   void initState() {
     super.initState();
+    _firestore = widget.debugFirestore ?? FirebaseFirestore.instance;
     _loadCompanies();
   }
 
@@ -44,6 +55,9 @@ class _AdminSubscriptionViewState extends State<AdminSubscriptionView> {
   Future<void> _loadCompanies() async {
     setState(() => _loadingCompanies = true);
     try {
+      if (widget.debugLoadGate != null) {
+        await widget.debugLoadGate;
+      }
       final snap = await _firestore
           .collection('companies')
           .where('status', isEqualTo: 'active')

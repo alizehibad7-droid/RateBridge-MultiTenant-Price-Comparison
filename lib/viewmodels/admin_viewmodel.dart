@@ -43,7 +43,7 @@ class PlatformTransaction {
 }
 
 class AdminViewModel extends ChangeNotifier {
-  final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final FirebaseFirestore _db;
   final NotificationService? _notificationService;
 
   String? _uid;
@@ -71,7 +71,8 @@ class AdminViewModel extends ChangeNotifier {
 
   StreamSubscription? _paymentQueueSub;
 
-  AdminViewModel([this._notificationService]);
+  AdminViewModel([this._notificationService, FirebaseFirestore? firestore])
+      : _db = firestore ?? FirebaseFirestore.instance;
 
   @override
   void dispose() {

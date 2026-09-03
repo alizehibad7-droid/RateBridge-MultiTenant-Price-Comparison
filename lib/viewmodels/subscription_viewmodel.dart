@@ -16,12 +16,26 @@ class SubscriptionViewModel extends ChangeNotifier {
   final FirestoreService _firestoreService;
   final CloudFunctionService _cloudFunctionService;
   final StorageService? _storageService;
+  final FirebaseFirestore _db;
+  final Future<String?> Function({
+    required List<int> bytes,
+    required String folder,
+    String filename,
+  }) _uploadImageBytes;
 
   SubscriptionViewModel(
     this._firestoreService,
     this._cloudFunctionService, [
     this._storageService,
-  ]);
+    FirebaseFirestore? firestore,
+    Future<String?> Function({
+      required List<int> bytes,
+      required String folder,
+      String filename,
+    })? uploadImageBytes,
+  ])  : _db = firestore ?? FirebaseFirestore.instance,
+        _uploadImageBytes =
+            uploadImageBytes ?? CloudinaryService.uploadImageBytes;
 
   bool _isLoading = false;
   String? error;
@@ -61,7 +75,7 @@ class SubscriptionViewModel extends ChangeNotifier {
   }
 
   Future<void> _loadPendingPayment(String companyId) async {
-    final snap = await FirebaseFirestore.instance
+    final snap = await _db
         .collection('payment_proofs')
         .where('companyId', isEqualTo: companyId)
         .where('status', isEqualTo: 'pending')
@@ -119,7 +133,7 @@ class SubscriptionViewModel extends ChangeNotifier {
       if (bytes.isEmpty) throw Exception("Selected file is empty.");
 
       // 2. Upload to Cloudinary instead of Firebase Storage to bypass CORS/Storage errors
-      final url = await CloudinaryService.uploadImageBytes(
+      final url = await _uploadImageBytes(
         bytes: bytes,
         folder: 'payment_proofs/$companyId',
         filename: '${DateTime.now().millisecondsSinceEpoch}.jpg',
@@ -144,7 +158,7 @@ class SubscriptionViewModel extends ChangeNotifier {
         createdAt: DateTime.now(),
       );
 
-      await FirebaseFirestore.instance.collection('payment_proofs').add(proof.toMap());
+      await _db.collection('payment_proofs').add(proof.toMap());
       
       _pendingPayment = proof;
       successMessage = 'Payment proof submitted. Plan will be active after Admin verification.';
@@ -219,7 +233,7 @@ class SubscriptionViewModel extends ChangeNotifier {
     await _firestoreService.updateSubscriptionHistory(companyId, historyEntry);
 
     // 2. Update Company doc so Field Users inherit the plan automatically
-    await FirebaseFirestore.instance
+    await _db
         .collection('companies')
         .doc(companyId)
         .set({
@@ -256,7 +270,7 @@ class SubscriptionViewModel extends ChangeNotifier {
       );
       await _firestoreService.updateSubscriptionHistory(companyId, historyEntry);
 
-      await FirebaseFirestore.instance
+      await _db
           .collection('companies')
           .doc(companyId)
           .set({

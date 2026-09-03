@@ -7,10 +7,20 @@ import '../models/category_model.dart';
 import '../repositories/material_repository.dart';
 import '../services/cloudinary_service.dart';
 
+typedef MaterialImageUploader = Future<String?> Function({
+  required List<int> bytes,
+  required String folder,
+  String filename,
+});
+
 class MaterialViewModel extends ChangeNotifier {
   final MaterialRepository _materialRepo;
+  final MaterialImageUploader _uploadImage;
 
-  MaterialViewModel(this._materialRepo);
+  MaterialViewModel(
+    this._materialRepo, {
+    MaterialImageUploader? uploadImage,
+  }) : _uploadImage = uploadImage ?? CloudinaryService.uploadImageBytes;
 
   List<CategoryModel> _categories = [];
   CategoryModel? _selectedCategory;
@@ -113,7 +123,7 @@ class MaterialViewModel extends ChangeNotifier {
     try {
       String? imageUrl;
       final bytes = await imageFile.readAsBytes();
-      imageUrl = await CloudinaryService.uploadImageBytes(
+      imageUrl = await _uploadImage(
         bytes: bytes,
         folder: 'ratebridge/materials',
         filename: imageFile.name.isNotEmpty ? imageFile.name : 'material.jpg',
@@ -222,7 +232,7 @@ class MaterialViewModel extends ChangeNotifier {
 
       if (imageFile != null) {
         final bytes = await imageFile.readAsBytes();
-        final imageUrl = await CloudinaryService.uploadImageBytes(
+        final imageUrl = await _uploadImage(
           bytes: bytes,
           folder: 'ratebridge/materials',
           filename: imageFile.name.isNotEmpty ? imageFile.name : 'material.jpg',

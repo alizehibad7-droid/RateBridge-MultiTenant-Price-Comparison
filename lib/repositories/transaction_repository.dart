@@ -10,9 +10,10 @@ import '../constants/app_constants.dart';
 import '../utils/app_exception.dart';
 
 class TransactionRepository {
-  final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final FirebaseFirestore _db;
 
-  TransactionRepository(FirestoreService _);
+  TransactionRepository(FirestoreService _, {FirebaseFirestore? firestore})
+      : _db = firestore ?? FirebaseFirestore.instance;
 
   /// Live stream of every unsettled commission record for [supplierUid].
   Stream<List<TransactionModel>> watchSupplierUnsettledTransactions(String supplierUid) {

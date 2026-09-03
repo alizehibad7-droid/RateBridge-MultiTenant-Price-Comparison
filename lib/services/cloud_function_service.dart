@@ -41,7 +41,10 @@ String _messageForFunctionsException(FirebaseFunctionsException e) {
 }
 
 class CloudFunctionService {
-  final FirebaseFunctions _functions = FirebaseFunctions.instance;
+  final FirebaseFunctions _functions;
+
+  CloudFunctionService({FirebaseFunctions? functions})
+      : _functions = functions ?? FirebaseFunctions.instance;
 
   Future<dynamic> callFunction(String name, Map<String, dynamic> data) async {
     try {

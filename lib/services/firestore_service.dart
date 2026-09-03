@@ -24,7 +24,10 @@ import '../utils/seed_data_guard.dart';
 import '../utils/app_exception.dart';
 
 class FirestoreService {
-  final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final FirebaseFirestore _db;
+
+  FirestoreService({FirebaseFirestore? firestore})
+      : _db = firestore ?? FirebaseFirestore.instance;
 
   Map<String, dynamic> _requireDocData(DocumentSnapshot doc) {
     final data = doc.data();

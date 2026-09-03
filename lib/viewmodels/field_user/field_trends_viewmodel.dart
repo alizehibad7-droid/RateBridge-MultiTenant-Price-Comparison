@@ -15,6 +15,7 @@ class FieldTrendsViewModel extends ChangeNotifier {
   final MaterialRepository _materialRepo;
   final CompanyRepository _companyRepo;
   final FirestoreService _firestore;
+  final FirebaseAuth _auth;
 
   bool _isLoading = false;
   bool _isAiLoading = false;
@@ -29,8 +30,9 @@ class FieldTrendsViewModel extends ChangeNotifier {
   FieldTrendsViewModel(
     this._materialRepo,
     this._companyRepo,
-    this._firestore,
-  );
+    this._firestore, {
+    FirebaseAuth? auth,
+  }) : _auth = auth ?? FirebaseAuth.instance;
 
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
@@ -196,7 +198,7 @@ class FieldTrendsViewModel extends ChangeNotifier {
       return;
     }
 
-    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final uid = _auth.currentUser?.uid;
     if (uid == null || uid.isEmpty) {
       debugPrint('Trend AI skipped: user is signed out');
       return;

@@ -8,9 +8,10 @@ import '../constants/firestore_paths.dart';
 import '../utils/app_exception.dart';
 
 class PriceHistoryRepository {
-  final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final FirebaseFirestore _db;
 
-  PriceHistoryRepository(FirestoreService _);
+  PriceHistoryRepository(FirestoreService _, {FirebaseFirestore? firestore})
+      : _db = firestore ?? FirebaseFirestore.instance;
 
   Stream<List<PriceHistoryModel>> watchPriceHistory(
     String matId,

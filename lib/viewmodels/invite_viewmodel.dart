@@ -13,6 +13,7 @@ class InviteViewModel extends ChangeNotifier {
   final JoinRequestRepository _joinRequestRepo;
   final DynamicLinkService _dynamicLinks;
   final CloudFunctionService _cloudFunctions;
+  final Future<void> Function(String text, {String? subject}) _shareText;
 
   String? _supplierUid;
   String? _companyId;
@@ -24,7 +25,16 @@ class InviteViewModel extends ChangeNotifier {
   bool _isRejected = false;
   String? _error;
 
-  InviteViewModel(this._invitationRepo, this._joinRequestRepo, this._dynamicLinks, this._cloudFunctions);
+  InviteViewModel(
+    this._invitationRepo,
+    this._joinRequestRepo,
+    this._dynamicLinks,
+    this._cloudFunctions, {
+    Future<void> Function(String text, {String? subject})? shareText,
+  }) : _shareText = shareText ??
+            ((text, {subject}) async {
+              await Share.share(text, subject: subject);
+            });
 
   void updateAuth(AuthViewModel auth) {
     _supplierUid = auth.user?.uid;
@@ -107,7 +117,7 @@ class InviteViewModel extends ChangeNotifier {
         companyId, ceoUid, targetSupplierUid, companyName,
       );
       final link = await _dynamicLinks.generateInviteLink(token);
-      await Share.share(
+      await _shareText(
         'You have been invited to supply on RateBridge.\nTap to accept: $link',
         subject: 'RateBridge Supplier Invitation',
       );

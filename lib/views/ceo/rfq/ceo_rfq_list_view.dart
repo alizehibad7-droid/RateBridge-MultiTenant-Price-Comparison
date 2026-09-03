@@ -18,7 +18,13 @@ import '../../../widgets/ceo/ceo_widgets.dart';
 class CeoRfqListView extends StatelessWidget {
   final bool fieldUser;
 
-  const CeoRfqListView({super.key, this.fieldUser = false});
+  const CeoRfqListView({
+    super.key,
+    this.fieldUser = false,
+    @visibleForTesting this.debugFirestore,
+  });
+
+  final FirebaseFirestore? debugFirestore;
 
   @override
   Widget build(BuildContext context) {
@@ -67,7 +73,7 @@ class CeoRfqListView extends StatelessWidget {
         child: FloatingActionButton.extended(
           onPressed: () async {
             final effectivePlan = await PlanLimitService.companyPlan(
-              FirebaseFirestore.instance,
+              debugFirestore ?? FirebaseFirestore.instance,
               companyId,
             );
             if (!context.mounted) return;

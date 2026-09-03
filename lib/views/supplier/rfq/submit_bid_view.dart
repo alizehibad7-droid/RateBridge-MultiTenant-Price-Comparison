@@ -9,7 +9,13 @@ import '../../../viewmodels/supplier_viewmodel.dart';
 
 class SubmitBidView extends StatefulWidget {
   final String rfqId;
-  const SubmitBidView({super.key, required this.rfqId});
+  final FirebaseFirestore? debugFirestore;
+
+  const SubmitBidView({
+    super.key,
+    required this.rfqId,
+    @visibleForTesting this.debugFirestore,
+  });
 
   @override
   State<SubmitBidView> createState() => _SubmitBidViewState();
@@ -33,12 +39,8 @@ class _SubmitBidViewState extends State<SubmitBidView> {
 
   Future<void> _loadData() async {
     final vm = context.read<SupplierViewModel>();
-    // Fetch RFQ
-    final rfqDoc =
-        await FirebaseFirestore.instance
-            .collection('rfqs')
-            .doc(widget.rfqId)
-            .get();
+    final db = widget.debugFirestore ?? FirebaseFirestore.instance;
+    final rfqDoc = await db.collection('rfqs').doc(widget.rfqId).get();
     if (rfqDoc.exists) {
       _rfq = RfqModel.fromMap(rfqDoc.id, rfqDoc.data()!);
       // Check if existing bid

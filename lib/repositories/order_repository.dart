@@ -8,9 +8,10 @@ import '../utils/app_exception.dart';
 
 class OrderRepository {
   final FirestoreService _firestoreService;
-  final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final FirebaseFirestore _db;
 
-  OrderRepository(this._firestoreService);
+  OrderRepository(this._firestoreService, {FirebaseFirestore? firestore})
+      : _db = firestore ?? FirebaseFirestore.instance;
 
   Future<void> createOrder(OrderModel order) async {
     try {

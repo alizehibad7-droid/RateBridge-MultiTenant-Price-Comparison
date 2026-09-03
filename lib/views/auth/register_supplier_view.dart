@@ -22,7 +22,16 @@ import '../../widgets/auth/auth_widgets.dart';
 const _totalSteps = 3;
 
 class RegisterSupplierView extends StatefulWidget {
-  const RegisterSupplierView({super.key});
+  const RegisterSupplierView({
+    super.key,
+    @visibleForTesting this.debugCnicFrontBytes,
+    @visibleForTesting this.debugCnicBackBytes,
+    @visibleForTesting this.debugShopPhotoBytes,
+  });
+
+  final Uint8List? debugCnicFrontBytes;
+  final Uint8List? debugCnicBackBytes;
+  final Uint8List? debugShopPhotoBytes;
 
   @override
   State<RegisterSupplierView> createState() => _RegisterSupplierViewState();
@@ -60,6 +69,9 @@ class _RegisterSupplierViewState extends State<RegisterSupplierView> {
   @override
   void initState() {
     super.initState();
+    _cnicFrontBytes = widget.debugCnicFrontBytes;
+    _cnicBackBytes = widget.debugCnicBackBytes;
+    _shopPhotoBytes = widget.debugShopPhotoBytes;
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadCategories());
   }
 
