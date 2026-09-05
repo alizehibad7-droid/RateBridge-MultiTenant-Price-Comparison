@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../theme/ceo_theme.dart';
+import '../../theme/field_theme.dart';
 import '../../viewmodels/ceo_viewmodel.dart';
 import '../../viewmodels/auth_viewmodel.dart';
 import '../../models/user_model.dart';
@@ -113,7 +114,7 @@ class _CeoFieldUsersViewState extends State<CeoFieldUsersView>
           controller: _tabController,
           indicatorColor: CeoColors.amber,
           indicatorWeight: 3,
-          labelColor: CeoColors.navy,
+          labelColor: Colors.white,
           unselectedLabelColor: CeoColors.textGrey,
           labelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 13),
           unselectedLabelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w500, fontSize: 13),
@@ -138,38 +139,12 @@ class _CeoFieldUsersViewState extends State<CeoFieldUsersView>
                   }
                   final users = snap.data ?? [];
                   if (users.isEmpty) {
-                    return Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(20),
-                            decoration: BoxDecoration(
-                              color: CeoColors.navy.withValues(alpha: 0.05),
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(
-                              _emptyIcon(filters[i]),
-                              size: 48, 
-                              color: CeoColors.textGrey,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            'No ${filters[i]} field users found',
-                            style: CeoTheme.titleStyle(size: 16).copyWith(color: CeoColors.textGrey),
-                          ),
-                          if (i == 0) ...[
-                            const SizedBox(height: 24),
-                            ElevatedButton.icon(
-                              onPressed: () => _showInviteCodeSheet(context),
-                              icon: const Icon(Icons.share_rounded, size: 18),
-                              label: const Text('Share invite code'),
-                              style: CeoTheme.primaryButtonStyle(height: 48),
-                            ),
-                          ],
-                        ],
-                      ),
+                    return _FieldUsersEmptyState(
+                      status: filters[i],
+                      icon: _emptyIcon(filters[i]),
+                      onShareInvite: i == 0
+                          ? () => _showInviteCodeSheet(context)
+                          : null,
                     );
                   }
                   return ListView.separated(
@@ -216,16 +191,18 @@ class _CeoFieldUsersViewState extends State<CeoFieldUsersView>
     final isSelected = _selectedUserUids.contains(user.uid);
     final canSelect = filter == 'active';
 
-    return AdminCard(
+    return Container(
       padding: const EdgeInsets.all(16),
+      decoration: FieldTheme.cardDecoration(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               if (canSelect)
                 Padding(
-                  padding: const EdgeInsets.only(right: 8),
+                  padding: const EdgeInsets.only(right: 8, top: 10),
                   child: SizedBox(
                     width: 24,
                     height: 24,
@@ -241,65 +218,96 @@ class _CeoFieldUsersViewState extends State<CeoFieldUsersView>
                         });
                       },
                       activeColor: CeoColors.amber,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(4),
+                      ),
                     ),
                   ),
                 ),
               Container(
-                width: 44,
-                height: 44,
+                width: 48,
+                height: 48,
                 decoration: BoxDecoration(
                   color: _statusColor(filter).withValues(alpha: 0.1),
-                  shape: BoxShape.circle,
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                child: Center(
-                  child: user.profileImageUrl != null
-                    ? CircleAvatar(radius: 22, backgroundImage: NetworkImage(user.profileImageUrl!))
-                    : Text(
-                        user.name.isNotEmpty ? user.name[0].toUpperCase() : 'F',
-                        style: GoogleFonts.plusJakartaSans(
-                          color: _statusColor(filter),
-                          fontWeight: FontWeight.w800,
-                          fontSize: 18,
+                clipBehavior: Clip.antiAlias,
+                child: user.profileImageUrl != null
+                    ? Image.network(
+                        user.profileImageUrl!,
+                        fit: BoxFit.cover,
+                      )
+                    : Center(
+                        child: Text(
+                          user.name.isNotEmpty
+                              ? user.name[0].toUpperCase()
+                              : 'F',
+                          style: GoogleFonts.plusJakartaSans(
+                            color: _statusColor(filter),
+                            fontWeight: FontWeight.w800,
+                            fontSize: 20,
+                          ),
                         ),
                       ),
-                ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       user.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.plusJakartaSans(
                         fontWeight: FontWeight.w700,
-                        fontSize: 15,
-                        color: CeoColors.navy,
+                        fontSize: 16,
+                        color: FieldColors.primaryNavy,
                       ),
                     ),
+                    const SizedBox(height: 4),
                     Row(
                       children: [
-                        const Icon(Icons.phone_outlined, size: 12, color: CeoColors.textGrey),
+                        const Icon(
+                          Icons.phone_outlined,
+                          size: 12,
+                          color: FieldColors.textSecondary,
+                        ),
                         const SizedBox(width: 4),
-                        Text(user.phone, style: CeoTheme.mutedStyle(size: 12)),
+                        Expanded(
+                          child: Text(
+                            user.phone,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: FieldTypography.bodyMedium,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.event_available_rounded,
+                          size: 12,
+                          color: FieldColors.textSecondary,
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            'Member since ${_fmtDate(user.createdAt)}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: FieldTypography.labelSmall,
+                          ),
+                        ),
                       ],
                     ),
                   ],
                 ),
               ),
+              const SizedBox(width: 8),
               CeoStatusBadge(status: filter),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              const Icon(Icons.event_available_rounded, size: 12, color: CeoColors.textGrey),
-              const SizedBox(width: 6),
-              Text(
-                'Member since ${_fmtDate(user.createdAt)}',
-                style: CeoTheme.mutedStyle(size: 11),
-              ),
             ],
           ),
           const SizedBox(height: 16),
@@ -660,4 +668,82 @@ class _CeoFieldUsersViewState extends State<CeoFieldUsersView>
   }
 
   String _fmtDate(DateTime d) => '${d.day}/${d.month}/${d.year}';
+}
+
+class _FieldUsersEmptyState extends StatelessWidget {
+  final String status;
+  final IconData icon;
+  final VoidCallback? onShareInvite;
+
+  const _FieldUsersEmptyState({
+    required this.status,
+    required this.icon,
+    this.onShareInvite,
+  });
+
+  String get _subtitle {
+    switch (status) {
+      case 'pending':
+        return 'Share your invite code so field engineers can join your company.';
+      case 'active':
+        return 'Approved team members will appear here.';
+      default:
+        return 'Deactivated users will appear here.';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 44,
+              color: FieldColors.textMuted.withValues(alpha: 0.75),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'No $status field users found',
+              textAlign: TextAlign.center,
+              style: FieldTypography.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _subtitle,
+              textAlign: TextAlign.center,
+              style: FieldTypography.bodyMedium,
+            ),
+            if (onShareInvite != null) ...[
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
+                onPressed: onShareInvite,
+                icon: const Icon(Icons.share_rounded, size: 18),
+                label: const Text('Share Invite code'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: CeoColors.amber,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 12,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  textStyle: GoogleFonts.plusJakartaSans(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }

@@ -84,7 +84,7 @@ class _CeoMySuppliersViewState extends State<CeoMySuppliersView>
           isScrollable: true,
           indicatorColor: CeoColors.amber,
           indicatorWeight: 3,
-          labelColor: CeoColors.navy,
+          labelColor: Colors.white,
           unselectedLabelColor: CeoColors.textGrey,
           labelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 13),
           unselectedLabelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w500, fontSize: 13),
@@ -234,6 +234,8 @@ class _CeoMySuppliersViewState extends State<CeoMySuppliersView>
                   children: [
                     Text(
                       name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.plusJakartaSans(
                         fontWeight: FontWeight.w700,
                         fontSize: 16,
@@ -244,8 +246,14 @@ class _CeoMySuppliersViewState extends State<CeoMySuppliersView>
                       children: [
                         const Icon(Icons.location_on_outlined, size: 12, color: CeoColors.textGrey),
                         const SizedBox(width: 4),
-                        Text('$city · $materialType',
-                            style: CeoTheme.mutedStyle(size: 12)),
+                        Expanded(
+                          child: Text(
+                            '$city · $materialType',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: CeoTheme.mutedStyle(size: 12),
+                          ),
+                        ),
                       ],
                     ),
                     if (linkedAt != null)

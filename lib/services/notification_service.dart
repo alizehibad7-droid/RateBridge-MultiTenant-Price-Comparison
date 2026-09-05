@@ -20,6 +20,7 @@ class NotificationService {
   static const typeCommission = 'commission';
   static const typePartnership = 'partnership';
   static const typeRFQ = 'rfq';
+  static const typeRating = 'rating';
   static const typeDispute = 'dispute';
   static const typeApproval = 'approval';
 
@@ -352,6 +353,35 @@ class NotificationService {
     );
   }
 
+  Future<void> notifyDisputeResolved({
+    required String recipientUid,
+    required String recipientRole,
+    required String orderId,
+    required String companyId,
+    required String status,
+    required String resolutionNotes,
+  }) async {
+    final rejected = status.trim().toLowerCase() == 'rejected';
+    final outcome = rejected ? 'rejected' : 'resolved';
+    final notes = resolutionNotes.trim();
+    await _create(
+      recipientUserId: recipientUid,
+      recipientRole: recipientRole,
+      type: typeDispute,
+      title: rejected ? 'Dispute rejected' : 'Dispute resolved',
+      message: notes.isEmpty
+          ? 'Your dispute for order $orderId was $outcome.'
+          : 'Your dispute for order $orderId was $outcome. $notes',
+      companyId: companyId,
+      data: {
+        'orderId': orderId,
+        'status': status,
+        'relatedId': orderId,
+        'relatedCollection': 'orders',
+      },
+    );
+  }
+
   Future<void> notifySubscriptionPaymentSubmitted({
     required String adminUserId,
     required String companyName,
@@ -499,6 +529,38 @@ class NotificationService {
         'companyName': companyName,
         'relatedId': rfqId,
         'relatedCollection': 'rfqs',
+      },
+    );
+  }
+
+  Future<void> notifySupplierNewRating({
+    required String supplierId,
+    required double rating,
+    required String fieldUserName,
+    required String materialName,
+    required String orderId,
+    String comment = '',
+  }) async {
+    final stars = rating == rating.roundToDouble()
+        ? rating.toStringAsFixed(0)
+        : rating.toStringAsFixed(1);
+    final excerpt = comment.trim();
+    final excerptBit = excerpt.isEmpty
+        ? ''
+        : ' “${excerpt.length > 80 ? '${excerpt.substring(0, 80)}…' : excerpt}”';
+    await _create(
+      recipientUserId: supplierId,
+      recipientRole: 'Supplier',
+      type: typeRating,
+      title: 'New rating received',
+      message:
+          '$fieldUserName rated you $stars/5 for $materialName.$excerptBit',
+      data: {
+        'orderId': orderId,
+        'rating': rating,
+        'materialName': materialName,
+        'relatedId': orderId,
+        'relatedCollection': 'orders',
       },
     );
   }

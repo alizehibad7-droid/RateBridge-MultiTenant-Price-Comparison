@@ -94,41 +94,52 @@ class TransactionRepository {
 
   /// Live stream of the entire ledger, reactive to both transactions and payments.
   Stream<CommissionLedgerSnapshot> watchCommissionLedger() {
-    final controller = StreamController<CommissionLedgerSnapshot>();
-    
+    late StreamController<CommissionLedgerSnapshot> controller;
+    StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? txSub;
+    StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? paySub;
+
     Future<void> refresh() async {
       if (controller.isClosed) return;
       try {
-        // Fetch fresh snapshots of both collections to build the unified ledger state
-        final txSnap = await _db.collection(FirestorePaths.transactionsCol)
+        final txSnap = await _db
+            .collection(FirestorePaths.transactionsCol)
             .orderBy('createdAt', descending: true)
             .get();
-        
-        final paymentSnap = await _db.collection('payment_proofs')
+
+        final paymentSnap = await _db
+            .collection('payment_proofs')
             .where('type', isEqualTo: 'commission')
             .where('status', whereIn: ['confirmed', 'settled', 'approved'])
             .get();
-        
+
         final snapshot = await _buildSnapshotFromData(txSnap, paymentSnap);
         if (!controller.isClosed) controller.add(snapshot);
       } catch (e) {
-        developer.log("Error refreshing commission ledger: $e");
+        developer.log('Error refreshing commission ledger: $e');
       }
     }
 
-    // React to changes in either collection to ensure real-time updates
-    final txSub = _db.collection(FirestorePaths.transactionsCol).snapshots().listen((_) => refresh());
-    final paySub = _db.collection('payment_proofs')
-        .where('type', isEqualTo: 'commission')
-        .snapshots().listen((_) => refresh());
+    controller = StreamController<CommissionLedgerSnapshot>.broadcast(
+      onListen: () {
+        txSub ??= _db
+            .collection(FirestorePaths.transactionsCol)
+            .snapshots()
+            .listen((_) => refresh());
+        paySub ??= _db
+            .collection('payment_proofs')
+            .where('type', isEqualTo: 'commission')
+            .snapshots()
+            .listen((_) => refresh());
+        refresh();
+      },
+      onCancel: () {
+        txSub?.cancel();
+        paySub?.cancel();
+        txSub = null;
+        paySub = null;
+      },
+    );
 
-    controller.onCancel = () {
-      txSub.cancel();
-      paySub.cancel();
-      controller.close();
-    };
-
-    refresh(); // Initial load
     return controller.stream;
   }
 

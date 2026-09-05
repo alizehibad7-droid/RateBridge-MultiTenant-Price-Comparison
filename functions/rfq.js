@@ -76,17 +76,39 @@ function stringList(value) {
     : [];
 }
 
-function supplierMatches(supplier, category, city) {
+function supplierMatches(supplier, category, city, user) {
   if (!supplier) return false;
-  const categories = stringList(
-    supplier.declaredCategories?.length
-      ? supplier.declaredCategories
-      : supplier.categories,
-  );
+  const categories = [
+    ...stringList(supplier.declaredCategories),
+    ...stringList(supplier.categories),
+    ...stringList(user?.declaredCategories),
+    ...stringList(user?.categories),
+  ];
+  const uniqueCategories = [...new Set(categories)];
   const coverage = stringList(supplier.deliveryCoverageAreas);
   const supplierCity = normalize(supplier.city);
-  return categories.includes(normalize(category)) &&
-    (coverage.includes(normalize(city)) || supplierCity === normalize(city));
+  const cityKey = normalize(city);
+  const categoryOk =
+    uniqueCategories.length === 0 ||
+    categoryListMatches(uniqueCategories, category);
+  const cityOk =
+    coverage.length === 0 ||
+    coverage.includes(cityKey) ||
+    supplierCity === cityKey;
+  return categoryOk && cityOk;
+}
+
+function categoryListMatches(list, category) {
+  const target = normalize(category);
+  const targetStem = stemCategory(target);
+  return list.some((item) => {
+    if (item === target) return true;
+    return stemCategory(item) === targetStem;
+  });
+}
+
+function stemCategory(value) {
+  return value.replace(/ies$/, 'y').replace(/s$/, '');
 }
 
 function notificationData(userId, type, title, body, data) {
@@ -236,7 +258,8 @@ async function performCreateRfq({ uid, user, payload }) {
       const suppliers = await db.collection('suppliers').get();
       const matches = suppliers.docs.filter((doc) => {
         const supplier = doc.data();
-        return canSupplierBid(supplier) && supplierMatches(supplier, category, city);
+        return canSupplierBid(supplier) &&
+          supplierMatches(supplier, category, city);
       });
       matchedSupplierCount = matches.length;
 
@@ -322,8 +345,7 @@ exports.onRfqJobCreated = functions.firestore
     return null;
   });
 
-exports.submitRfqBid = functions.https.onCall(async (data, context) => {
-  const { uid, user } = await authenticatedUser(context);
+async function performSubmitRfqBid({ uid, user, payload }) {
   if (normalizeRole(user.role) !== 'supplier') {
     throw new functions.https.HttpsError(
       'permission-denied',
@@ -331,13 +353,13 @@ exports.submitRfqBid = functions.https.onCall(async (data, context) => {
     );
   }
 
-  const rfqId = requireValue(data.rfqId, 'Quote request');
-  const bidPrice = Number(data.bidPrice);
+  const rfqId = requireValue(payload.rfqId, 'Quote request');
+  const bidPrice = Number(payload.bidPrice);
   const estimatedDeliveryTime = requireValue(
-    data.estimatedDeliveryTime,
+    payload.estimatedDeliveryTime,
     'Estimated delivery time',
   );
-  const note = String(data.note || '').trim();
+  const note = String(payload.note || '').trim();
   if (!Number.isFinite(bidPrice) || bidPrice <= 0) {
     throw new functions.https.HttpsError(
       'invalid-argument',
@@ -379,12 +401,9 @@ exports.submitRfqBid = functions.https.onCall(async (data, context) => {
         'This quote request is closed and no longer accepts bids.',
       );
     }
-    if (!supplierMatches(supplier, rfq.category, rfq.city)) {
-      throw new functions.https.HttpsError(
-        'permission-denied',
-        'This request does not match your categories and delivery coverage.',
-      );
-    }
+    // Category/city matching is used to notify relevant suppliers. The supplier
+    // RFQ inbox lists every open request, so bidding is allowed for any active
+    // supplier who can see it.
 
     let requesterUid = rfq.createdByUid;
     if (!requesterUid) {
@@ -436,10 +455,58 @@ exports.submitRfqBid = functions.https.onCall(async (data, context) => {
   });
 
   return { success: true, updated: result.updated };
+}
+
+exports.submitRfqBid = functions.https.onCall(async (data, context) => {
+  const { uid, user } = await authenticatedUser(context);
+  return performSubmitRfqBid({ uid, user, payload: data || {} });
 });
 
-exports.awardRfq = functions.https.onCall(async (data, context) => {
-  const { uid, user } = await authenticatedUser(context);
+// Firestore trigger — Flutter web callables are blocked by CORS on this project.
+exports.onRfqBidJobCreated = functions.firestore
+  .document('rfq_bid_jobs/{jobId}')
+  .onCreate(async (snap) => {
+    const job = snap.data() || {};
+    if (job.status && job.status !== 'pending') return null;
+
+    try {
+      const uid = requireValue(job.uid, 'User');
+      const userDoc = await db.collection('users').doc(uid).get();
+      if (!userDoc.exists) {
+        throw new functions.https.HttpsError(
+          'permission-denied',
+          'User profile not found.',
+        );
+      }
+      const user = userDoc.data();
+      if (normalize(user.status) !== 'active') {
+        throw new functions.https.HttpsError(
+          'permission-denied',
+          'Your account is not active.',
+        );
+      }
+
+      const result = await performSubmitRfqBid({ uid, user, payload: job });
+      await snap.ref.update({
+        status: 'complete',
+        updated: result.updated === true,
+        completedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    } catch (error) {
+      console.error('onRfqBidJobCreated failed:', error);
+      await snap.ref.update({
+        status: 'error',
+        error:
+          (isHttpsError(error) && error.message) ||
+          error.message ||
+          'Could not submit the bid. Please try again.',
+        completedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    }
+    return null;
+  });
+
+async function performAwardRfq({ uid, user, payload }) {
   const role = normalizeRole(user.role);
   if (role !== 'ceo' && role !== 'fielduser') {
     throw new functions.https.HttpsError(
@@ -448,11 +515,54 @@ exports.awardRfq = functions.https.onCall(async (data, context) => {
     );
   }
 
-  const rfqId = requireValue(data.rfqId, 'Quote request');
-  const bidId = requireValue(data.bidId, 'Bid');
+  const rfqId = requireValue(payload.rfqId, 'Quote request');
+  const bidId = requireValue(payload.bidId, 'Bid');
   const rfqRef = db.collection('rfqs').doc(rfqId);
   const bidRef = rfqRef.collection('bids').doc(bidId);
   const orderRef = db.collection('orders').doc(`RFQ_${rfqId}`);
+
+  const rfqPreviewDoc = await rfqRef.get();
+  if (rfqPreviewDoc.exists) {
+    const rfqPreview = rfqPreviewDoc.data();
+    if (user.companyId !== rfqPreview.companyId) {
+      throw new functions.https.HttpsError(
+        'permission-denied',
+        'You cannot award another company’s request.',
+      );
+    }
+    if (role === 'fielduser' && rfqPreview.createdByUid !== uid) {
+      throw new functions.https.HttpsError(
+        'permission-denied',
+        'Only the user who created this request can award it.',
+      );
+    }
+    if (normalize(rfqPreview.status) === 'open') {
+      const [companyDoc, subscriptionDoc] = await Promise.all([
+        db.collection('companies').doc(rfqPreview.companyId).get(),
+        db.collection('subscriptions').doc(rfqPreview.companyId).get(),
+      ]);
+      if (companyDoc.exists) {
+        const plan = effectivePlan(
+          companyDoc.data(),
+          subscriptionDoc.exists ? subscriptionDoc.data() : null,
+        );
+        const maxActiveOrders = plan === 'free' ? 5 : null;
+        if (maxActiveOrders !== null) {
+          const activeOrders = await db
+            .collection('orders')
+            .where('companyId', '==', rfqPreview.companyId)
+            .where('status', 'in', activeOrderStatuses)
+            .get();
+          if (activeOrders.size >= maxActiveOrders) {
+            throw new functions.https.HttpsError(
+              'resource-exhausted',
+              `Active order limit reached (${maxActiveOrders}) for the Free plan. Please upgrade to award this request.`,
+            );
+          }
+        }
+      }
+    }
+  }
 
   const result = await db.runTransaction(async (transaction) => {
     const [rfqDoc, bidDoc, existingOrder] = await Promise.all([
@@ -499,35 +609,14 @@ exports.awardRfq = functions.https.onCall(async (data, context) => {
     }
 
     const companyRef = db.collection('companies').doc(rfq.companyId);
-    const subscriptionRef = db.collection('subscriptions').doc(rfq.companyId);
-    const [companyDoc, subscriptionDoc, allBids] = await Promise.all([
+    const [companyDoc, allBids] = await Promise.all([
       transaction.get(companyRef),
-      transaction.get(subscriptionRef),
       transaction.get(rfqRef.collection('bids')),
     ]);
     if (!companyDoc.exists) {
       throw new functions.https.HttpsError('not-found', 'Company not found.');
     }
     const company = companyDoc.data();
-    const plan = effectivePlan(
-      company,
-      subscriptionDoc.exists ? subscriptionDoc.data() : null,
-    );
-    
-    // Free plan order limit
-    const maxActiveOrders = plan === 'free' ? 5 : null;
-    if (maxActiveOrders !== null) {
-      const activeOrders = await db.collectionGroup('orders')
-          .where('companyId', '==', rfq.companyId)
-          .where('status', 'in', activeOrderStatuses)
-          .get();
-      if (activeOrders.size >= maxActiveOrders) {
-        throw new functions.https.HttpsError(
-          'resource-exhausted',
-          `Active order limit reached (${maxActiveOrders}) for the Free plan. Please upgrade to award this request.`,
-        );
-      }
-    }
 
     const totalAmount = Number(rfq.quantity) * Number(bid.bidPrice);
     const commissionAmount = totalAmount * 0.02;
@@ -650,4 +739,59 @@ exports.awardRfq = functions.https.onCall(async (data, context) => {
   });
 
   return { success: true, ...result };
+}
+
+exports.awardRfq = functions.https.onCall(async (data, context) => {
+  try {
+    const { uid, user } = await authenticatedUser(context);
+    return await performAwardRfq({ uid, user, payload: data || {} });
+  } catch (error) {
+    rethrowHttps(error, 'Could not award this quote request.');
+  }
 });
+
+// Firestore trigger — Flutter web callables are blocked by CORS on this project.
+exports.onRfqAwardJobCreated = functions.firestore
+  .document('rfq_award_jobs/{jobId}')
+  .onCreate(async (snap) => {
+    const job = snap.data() || {};
+    if (job.status && job.status !== 'pending') return null;
+
+    try {
+      const uid = requireValue(job.uid, 'User');
+      const userDoc = await db.collection('users').doc(uid).get();
+      if (!userDoc.exists) {
+        throw new functions.https.HttpsError(
+          'permission-denied',
+          'User profile not found.',
+        );
+      }
+      const user = userDoc.data();
+      if (normalize(user.status) !== 'active') {
+        throw new functions.https.HttpsError(
+          'permission-denied',
+          'Your account is not active.',
+        );
+      }
+
+      const result = await performAwardRfq({ uid, user, payload: job });
+      await snap.ref.update({
+        status: 'complete',
+        orderId: result.orderId || null,
+        autoApproved: result.autoApproved === true,
+        alreadyAwarded: result.alreadyAwarded === true,
+        completedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    } catch (error) {
+      console.error('onRfqAwardJobCreated failed:', error);
+      await snap.ref.update({
+        status: 'error',
+        error:
+          (isHttpsError(error) && error.message) ||
+          error.message ||
+          'Could not award this quote request. Please try again.',
+        completedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    }
+    return null;
+  });

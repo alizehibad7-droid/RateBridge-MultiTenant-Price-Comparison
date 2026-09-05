@@ -83,27 +83,39 @@ String notificationRelativeTime(DateTime date) {
   return DateFormat('MMM d').format(date);
 }
 
+String _notifHaystack(NotificationModel notification) {
+  return '${notification.type} ${notification.title} ${notification.message}'
+      .toLowerCase();
+}
+
+bool _notifContains(NotificationModel notification, String keyword) {
+  return _notifHaystack(notification).contains(keyword.toLowerCase());
+}
+
+bool _isAwardedRfq(NotificationModel notification) {
+  final awarded = notification.data['awarded']?.toString().toLowerCase();
+  if (awarded == 'true' || awarded == '1') return true;
+  return _notifContains(notification, 'awarded');
+}
+
+String? _dataString(Map<String, dynamic> data, String key) {
+  final value = data[key]?.toString().trim();
+  if (value == null || value.isEmpty) return null;
+  return value;
+}
+
 void navigateForFieldNotification(
   BuildContext context,
   NotificationModel notification,
 ) {
   final data = notification.data;
-  final type = notification.type.toLowerCase();
-  final orderId = data['orderId'] as String?;
+  final orderId = _dataString(data, 'orderId');
 
-  if (type.contains('rfq')) {
-    final rfqId = data['rfqId'] as String?;
-    if (rfqId != null && rfqId.isNotEmpty) {
-      context.push(RouteNames.fieldRfqDetail.replaceFirst(':rfqId', rfqId));
-      return;
-    }
-  }
-
-  if (type.contains('chat')) {
+  if (_notifContains(notification, 'chat')) {
     final supplierUid =
-        data['supplierUid'] as String? ?? data['supplierId'] as String?;
-    final supplierName = data['supplierName'] as String? ?? 'Supplier';
-    if (supplierUid != null && supplierUid.isNotEmpty) {
+        _dataString(data, 'supplierUid') ?? _dataString(data, 'supplierId');
+    final supplierName = _dataString(data, 'supplierName') ?? 'Supplier';
+    if (supplierUid != null) {
       context.push(
         RouteNames.fieldChatThread.replaceFirst(':orderId', supplierUid),
         extra: FieldChatThreadArgs(
@@ -114,16 +126,31 @@ void navigateForFieldNotification(
       );
       return;
     }
+    context.push(RouteNames.fieldChat);
+    return;
   }
 
-  if (orderId != null && orderId.isNotEmpty) {
+  if (_notifContains(notification, 'dispute')) {
+    context.push(RouteNames.fieldMyDisputes);
+    return;
+  }
+
+  if (_notifContains(notification, 'rfq')) {
+    final rfqId = _dataString(data, 'rfqId');
+    if (rfqId != null) {
+      context.push(RouteNames.fieldRfqDetail.replaceFirst(':rfqId', rfqId));
+      return;
+    }
+    context.push(RouteNames.fieldRfqs);
+    return;
+  }
+
+  if (orderId != null) {
     context.push(RouteNames.fieldOrderDetail.replaceFirst(':orderId', orderId));
     return;
   }
 
-  if (type.contains('payment')) {
-    context.push(RouteNames.fieldProfile);
-  }
+  context.push(RouteNames.fieldHome);
 }
 
 ChatThreadModel supplierChatThreadFromOrder({
@@ -152,35 +179,16 @@ void navigateForSupplierNotification(
   NotificationModel notification,
 ) {
   final data = notification.data;
-  final type = notification.type.toLowerCase();
-  final orderId = data['orderId'] as String?;
+  final orderId = _dataString(data, 'orderId');
 
-  if (type.contains('rfq')) {
-    final rfqId = data['rfqId'] as String?;
-    if (rfqId != null && rfqId.isNotEmpty) {
-      context.push(RouteNames.supplierSubmitBid.replaceFirst(':rfqId', rfqId));
-      return;
-    }
-  }
-
-  if (type.contains('partnership')) {
-    final event = (data['event'] as String? ?? '').toLowerCase();
-    if (event == 'invitation_received') {
-      context.push('${RouteNames.supplierMyCompanies}?tab=1');
-      return;
-    }
-    context.push(RouteNames.supplierMyCompanies);
-    return;
-  }
-
-  if (type.contains('chat')) {
-    final chatId = data['chatId'] as String?;
-    final companyId = data['companyId'] as String? ?? '';
-    final fieldUserId = data['fieldUserId'] as String? ?? '';
-    final fieldUserName = data['fieldUserName'] as String? ?? 'Field User';
+  if (_notifContains(notification, 'chat')) {
+    final chatId = _dataString(data, 'chatId');
+    final companyId = _dataString(data, 'companyId') ?? '';
+    final fieldUserId = _dataString(data, 'fieldUserId') ?? '';
+    final fieldUserName = _dataString(data, 'fieldUserName') ?? 'Field User';
     final supplierId =
-        data['supplierId'] as String? ?? data['supplierUid'] as String? ?? '';
-    if (chatId != null && chatId.isNotEmpty) {
+        _dataString(data, 'supplierId') ?? _dataString(data, 'supplierUid') ?? '';
+    if (chatId != null) {
       context.push(
         RouteNames.supplierChatThread.replaceFirst(':orderId', chatId),
         extra: ChatThreadModel(
@@ -189,7 +197,7 @@ void navigateForSupplierNotification(
           fieldUserId: fieldUserId,
           supplierId: supplierId,
           fieldUserName: fieldUserName,
-          supplierName: data['supplierName'] as String? ?? '',
+          supplierName: _dataString(data, 'supplierName') ?? '',
           lastMessage: notification.body,
           lastMessageAt: notification.createdAt,
           lastSenderId: fieldUserId,
@@ -197,14 +205,58 @@ void navigateForSupplierNotification(
       );
       return;
     }
+    context.push(RouteNames.supplierChat);
+    return;
   }
 
-  if (orderId != null && orderId.isNotEmpty) {
+  if (_notifContains(notification, 'partnership')) {
+    final event = (_dataString(data, 'event') ?? '').toLowerCase();
+    if (event == 'invitation_received') {
+      context.push('${RouteNames.supplierMyCompanies}?tab=1');
+      return;
+    }
+    context.push(RouteNames.supplierMyCompanies);
+    return;
+  }
+
+  if (_notifContains(notification, 'rating')) {
+    context.push(RouteNames.supplierRatings);
+    return;
+  }
+
+  if (_notifContains(notification, 'commission') ||
+      _notifContains(notification, 'payment')) {
+    context.push(RouteNames.supplierEarnings);
+    return;
+  }
+
+  if (_notifContains(notification, 'dispute')) {
+    context.push(RouteNames.supplierMyDisputes);
+    return;
+  }
+
+  if (_notifContains(notification, 'rfq')) {
+    if (_isAwardedRfq(notification) || orderId != null) {
+      context.push(RouteNames.supplierOrders);
+      return;
+    }
+    final rfqId = _dataString(data, 'rfqId');
+    if (rfqId != null) {
+      context.push(RouteNames.supplierSubmitBid.replaceFirst(':rfqId', rfqId));
+      return;
+    }
+    context.push(RouteNames.supplierRfqs);
+    return;
+  }
+
+  if (orderId != null ||
+      _notifContains(notification, 'order') ||
+      _notifContains(notification, 'delivery')) {
     context.push(RouteNames.supplierOrders);
     return;
   }
 
-  context.push(RouteNames.supplierChat);
+  context.push(RouteNames.supplierDashboard);
 }
 
 void navigateForCeoNotification(
@@ -212,17 +264,16 @@ void navigateForCeoNotification(
   NotificationModel notification,
 ) {
   final data = notification.data;
-  final type = notification.type.toLowerCase();
-  final orderId = data['orderId'] as String?;
+  final orderId = _dataString(data, 'orderId');
 
-  if (type.contains('partnership')) {
+  if (_notifContains(notification, 'partnership')) {
     context.push(RouteNames.ceoJoinRequests);
     return;
   }
 
-  if (type.contains('rfq')) {
-    final rfqId = data['rfqId'] as String?;
-    if (rfqId != null && rfqId.isNotEmpty) {
+  if (_notifContains(notification, 'rfq')) {
+    final rfqId = _dataString(data, 'rfqId');
+    if (rfqId != null) {
       context.push(RouteNames.ceoRfqDetail.replaceFirst(':rfqId', rfqId));
       return;
     }
@@ -230,18 +281,19 @@ void navigateForCeoNotification(
     return;
   }
 
-  if (type.contains('dispute')) {
+  if (_notifContains(notification, 'dispute')) {
     context.push(RouteNames.ceoDisputes);
     return;
   }
 
-  if (type.contains('payment')) {
+  if (_notifContains(notification, 'payment') ||
+      _notifContains(notification, 'commission') ||
+      _notifContains(notification, 'subscription')) {
     context.push(RouteNames.ceoSubscription);
     return;
   }
 
-  if (orderId != null && orderId.isNotEmpty) {
-    // If it requires approval, go to orders with tab 1 (Awaiting Approval)
+  if (orderId != null) {
     if (data['status'] == 'pending_approval') {
       context.push('${RouteNames.ceoOrders}?tab=1');
     } else {
@@ -257,20 +309,22 @@ void navigateForAdminNotification(
   BuildContext context,
   NotificationModel notification,
 ) {
-  final type = notification.type.toLowerCase();
-  if (type.contains('dispute')) {
+  if (_notifContains(notification, 'dispute')) {
     context.push(RouteNames.adminDisputes);
     return;
   }
-  if (type.contains('payment') || type.contains('subscription')) {
+  if (_notifContains(notification, 'subscription') ||
+      (_notifContains(notification, 'payment') &&
+          !_notifContains(notification, 'commission'))) {
     context.push(RouteNames.adminSubscription);
     return;
   }
-  if (type.contains('commission')) {
-    context.push(RouteNames.adminDashboard);
+  if (_notifContains(notification, 'commission') ||
+      _notifContains(notification, 'payment')) {
+    context.push(RouteNames.adminPayments);
     return;
   }
-  if (type.contains('approval')) {
+  if (_notifContains(notification, 'approval')) {
     context.push(RouteNames.adminCompanies);
     return;
   }

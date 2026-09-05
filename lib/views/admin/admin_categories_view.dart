@@ -37,8 +37,8 @@ class _AdminCategoriesViewState extends State<AdminCategoriesView> {
           return Column(
             children: [
               Container(
-                padding: const EdgeInsets.all(16),
-                margin: const EdgeInsets.fromLTRB(24, 16, 24, 8),
+                padding: const EdgeInsets.all(14),
+                margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                 decoration: BoxDecoration(
                   color: AdminColors.navy.withValues(alpha: 0.05),
                   borderRadius: BorderRadius.circular(12),
@@ -59,7 +59,7 @@ class _AdminCategoriesViewState extends State<AdminCategoriesView> {
               ),
               Expanded(
                 child: ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
                   itemCount: categories.length,
                   itemBuilder: (context, idx) =>
                       _buildCategoryRow(context, categories[idx], adminVM),
@@ -93,67 +93,85 @@ class _AdminCategoriesViewState extends State<AdminCategoriesView> {
 
     return AdminCard(
       margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(10),
+            width: 40,
+            height: 40,
+            alignment: Alignment.center,
             decoration: BoxDecoration(
               color: AdminColors.navy.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(icon, color: AdminColors.navy, size: 22),
+            child: Icon(icon, color: AdminColors.navy, size: 20),
           ),
-          const SizedBox(width: 14),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   category.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: GoogleFonts.plusJakartaSans(
                     fontWeight: FontWeight.w700,
-                    fontSize: 16,
+                    fontSize: 15,
                     color: AdminColors.navy,
                   ),
                 ),
                 const SizedBox(height: 4),
-                Row(
-                  children: [
-                    const Icon(Icons.scale_rounded, size: 12, color: AdminColors.textGrey),
-                    const SizedBox(width: 4),
-                    Text(
-                      'Unit: ${category.unit}',
-                      style: AdminTheme.mutedStyle(size: 11),
-                    ),
-                    const SizedBox(width: 12),
-                    const Icon(Icons.inventory_2_outlined, size: 12, color: AdminColors.textGrey),
-                    const SizedBox(width: 4),
-                    Text(
-                      '${category.brands.length} Brands',
-                      style: AdminTheme.mutedStyle(size: 11),
-                    ),
-                  ],
+                Text(
+                  'Unit: ${category.unit}  ·  ${category.brands.length} Brands',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AdminTheme.mutedStyle(size: 11),
                 ),
               ],
             ),
           ),
+          const SizedBox(width: 4),
           Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Switch.adaptive(
-                value: category.isActive,
-                activeColor: AdminColors.amber,
-                onChanged: (value) =>
-                    adminVM.setCategoryActive(category.id, value),
+              SizedBox(
+                height: 32,
+                child: Switch(
+                  value: category.isActive,
+                  activeTrackColor: AdminColors.amber.withValues(alpha: 0.55),
+                  activeThumbColor: AdminColors.amber,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  onChanged: (value) async {
+                    try {
+                      await adminVM.setCategoryActive(category.id, value);
+                    } catch (e) {
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Could not update category: $e')),
+                      );
+                    }
+                  },
+                ),
               ),
-              Text(category.isActive ? 'ACTIVE' : 'INACTIVE', 
-                   style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, 
-                   color: category.isActive ? AdminColors.green : AdminColors.textGrey)),
+              Text(
+                category.isActive ? 'ACTIVE' : 'INACTIVE',
+                style: TextStyle(
+                  fontSize: 8,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.2,
+                  color: category.isActive
+                      ? AdminColors.green
+                      : AdminColors.textGrey,
+                ),
+              ),
             ],
           ),
-          const SizedBox(width: 8),
           IconButton(
             tooltip: 'Edit Specifications',
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
             onPressed: () => _showCategoryFormDialog(context, category, adminVM),
             icon: const Icon(
               Icons.settings_suggest_rounded,
@@ -208,39 +226,148 @@ class _AdminCategoriesViewState extends State<AdminCategoriesView> {
     );
   }
 
-  void _showCategoryFormDialog(BuildContext context, CategoryModel? existing, AdminViewModel adminVM) {
-    final isNew = existing == null;
-    final nameController =
-        TextEditingController(text: existing?.name ?? '');
-    final unitController =
-        TextEditingController(text: existing?.unit ?? '');
-    final brandsController = TextEditingController(
+  void _showCategoryFormDialog(
+    BuildContext context,
+    CategoryModel? existing,
+    AdminViewModel adminVM,
+  ) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => _CategoryFormDialog(
+        existing: existing,
+        adminVM: adminVM,
+      ),
+    );
+  }
+}
+
+class _CategoryFormDialog extends StatefulWidget {
+  final CategoryModel? existing;
+  final AdminViewModel adminVM;
+
+  const _CategoryFormDialog({
+    required this.existing,
+    required this.adminVM,
+  });
+
+  @override
+  State<_CategoryFormDialog> createState() => _CategoryFormDialogState();
+}
+
+class _CategoryFormDialogState extends State<_CategoryFormDialog> {
+  late final TextEditingController _nameController;
+  late final TextEditingController _unitController;
+  late final TextEditingController _brandsController;
+  late final TextEditingController _gradesController;
+  bool _saving = false;
+  String? _error;
+
+  bool get _isNew => widget.existing == null;
+
+  @override
+  void initState() {
+    super.initState();
+    final existing = widget.existing;
+    _nameController = TextEditingController(text: existing?.name ?? '');
+    _unitController = TextEditingController(text: existing?.unit ?? '');
+    _brandsController = TextEditingController(
       text: existing?.brands.join(', ') ?? '',
     );
-    final gradesController = TextEditingController(
+    _gradesController = TextEditingController(
       text: existing?.grades.join(', ') ?? '',
     );
+  }
 
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Row(
-          children: [
-            Icon(isNew ? Icons.add_business_rounded : Icons.edit_note_rounded, color: AdminColors.navy),
-            const SizedBox(width: 10),
-            Text(isNew ? 'New Category' : 'Edit Category'),
-          ],
-        ),
-        content: SingleChildScrollView(
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _unitController.dispose();
+    _brandsController.dispose();
+    _gradesController.dispose();
+    super.dispose();
+  }
+
+  List<String> _parseList(String raw) {
+    return raw
+        .split(',')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+  }
+
+  Future<void> _submit() async {
+    final name = _nameController.text.trim();
+    final unit = _unitController.text.trim();
+    if (_isNew && name.isEmpty) {
+      setState(() => _error = 'Category name is required');
+      return;
+    }
+    if (unit.isEmpty) {
+      setState(() => _error = 'Unit of measure is required');
+      return;
+    }
+
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+
+    try {
+      final brands = _parseList(_brandsController.text);
+      final grades = _parseList(_gradesController.text);
+      if (_isNew) {
+        await widget.adminVM.addCategory(name, unit, brands, grades);
+      } else {
+        await widget.adminVM.editCategory(
+          widget.existing!.id,
+          widget.existing!.name,
+          unit,
+          brands,
+          grades,
+        );
+      }
+      if (!mounted) return;
+      Navigator.pop(context);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _error = 'Could not save category. Please try again.';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      title: Row(
+        children: [
+          Icon(
+            _isNew ? Icons.add_business_rounded : Icons.edit_note_rounded,
+            color: AdminColors.navy,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              _isNew ? 'New Category' : 'Edit Category',
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+      content: SizedBox(
+        width: 420,
+        child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('GENERAL INFO', style: AdminTheme.sectionHeaderStyle()),
               const SizedBox(height: 12),
-              if (isNew)
+              if (_isNew)
                 TextField(
-                  controller: nameController,
+                  controller: _nameController,
                   decoration: AdminTheme.inputDecoration(
                     labelText: 'Category Name',
                     prefixIcon: const Icon(Icons.label_outline_rounded),
@@ -248,7 +375,10 @@ class _AdminCategoriesViewState extends State<AdminCategoriesView> {
                 )
               else
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
                   width: double.infinity,
                   decoration: BoxDecoration(
                     color: AdminColors.screenBg,
@@ -257,13 +387,20 @@ class _AdminCategoriesViewState extends State<AdminCategoriesView> {
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.lock_outline_rounded, size: 18, color: AdminColors.textGrey),
+                      const Icon(
+                        Icons.lock_outline_rounded,
+                        size: 18,
+                        color: AdminColors.textGrey,
+                      ),
                       const SizedBox(width: 12),
-                      Text(
-                        existing.name,
-                        style: GoogleFonts.plusJakartaSans(
-                          fontWeight: FontWeight.w700,
-                          color: AdminColors.navy,
+                      Expanded(
+                        child: Text(
+                          widget.existing!.name,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.plusJakartaSans(
+                            fontWeight: FontWeight.w700,
+                            color: AdminColors.navy,
+                          ),
                         ),
                       ),
                     ],
@@ -271,7 +408,7 @@ class _AdminCategoriesViewState extends State<AdminCategoriesView> {
                 ),
               const SizedBox(height: 16),
               TextField(
-                controller: unitController,
+                controller: _unitController,
                 decoration: AdminTheme.inputDecoration(
                   labelText: 'Unit of Measure',
                   hintText: 'e.g. bag, ton, cft',
@@ -282,7 +419,7 @@ class _AdminCategoriesViewState extends State<AdminCategoriesView> {
               Text('SPECIFICATIONS', style: AdminTheme.sectionHeaderStyle()),
               const SizedBox(height: 12),
               TextField(
-                controller: brandsController,
+                controller: _brandsController,
                 decoration: AdminTheme.inputDecoration(
                   labelText: 'Available Brands',
                   hintText: 'Separate with commas',
@@ -292,7 +429,7 @@ class _AdminCategoriesViewState extends State<AdminCategoriesView> {
               ),
               const SizedBox(height: 16),
               TextField(
-                controller: gradesController,
+                controller: _gradesController,
                 decoration: AdminTheme.inputDecoration(
                   labelText: 'Grades or Types',
                   hintText: 'Leave empty if not applicable',
@@ -300,53 +437,41 @@ class _AdminCategoriesViewState extends State<AdminCategoriesView> {
                 ),
                 maxLines: 2,
               ),
+              if (_error != null) ...[
+                const SizedBox(height: 12),
+                Text(
+                  _error!,
+                  style: AdminTheme.bodyStyle(color: AdminColors.red)
+                      .copyWith(fontSize: 12),
+                ),
+              ],
             ],
           ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('CANCEL'),
-          ),
-          ElevatedButton.icon(
-            onPressed: () {
-              final brands = brandsController.text
-                  .split(',')
-                  .map((e) => e.trim())
-                  .where((e) => e.isNotEmpty)
-                  .toList();
-              final grades = gradesController.text
-                  .split(',')
-                  .map((e) => e.trim())
-                  .where((e) => e.isNotEmpty)
-                  .toList();
-              if (isNew) {
-                if (nameController.text.trim().isEmpty) return;
-                adminVM.addCategory(
-                  nameController.text.trim(),
-                  unitController.text.trim(),
-                  brands,
-                  grades,
-                );
-              } else {
-                adminVM.editCategory(
-                  existing.id,
-                  existing.name,
-                  unitController.text.trim(),
-                  brands,
-                  grades,
-                );
-              }
-              Navigator.pop(context);
-            },
-            icon: const Icon(Icons.save_rounded, size: 18),
-            label: Text(isNew ? 'CREATE' : 'SAVE CHANGES'),
-            style: AdminTheme.primaryButtonStyle(height: 44).copyWith(
-              minimumSize: WidgetStateProperty.all(const Size(140, 44)),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _saving ? null : () => Navigator.pop(context),
+          child: const Text('CANCEL'),
+        ),
+        ElevatedButton.icon(
+          onPressed: _saving ? null : _submit,
+          icon: _saving
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.save_rounded, size: 18),
+          label: Text(_isNew ? 'CREATE' : 'SAVE CHANGES'),
+          style: AdminTheme.primaryButtonStyle(height: 44).copyWith(
+            minimumSize: WidgetStateProperty.all(const Size(0, 44)),
+            padding: WidgetStateProperty.all(
+              const EdgeInsets.symmetric(horizontal: 16),
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

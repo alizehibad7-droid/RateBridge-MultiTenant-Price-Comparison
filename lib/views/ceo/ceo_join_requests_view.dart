@@ -53,7 +53,7 @@ class _CeoJoinRequestsViewState extends State<CeoJoinRequestsView>
           controller: _tabController,
           indicatorColor: CeoColors.amber,
           indicatorWeight: 3,
-          labelColor: CeoColors.navy,
+          labelColor: Colors.white,
           unselectedLabelColor: CeoColors.textGrey,
           labelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 13),
           unselectedLabelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w500, fontSize: 13),

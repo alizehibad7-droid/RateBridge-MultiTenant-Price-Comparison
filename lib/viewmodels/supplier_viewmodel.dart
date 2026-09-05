@@ -855,12 +855,50 @@ class SupplierViewModel extends ChangeNotifier {
   }
 
   Future<void> submitRfqBid({required String rfqId, required double bidPrice, required String deliveryTime, String? note}) async {
-    if (_supplierUid == null) return;
-    _isLoading = true; notifyListeners();
+    final uid = _supplierUid;
+    if (uid == null) return;
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
     try {
-      await _cloudFunctions.callFunction('submitRfqBid', {'rfqId': rfqId, 'bidPrice': bidPrice, 'estimatedDeliveryTime': deliveryTime, 'note': note});
+      // Firestore job instead of HTTPS callable — Flutter web is blocked by CORS.
+      final ref = _db.collection('rfq_bid_jobs').doc();
+      await ref.set({
+        'uid': uid,
+        'rfqId': rfqId,
+        'bidPrice': bidPrice,
+        'estimatedDeliveryTime': deliveryTime,
+        'note': note ?? '',
+        'status': 'pending',
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+      final done = await ref.snapshots().firstWhere((snap) {
+        final status = snap.data()?['status']?.toString();
+        return status == 'complete' || status == 'error';
+      }).timeout(
+        const Duration(seconds: 60),
+        onTimeout: () {
+          throw AppException(
+            'Submitting the bid timed out. Please try again.',
+            'deadline-exceeded',
+          );
+        },
+      );
+      final data = done.data() ?? {};
+      if (data['status'] == 'error') {
+        throw AppException(
+          (data['error'] as String?)?.trim().isNotEmpty == true
+              ? data['error'] as String
+              : 'Could not submit the bid. Please try again.',
+        );
+      }
       _successMessage = 'Bid submitted.';
-    } catch (e) { _error = e.toString(); } finally { _isLoading = false; notifyListeners(); }
+    } catch (e) {
+      _error = e is AppException ? e.message : e.toString();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
   Future<RfqBidModel?> getMyBid(String rfqId) async {

@@ -9,6 +9,7 @@ import '../models/subscription_model.dart';
 import '../models/payment_proof_model.dart';
 import '../services/cloud_function_service.dart';
 import '../services/firestore_service.dart';
+import '../services/notification_service.dart';
 import '../services/storage_service.dart';
 import '../services/cloudinary_service.dart';
 
@@ -22,6 +23,7 @@ class SubscriptionViewModel extends ChangeNotifier {
     required String folder,
     String filename,
   }) _uploadImageBytes;
+  final NotificationService? _notificationService;
 
   SubscriptionViewModel(
     this._firestoreService,
@@ -33,9 +35,11 @@ class SubscriptionViewModel extends ChangeNotifier {
       required String folder,
       String filename,
     })? uploadImageBytes,
+    NotificationService? notificationService,
   ])  : _db = firestore ?? FirebaseFirestore.instance,
         _uploadImageBytes =
-            uploadImageBytes ?? CloudinaryService.uploadImageBytes;
+            uploadImageBytes ?? CloudinaryService.uploadImageBytes,
+        _notificationService = notificationService;
 
   bool _isLoading = false;
   String? error;
@@ -87,6 +91,30 @@ class SubscriptionViewModel extends ChangeNotifier {
       _pendingPayment = PaymentProofModel.fromMap(snap.docs.first.id, snap.docs.first.data());
     } else {
       _pendingPayment = null;
+    }
+  }
+
+  Future<void> _notifyAdminsPaymentSubmitted({
+    required String companyId,
+    required String fallbackName,
+  }) async {
+    final notifications = _notificationService;
+    if (notifications == null) return;
+    try {
+      final company = await _firestoreService.getCompany(companyId);
+      final companyName = (company?.name.trim().isNotEmpty == true)
+          ? company!.name
+          : fallbackName;
+      final adminIds = await _firestoreService.getAdminUserIds();
+      for (final adminUserId in adminIds) {
+        await notifications.notifySubscriptionPaymentSubmitted(
+          adminUserId: adminUserId,
+          companyName: companyName,
+          companyId: companyId,
+        );
+      }
+    } catch (_) {
+      // Proof already stored; admin alert is best-effort.
     }
   }
 
@@ -162,6 +190,10 @@ class SubscriptionViewModel extends ChangeNotifier {
       
       _pendingPayment = proof;
       successMessage = 'Payment proof submitted. Plan will be active after Admin verification.';
+      await _notifyAdminsPaymentSubmitted(
+        companyId: companyId,
+        fallbackName: ceoName,
+      );
       return true;
     } catch (e) {
       debugPrint("Upload Error: $e");

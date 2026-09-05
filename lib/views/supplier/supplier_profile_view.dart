@@ -371,6 +371,7 @@ class _SupplierProfileViewState extends State<SupplierProfileView> {
                 ),
                 onTerms: _showTermsDialog,
                 onRatings: () => context.push(RouteNames.supplierRatings),
+                onDisputes: () => context.push(RouteNames.supplierMyDisputes),
                 onEarnings: () => context.push(RouteNames.supplierEarnings),
                 onPartnerships: () =>
                     context.push(RouteNames.supplierMyCompanies),
@@ -989,6 +990,7 @@ class _AccountSettingsCard extends StatelessWidget {
   final VoidCallback onChangePassword;
   final VoidCallback onTerms;
   final VoidCallback onRatings;
+  final VoidCallback onDisputes;
   final VoidCallback onEarnings;
   final VoidCallback onPartnerships;
   final VoidCallback onFindCompanies;
@@ -999,6 +1001,7 @@ class _AccountSettingsCard extends StatelessWidget {
     required this.onChangePassword,
     required this.onTerms,
     required this.onRatings,
+    required this.onDisputes,
     required this.onEarnings,
     required this.onPartnerships,
     required this.onFindCompanies,
@@ -1039,6 +1042,11 @@ class _AccountSettingsCard extends StatelessWidget {
             icon: Icons.star_outline,
             title: 'My Ratings & Reviews',
             onTap: onRatings,
+          ),
+          _SettingsRow(
+            icon: Icons.gavel_outlined,
+            title: 'My Disputes',
+            onTap: onDisputes,
           ),
           _SettingsRow(
             icon: Icons.handshake_outlined,

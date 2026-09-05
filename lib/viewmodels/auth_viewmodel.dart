@@ -27,6 +27,8 @@ class AuthViewModel extends ChangeNotifier {
   AuthStatus _status = AuthStatus.loading;
   String? _errorMessage;
   StreamSubscription? _userSubscription;
+  String? _listeningUid;
+  Completer<UserModel?>? _profileReady;
 
   bool isRegistered = false;
   String? pendingInviteCompanyId;
@@ -43,7 +45,9 @@ class AuthViewModel extends ChangeNotifier {
         _user = null;
         _status = AuthStatus.unauthenticated;
         notifyListeners();
-      } else {
+      } else if (_listeningUid != firebaseUser.uid ||
+          (_user == null &&
+              (_profileReady == null || _profileReady!.isCompleted))) {
         _initSession();
       }
     });
@@ -60,6 +64,31 @@ class AuthViewModel extends ChangeNotifier {
 
   Future<void> _initSession() async {
     try {
+      final firebaseUser = _authService.currentUser;
+      if (firebaseUser != null) {
+        if (_listeningUid == firebaseUser.uid && _user != null) {
+          _status = AuthStatus.authenticated;
+          notifyListeners();
+          return;
+        }
+        await firebaseUser.getIdToken();
+        final profile = await _attachUserListener(firebaseUser.uid);
+        if (profile == null) {
+          _status = AuthStatus.unauthenticated;
+          notifyListeners();
+          return;
+        }
+        _status = AuthStatus.authenticated;
+        notifyListeners();
+        await updateFcmToken(profile.uid);
+        try {
+          await CategorySeedService(_firestore).seedIfEmpty();
+        } catch (e) {
+          debugPrint('Category seed skipped: $e');
+        }
+        return;
+      }
+
       final user = await _userRepo.getSessionUser();
       if (user != null) {
         _user = user;
@@ -83,19 +112,81 @@ class AuthViewModel extends ChangeNotifier {
     }
   }
 
-  void _startUserSubscription(String uid) {
+  Future<UserModel?> _awaitProfile({
+    Duration timeout = const Duration(seconds: 20),
+  }) {
+    final pending = _profileReady;
+    if (pending == null) return Future.value(_user);
+    if (pending.isCompleted) return Future.value(_user);
+    return pending.future.timeout(
+      timeout,
+      onTimeout: () {
+        throw AppException(
+          'Could not load your profile. Refresh the page and try again.',
+        );
+      },
+    );
+  }
+
+  Future<UserModel?> _attachUserListener(String uid) {
+    if (_listeningUid == uid && _user != null) {
+      return Future.value(_user);
+    }
+    if (_listeningUid == uid &&
+        _userSubscription != null &&
+        _profileReady != null &&
+        !_profileReady!.isCompleted) {
+      return _awaitProfile();
+    }
+
+    _profileReady = Completer<UserModel?>();
+    _bindUserListener(uid);
+    return _awaitProfile();
+  }
+
+  void _completeProfile(UserModel? user, {Object? error}) {
+    final pending = _profileReady;
+    if (pending == null || pending.isCompleted) return;
+    if (error != null) {
+      pending.completeError(error);
+      return;
+    }
+    pending.complete(user);
+  }
+
+  void _bindUserListener(String uid) {
+    if (_listeningUid == uid && _userSubscription != null) {
+      if (_user != null) _completeProfile(_user);
+      return;
+    }
+
+    _listeningUid = uid;
     _userSubscription?.cancel();
-    _userSubscription = _userRepo.watchUserDoc(uid).listen((updatedUser) {
-      _user = updatedUser;
-      notifyListeners();
-    }, onError: (e) {
-      debugPrint("Error watching user doc: $e");
-    });
+    _userSubscription = _userRepo.watchUserDoc(uid).listen(
+      (updatedUser) {
+        _user = updatedUser;
+        _completeProfile(updatedUser);
+        notifyListeners();
+      },
+      onError: (Object e) {
+        debugPrint('Error watching user doc: $e');
+        _completeProfile(null, error: e);
+      },
+    );
+  }
+
+  void _startUserSubscription(String uid) {
+    _bindUserListener(uid);
   }
 
   void _cancelUserSubscription() {
     _userSubscription?.cancel();
     _userSubscription = null;
+    _listeningUid = null;
+    if (_profileReady != null && !_profileReady!.isCompleted) {
+      _profileReady!.complete(null);
+    }
+    _profileReady = null;
   }
 
   Future<void> checkAuthState() => _initSession();
@@ -111,9 +202,11 @@ class AuthViewModel extends ChangeNotifier {
       if (uid == null) throw Exception("Authentication failed");
 
       await firebaseUser!.getIdToken(true);
-      _user = await _userRepo.getUserDoc(uid);
+      _user = await _attachUserListener(uid);
+      if (_user == null) {
+        throw Exception('User model not found for UID: $uid');
+      }
       _status = AuthStatus.authenticated;
-      _startUserSubscription(uid);
       notifyListeners();
       await updateFcmToken(uid);
       return true;
@@ -719,9 +812,15 @@ class AuthViewModel extends ChangeNotifier {
       }
     }
     final message = e.toString();
-    if (message.contains('User model not found')) {
+    if (message.contains('INTERNAL ASSERTION FAILED') ||
+        message.contains('Unexpected state (ID:')) {
+      return 'Connection to the database was interrupted. Refresh the page and sign in again.';
+    }
+    if (message.contains('User model not found') ||
+        message.contains('User doc does not exist')) {
       return 'Signed in, but no profile was found. Please register or contact your company admin.';
     }
+    if (e is AppException) return e.message;
     return message;
   }
 

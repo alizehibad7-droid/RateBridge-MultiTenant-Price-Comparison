@@ -64,6 +64,7 @@ class RouteNames {
   static const String supplierCompanyDirectory = '/supplier/companies';
   static const String supplierMyCompanies = '/supplier/my-companies';
   static const String supplierProfile = '/supplier/profile';
+  static const String supplierMyDisputes = '/supplier/disputes';
   static const String supplierNotifications = '/supplier/notifications';
 
   // Field User
@@ -87,6 +88,7 @@ class RouteNames {
   static const String fieldRateSupplier = '/field/rate/:orderId';
   static const String fieldNotifications = '/field/notifications';
   static const String fieldProfile = '/field/profile';
+  static const String fieldMyDisputes = '/field/disputes';
   static const String fieldRfqs = '/field/rfqs';
   static const String fieldCreateRfq = '/field/rfqs/create';
   static const String fieldRfqDetail = '/field/rfqs/:rfqId';

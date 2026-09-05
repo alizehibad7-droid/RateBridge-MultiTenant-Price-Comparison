@@ -101,11 +101,13 @@ class _DisputeReportSheetState extends State<DisputeReportSheet> {
         throw Exception('You must be signed in to report an issue.');
       }
       await context.read<DisputeViewModel>().raiseDispute(
+        uid: user.uid,
         orderId: widget.order.orderId,
         companyId: widget.order.companyId,
         type: _selectedType,
         description: description,
         photoUrl: photoUrl,
+        raisedByRole: user.role,
       );
 
       if (mounted) {

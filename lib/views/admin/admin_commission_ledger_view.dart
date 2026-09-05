@@ -20,6 +20,7 @@ class AdminCommissionLedgerView extends StatefulWidget {
 class _AdminCommissionLedgerViewState extends State<AdminCommissionLedgerView> with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final _currency = NumberFormat.currency(symbol: 'Rs ', decimalDigits: 0);
+  Stream<CommissionLedgerSnapshot>? _ledgerStream;
 
   @override
   void initState() {
@@ -31,6 +32,13 @@ class _AdminCommissionLedgerViewState extends State<AdminCommissionLedgerView> w
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _ledgerStream ??=
+        context.read<TransactionRepository>().watchCommissionLedger();
+  }
+
+  @override
   void dispose() {
     _tabController.dispose();
     super.dispose();
@@ -39,7 +47,6 @@ class _AdminCommissionLedgerViewState extends State<AdminCommissionLedgerView> w
   @override
   Widget build(BuildContext context) {
     final adminVM = context.watch<AdminViewModel>();
-    final repo = context.read<TransactionRepository>();
     
     final pendingCommissionPayments = adminVM.pendingPayments.where((p) => p.type == 'commission').toList();
     final settledCommissionPayments = adminVM.confirmedPayments.where((p) => p.type == 'commission').toList();
@@ -72,7 +79,7 @@ class _AdminCommissionLedgerViewState extends State<AdminCommissionLedgerView> w
           child: TabBarView(
             controller: _tabController,
             children: [
-              _buildLedgerTab(repo, adminVM, pendingCommissionPayments),
+              _buildLedgerTab(adminVM, pendingCommissionPayments),
               _buildSettledTab(settledCommissionPayments, adminVM),
             ],
           ),
@@ -81,9 +88,9 @@ class _AdminCommissionLedgerViewState extends State<AdminCommissionLedgerView> w
     );
   }
 
-  Widget _buildLedgerTab(TransactionRepository repo, AdminViewModel adminVM, List<PaymentProofModel> pendingComms) {
+  Widget _buildLedgerTab(AdminViewModel adminVM, List<PaymentProofModel> pendingComms) {
     return StreamBuilder<CommissionLedgerSnapshot>(
-      stream: repo.watchCommissionLedger(),
+      stream: _ledgerStream,
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
         

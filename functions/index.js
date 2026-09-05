@@ -19,8 +19,20 @@ const {
   onAppealCreated 
 } = require('./notifications');
 const { verifyPaymentScreenshot } = require('./payment_verification');
-const { createRfq, submitRfqBid, awardRfq, onRfqJobCreated } = require('./rfq');
-const { raiseDispute, updateDispute } = require('./disputes');
+const {
+  createRfq,
+  submitRfqBid,
+  awardRfq,
+  onRfqJobCreated,
+  onRfqBidJobCreated,
+  onRfqAwardJobCreated,
+} = require('./rfq');
+const {
+  raiseDispute,
+  updateDispute,
+  onDisputeJobCreated,
+  onDisputeUpdateJobCreated,
+} = require('./disputes');
 const { generateAiText, onAiJobCreated } = require('./ai_assistant');
 
 exports.onOrderConfirmed = onOrderConfirmed;
@@ -44,7 +56,11 @@ exports.createRfq = createRfq;
 exports.submitRfqBid = submitRfqBid;
 exports.awardRfq = awardRfq;
 exports.onRfqJobCreated = onRfqJobCreated;
+exports.onRfqBidJobCreated = onRfqBidJobCreated;
+exports.onRfqAwardJobCreated = onRfqAwardJobCreated;
 exports.raiseDispute = raiseDispute;
+exports.onDisputeJobCreated = onDisputeJobCreated;
 exports.updateDispute = updateDispute;
+exports.onDisputeUpdateJobCreated = onDisputeUpdateJobCreated;
 exports.generateAiText = generateAiText;
 exports.onAiJobCreated = onAiJobCreated;

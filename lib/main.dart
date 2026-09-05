@@ -54,7 +54,10 @@ import 'firebase_options.dart';
 /// Call once after [Firebase.initializeApp], before any Firestore reads.
 void configureFirestoreForPlatform() {
   if (!kIsWeb) return;
+  // IndexedDB persistence + a one-shot get() on a cold WebChannel can crash
+  // the JS SDK (assertion ca9 → b815) and brick Firestore for the page.
   FirebaseFirestore.instance.settings = const Settings(
+    persistenceEnabled: false,
     webExperimentalAutoDetectLongPolling: true,
   );
 }
@@ -216,10 +219,11 @@ void main() async {
             },
           ),
 
-          ChangeNotifierProxyProvider3<
+          ChangeNotifierProxyProvider4<
             FirestoreService,
             CloudFunctionService,
             StorageService,
+            NotificationService,
             SubscriptionViewModel
           >(
             create:
@@ -227,10 +231,21 @@ void main() async {
                   context.read<FirestoreService>(),
                   context.read<CloudFunctionService>(),
                   context.read<StorageService>(),
+                  null,
+                  null,
+                  context.read<NotificationService>(),
                 ),
             update:
-                (context, firestore, cloud, storage, previous) =>
-                    previous ?? SubscriptionViewModel(firestore, cloud, storage),
+                (context, firestore, cloud, storage, notifications, previous) =>
+                    previous ??
+                    SubscriptionViewModel(
+                      firestore,
+                      cloud,
+                      storage,
+                      null,
+                      null,
+                      notifications,
+                    ),
           ),
 
           ChangeNotifierProxyProvider4<
@@ -379,13 +394,19 @@ void main() async {
                 (context, chat, previous) => previous ?? ChatViewModel(chat),
           ),
 
-          ChangeNotifierProxyProvider<OrderRepository, FieldRatingViewModel>(
+          ChangeNotifierProxyProvider2<
+            OrderRepository,
+            NotificationService,
+            FieldRatingViewModel
+          >(
             create:
-                (context) =>
-                    FieldRatingViewModel(context.read<OrderRepository>()),
+                (context) => FieldRatingViewModel(
+                  context.read<OrderRepository>(),
+                  context.read<NotificationService>(),
+                ),
             update:
-                (context, ord, previous) =>
-                    previous ?? FieldRatingViewModel(ord),
+                (context, ord, notifications, previous) =>
+                    previous ?? FieldRatingViewModel(ord, notifications),
           ),
 
           ChangeNotifierProxyProvider2<
@@ -403,34 +424,40 @@ void main() async {
                     previous ?? FieldSupplierProfileViewModel(mat, ord),
           ),
 
-          ChangeNotifierProxyProvider2<
+          ChangeNotifierProxyProvider3<
             FirestoreService,
             CloudFunctionService,
+            NotificationService,
             RfqViewModel
           >(
             create:
                 (context) => RfqViewModel(
                   context.read<FirestoreService>(),
                   context.read<CloudFunctionService>(),
+                  context.read<NotificationService>(),
                 ),
             update:
-                (context, fire, functions, previous) =>
-                    previous ?? RfqViewModel(fire, functions),
+                (context, fire, functions, notifications, previous) =>
+                    previous ??
+                    RfqViewModel(fire, functions, notifications),
           ),
 
-          ChangeNotifierProxyProvider2<
+          ChangeNotifierProxyProvider3<
             FirestoreService,
             CloudFunctionService,
+            NotificationService,
             DisputeViewModel
           >(
             create:
                 (context) => DisputeViewModel(
                   context.read<FirestoreService>(),
                   context.read<CloudFunctionService>(),
+                  context.read<NotificationService>(),
                 ),
             update:
-                (context, fire, functions, previous) =>
-                    previous ?? DisputeViewModel(fire, functions),
+                (context, fire, functions, notifications, previous) =>
+                    previous ??
+                    DisputeViewModel(fire, functions, notifications),
           ),
 
           ChangeNotifierProxyProvider<AuthViewModel, CeoViewModel>(

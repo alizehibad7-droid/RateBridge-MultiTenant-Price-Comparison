@@ -378,6 +378,8 @@ class _FieldProfileViewState extends State<FieldProfileView> {
                             onOrders: () => _openOrdersSubTab(0),
                             onMessages: _openMessagesTab,
                             onRatings: _openMyRatings,
+                            onDisputes: () =>
+                                context.push(RouteNames.fieldMyDisputes),
                             onChangePassword: () => _openChangePassword(user.email),
                             onAbout: _showAboutDialog,
                           ),
@@ -980,6 +982,7 @@ class _MyAccountCard extends StatelessWidget {
   final VoidCallback onOrders;
   final VoidCallback onMessages;
   final VoidCallback onRatings;
+  final VoidCallback onDisputes;
   final VoidCallback onChangePassword;
   final VoidCallback onAbout;
 
@@ -987,6 +990,7 @@ class _MyAccountCard extends StatelessWidget {
     required this.onOrders,
     required this.onMessages,
     required this.onRatings,
+    required this.onDisputes,
     required this.onChangePassword,
     required this.onAbout,
   });
@@ -1022,6 +1026,11 @@ class _MyAccountCard extends StatelessWidget {
             emoji: '⭐',
             title: 'My Ratings',
             onTap: onRatings,
+          ),
+          _AccountSettingsRow(
+            emoji: '⚖️',
+            title: 'My Disputes',
+            onTap: onDisputes,
           ),
           _AccountSettingsRow(
             emoji: '🔒',

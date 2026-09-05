@@ -94,16 +94,17 @@ class UserRepository {
   }
 
   Stream<UserModel> watchUserDoc(String uid) {
-    return _db.collection('users').doc(uid).snapshots().map((doc) {
+    return _db.collection('users').doc(uid).snapshots().expand((doc) {
       if (!doc.exists || doc.data() == null) {
+        // Cache can emit an empty doc before the server snapshot arrives.
+        if (doc.metadata.isFromCache) return const <UserModel>[];
         throw Exception("User doc does not exist");
       }
       final data = Map<String, dynamic>.from(doc.data()!);
-      // Ensure uid is set from document ID
       if (data['uid'] == null || data['uid'].toString().isEmpty) {
         data['uid'] = doc.id;
       }
-      return UserModel.fromMap(data);
+      return [UserModel.fromMap(data)];
     });
   }
 

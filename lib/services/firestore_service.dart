@@ -27,7 +27,27 @@ class FirestoreService {
   final FirebaseFirestore _db;
 
   FirestoreService({FirebaseFirestore? firestore})
-      : _db = firestore ?? FirebaseFirestore.instance;
+    : _db = firestore ?? FirebaseFirestore.instance;
+
+  Never _rethrowFirestore(Object error) {
+    if (error is AppException) throw error;
+    if (error is FirebaseException) {
+      if (error.code == 'permission-denied') {
+        throw AppException(
+          "You don't have permission to perform this action. Please contact support if this continues.",
+          'permission-denied',
+        );
+      }
+      final message = error.message?.trim();
+      throw AppException(
+        (message != null && message.isNotEmpty)
+            ? message
+            : 'Something went wrong. Please try again.',
+        error.code,
+      );
+    }
+    throw error;
+  }
 
   Map<String, dynamic> _requireDocData(DocumentSnapshot doc) {
     final data = doc.data();
@@ -57,6 +77,18 @@ class FirestoreService {
 
   Future<void> saveUser(UserModel user) async {
     await _db.collection('users').doc(user.uid).set(user.toMap());
+  }
+
+  Future<List<String>> getAdminUserIds() async {
+    final query = await _db.collection('users').where('role', whereIn: [
+      'Admin',
+      'admin',
+      'ADMIN',
+      'Administrator',
+      'administrator',
+      'ADMINISTRATOR',
+    ]).get();
+    return query.docs.map((doc) => doc.id).toList();
   }
 
   // --- Companies ---
@@ -1225,6 +1257,147 @@ class FirestoreService {
     return (data['rfqId'] as String?) ?? ref.id;
   }
 
+  /// Writes an award payload to [rfq_award_jobs] and waits for
+  /// [onRfqAwardJobCreated]. Used instead of the `awardRfq` HTTPS callable,
+  /// which is blocked by CORS on Flutter web.
+  Future<void> createRfqAwardJob({
+    required String uid,
+    required String rfqId,
+    required String bidId,
+  }) async {
+    final ref = _db.collection('rfq_award_jobs').doc();
+    await ref.set({
+      'uid': uid,
+      'rfqId': rfqId,
+      'bidId': bidId,
+      'status': 'pending',
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+
+    final done = await ref.snapshots().firstWhere((snap) {
+      final status = snap.data()?['status']?.toString();
+      return status == 'complete' || status == 'error';
+    }).timeout(
+      const Duration(seconds: 60),
+      onTimeout: () {
+        throw AppException(
+          'Awarding the contract timed out. Please try again.',
+          'deadline-exceeded',
+        );
+      },
+    );
+
+    final data = done.data() ?? {};
+    if (data['status'] == 'error') {
+      throw AppException(
+        (data['error'] as String?)?.trim().isNotEmpty == true
+            ? data['error'] as String
+            : 'Could not award this quote request. Please try again.',
+      );
+    }
+  }
+
+  /// Writes a report payload to [dispute_jobs] and waits for
+  /// [onDisputeJobCreated]. Used instead of the `raiseDispute` HTTPS callable,
+  /// which is blocked by CORS on Flutter web.
+  Future<String> createDisputeJob({
+    required String uid,
+    required String orderId,
+    required String companyId,
+    required String type,
+    required String description,
+    String? photoUrl,
+  }) async {
+    final ref = _db.collection('dispute_jobs').doc();
+    await ref.set({
+      'uid': uid,
+      'orderId': orderId,
+      'companyId': companyId,
+      'type': type,
+      'description': description,
+      'photoUrl': photoUrl,
+      'status': 'pending',
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+
+    final done = await ref.snapshots().firstWhere((snap) {
+      final status = snap.data()?['status']?.toString();
+      return status == 'complete' || status == 'error';
+    }).timeout(
+      const Duration(seconds: 60),
+      onTimeout: () {
+        throw AppException(
+          'Submitting the report timed out. Please try again.',
+          'deadline-exceeded',
+        );
+      },
+    );
+
+    final data = done.data() ?? {};
+    if (data['status'] == 'error') {
+      throw AppException(
+        (data['error'] as String?)?.trim().isNotEmpty == true
+            ? data['error'] as String
+            : 'Could not submit the report. Please try again.',
+      );
+    }
+    return (data['disputeId'] as String?) ?? ref.id;
+  }
+
+  /// Writes an admin update payload to [dispute_update_jobs] and waits for
+  /// [onDisputeUpdateJobCreated]. Used instead of the `updateDispute` HTTPS
+  /// callable, which is blocked by CORS on Flutter web.
+  Future<void> createDisputeUpdateJob({
+    required String uid,
+    required String disputeId,
+    required String status,
+    required String resolutionNotes,
+  }) async {
+    try {
+      final ref = _db.collection('dispute_update_jobs').doc();
+      await ref.set({
+        'uid': uid,
+        'disputeId': disputeId,
+        'statusUpdate': status,
+        'resolutionNotes': resolutionNotes,
+        'status': 'pending',
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      final done = await ref.snapshots().firstWhere((snap) {
+        final jobStatus = snap.data()?['status']?.toString();
+        return jobStatus == 'complete' || jobStatus == 'error';
+      }).timeout(
+        const Duration(seconds: 60),
+        onTimeout: () {
+          throw AppException(
+            'Updating the dispute timed out. Please try again.',
+            'deadline-exceeded',
+          );
+        },
+      );
+
+      final data = done.data() ?? {};
+      if (data['status'] == 'error') {
+        final jobError = (data['error'] as String?)?.trim() ?? '';
+        if (jobError.toLowerCase().contains('permission-denied') ||
+            jobError.toLowerCase().contains('insufficient permissions')) {
+          throw AppException(
+            "You don't have permission to perform this action. Please contact support if this continues.",
+            'permission-denied',
+          );
+        }
+        throw AppException(
+          jobError.isNotEmpty
+              ? jobError
+              : 'Could not update the dispute. Please try again.',
+        );
+      }
+    } catch (error) {
+      _rethrowFirestore(error);
+    }
+  }
+
   /// Writes a prompt to [ai_jobs] and waits for [onAiJobCreated] to fill it.
   /// Used instead of the `generateAiText` HTTPS callable, which 403s on Flutter web.
   Future<String> generateAiText({
@@ -1315,6 +1488,16 @@ class FirestoreService {
         );
   }
 
+  Future<List<RfqBidModel>> getRfqBids(String rfqId) async {
+    final snap =
+        await _db.collection('rfqs').doc(rfqId).collection('bids').get();
+    final bids = snap.docs
+        .map((doc) => RfqBidModel.fromMap(doc.id, doc.data()))
+        .toList();
+    bids.sort((a, b) => a.bidPrice.compareTo(b.bidPrice));
+    return bids;
+  }
+
   Stream<List<RfqBidModel>> streamRfqBids(String rfqId) {
     return _db.collection('rfqs').doc(rfqId).collection('bids').snapshots().map(
       (snap) {
@@ -1380,6 +1563,28 @@ class FirestoreService {
                     ),
                   )
                   .where((dispute) => dispute.companyId == companyId)
+                  .toList();
+          disputes.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          return disputes;
+        });
+  }
+
+  Stream<List<DisputeModel>> streamRaisedByDisputes(String uid) {
+    if (uid.trim().isEmpty) return Stream.value(const []);
+    return _db
+        .collection('disputes')
+        .where('raisedByUid', isEqualTo: uid)
+        .snapshots()
+        .map((snap) {
+          final disputes =
+              snap.docs
+                  .map(
+                    (doc) => DisputeModel.fromMap(
+                      doc.id,
+                      doc.data() as Map<String, dynamic>,
+                    ),
+                  )
+                  .where((dispute) => dispute.raisedByUid == uid)
                   .toList();
           disputes.sort((a, b) => b.createdAt.compareTo(a.createdAt));
           return disputes;

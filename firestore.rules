@@ -12,11 +12,12 @@ service cloud.firestore {
     }
 
     function currentRole() {
-      return currentUser().role.lower();
+      return currentUser().role.lower().replace('_', '').replace(' ', '');
     }
 
     function isAdmin() {
       return signedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
         && currentRole() in ['admin', 'administrator'];
     }
 
@@ -98,8 +99,8 @@ service cloud.firestore {
       }
     }
 
-    // Dispute creation and resolution are validated by callable functions.
-    // Reads are limited to admins, the owning company CEO, or the reporter.
+    // Dispute creation stays server-side (jobs / Admin SDK). Admins may
+    // update resolution fields only; non-admins cannot write disputes.
     match /disputes/{disputeId} {
       allow read: if isAdmin()
         || (
@@ -110,7 +111,17 @@ service cloud.firestore {
           signedIn()
           && resource.data.raisedByUid == request.auth.uid
         );
-      allow create, update, delete: if false;
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly([
+            'status',
+            'resolutionNotes',
+            'resolvedAt',
+            'resolvedBy',
+            'resolvedByUid',
+            'updatedAt'
+          ]);
+      allow create, delete: if false;
     }
 
     // Audit logs are append-only. Only admins may read or create them;
@@ -134,6 +145,68 @@ service cloud.firestore {
         && request.resource.data.unit is string
         && request.resource.data.city is string
         && request.resource.data.requiredByMillis is number
+        && request.resource.data.createdAt is timestamp;
+      allow read: if signedIn() && resource.data.uid == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // RFQ bid jobs. Clients write a pending payload; Cloud Functions
+    // write the bid with the Admin SDK. Avoids callable CORS on web.
+    match /rfq_bid_jobs/{jobId} {
+      allow create: if signedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.rfqId is string
+        && request.resource.data.rfqId.size() > 0
+        && request.resource.data.bidPrice is number
+        && request.resource.data.estimatedDeliveryTime is string
+        && request.resource.data.estimatedDeliveryTime.size() > 0
+        && request.resource.data.createdAt is timestamp;
+      allow read: if signedIn() && resource.data.uid == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // RFQ award jobs. Clients write a pending payload; Cloud Functions
+    // award the bid with the Admin SDK. Avoids callable CORS on web.
+    match /rfq_award_jobs/{jobId} {
+      allow create: if signedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.rfqId is string
+        && request.resource.data.rfqId.size() > 0
+        && request.resource.data.bidId is string
+        && request.resource.data.bidId.size() > 0
+        && request.resource.data.createdAt is timestamp;
+      allow read: if signedIn() && resource.data.uid == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // Dispute raise jobs. Clients write a pending payload; Cloud Functions
+    // create the dispute with the Admin SDK. Avoids callable CORS on web.
+    match /dispute_jobs/{jobId} {
+      allow create: if signedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.orderId is string
+        && request.resource.data.orderId.size() > 0
+        && request.resource.data.companyId is string
+        && request.resource.data.companyId.size() > 0
+        && request.resource.data.type is string
+        && request.resource.data.description is string
+        && request.resource.data.description.size() > 0
+        && request.resource.data.createdAt is timestamp;
+      allow read: if signedIn() && resource.data.uid == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    match /dispute_update_jobs/{jobId} {
+      allow create: if isAdmin()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.disputeId is string
+        && request.resource.data.disputeId.size() > 0
+        && request.resource.data.statusUpdate is string
+        && request.resource.data.statusUpdate.size() > 0
         && request.resource.data.createdAt is timestamp;
       allow read: if signedIn() && resource.data.uid == request.auth.uid;
       allow update, delete: if false;
@@ -169,7 +242,11 @@ service cloud.firestore {
         && collection != 'disputes'
         && collection != 'audit_logs'
         && collection != 'ai_jobs'
-        && collection != 'rfq_jobs';
+        && collection != 'rfq_jobs'
+        && collection != 'dispute_jobs'
+        && collection != 'dispute_update_jobs'
+        && collection != 'rfq_bid_jobs'
+        && collection != 'rfq_award_jobs';
     }
   }
 }

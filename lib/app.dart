@@ -56,6 +56,7 @@ import 'views/field_user/orders/field_orders_view.dart';
 import 'views/field_user/orders/field_order_detail_view.dart';
 import 'views/field_user/orders/field_weight_report_view.dart';
 import 'views/field_user/orders/field_rate_supplier_view.dart';
+import 'views/field_user/orders/field_my_disputes_view.dart';
 import 'views/field_user/chat/field_chat_list_view.dart';
 import 'views/field_user/chat/field_chat_thread_view.dart';
 import 'views/field_user/chat/field_chat_thread_args.dart';
@@ -76,6 +77,7 @@ import 'views/supplier/supplier_material_detail_view.dart';
 import 'views/supplier/supplier_add_material_view.dart';
 import 'views/supplier/supplier_edit_material_view.dart';
 import 'views/supplier/supplier_orders_view.dart';
+import 'views/supplier/supplier_my_disputes_view.dart';
 import 'views/supplier/supplier_chat_view.dart';
 import 'views/supplier/supplier_chat_thread_view.dart';
 import 'views/supplier/supplier_ratings_view.dart';
@@ -468,6 +470,14 @@ class _RateBridgeAppState extends State<RateBridgeApp> {
               ),
         ),
         GoRoute(
+          path: RouteNames.fieldMyDisputes,
+          pageBuilder:
+              (context, state) => fieldTransitionPage(
+                key: state.pageKey,
+                child: const FieldMyDisputesView(),
+              ),
+        ),
+        GoRoute(
           path: RouteNames.fieldSupplierProfile,
           pageBuilder:
               (context, state) => fieldTransitionPage(
@@ -584,6 +594,12 @@ class _RateBridgeAppState extends State<RateBridgeApp> {
           builder:
               (context, state) =>
                   SupplierTheme.wrap(const SupplierProfileView()),
+        ),
+        GoRoute(
+          path: RouteNames.supplierMyDisputes,
+          builder:
+              (context, state) =>
+                  SupplierTheme.wrap(const SupplierMyDisputesView()),
         ),
         GoRoute(
           path: RouteNames.supplierPartnershipRequests,
@@ -722,6 +738,12 @@ class _RateBridgeAppState extends State<RateBridgeApp> {
           return homeForRole();
         }
         if (path == RouteNames.ceoDisputes && role != 'ceo') {
+          return homeForRole();
+        }
+        if (path == RouteNames.fieldMyDisputes && role != 'fielduser') {
+          return homeForRole();
+        }
+        if (path == RouteNames.supplierMyDisputes && role != 'supplier') {
           return homeForRole();
         }
 
