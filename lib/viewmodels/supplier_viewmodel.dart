@@ -305,6 +305,45 @@ class SupplierViewModel extends ChangeNotifier {
           _pendingCommissionPayments = all.where((p) => p.status == 'pending').toList();
           notifyListeners();
         });
+
+    _db.collection('commission_ensure_jobs').doc(uid).set({
+      'uid': uid,
+      'status': 'pending',
+      'createdAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true)).catchError((e) {
+      debugPrint('Commission ensure job skipped: $e');
+    });
+    _backfillMissingCommissionTransactions(uid);
+  }
+
+  /// Confirmed orders update gross/net from the orders collection. Owed is
+  /// read from `transactions`. If a confirm path skipped that write, create
+  /// the missing unsettled rows (idempotent doc id `comm_{orderId}`).
+  Future<void> _backfillMissingCommissionTransactions(String uid) async {
+    try {
+      final snap = await _db
+          .collection('orders')
+          .where('supplierId', isEqualTo: uid)
+          .get();
+      for (final doc in snap.docs) {
+        final data = doc.data();
+        final status = (data['status'] ?? '').toString().toLowerCase().trim();
+        if (status != 'confirmed') continue;
+        final totalAmount = (data['totalAmount'] as num?)?.toDouble() ?? 0;
+        if (totalAmount <= 0) continue;
+        final commissionAmount = totalAmount * AppConstants.commissionRate;
+        await _transactionRepo.createUnsettledCommissionTransaction(
+          orderId: doc.id,
+          companyId: (data['companyId'] ?? '').toString(),
+          supplierUid: uid,
+          totalAmount: totalAmount,
+          commissionAmount: commissionAmount,
+          supplierEarning: totalAmount - commissionAmount,
+        );
+      }
+    } catch (e) {
+      debugPrint('Commission transaction backfill skipped: $e');
+    }
   }
 
   Future<void> retryInitialLoad() async {
@@ -621,11 +660,63 @@ class SupplierViewModel extends ChangeNotifier {
   }
 
   Future<void> deleteMaterial(String matId, String companyId) async {
-    _isLoading = true; notifyListeners();
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
     try {
-      await _materialRepo.removeMaterial(matId);
-      await _db.collection('companies').doc(companyId).collection('materials').doc(matId).delete();
-    } catch (e) { _error = e.toString(); } finally { _isLoading = false; notifyListeners(); }
+      QuerySnapshot<Map<String, dynamic>> ordersSnap;
+      try {
+        ordersSnap = await _db
+            .collection('orders')
+            .where('materialId', isEqualTo: matId)
+            .get();
+      } catch (_) {
+        ordersSnap = await _db
+            .collection('orders')
+            .where('supplierId', isEqualTo: _supplierUid)
+            .get();
+      }
+      final related = ordersSnap.docs.where((doc) {
+        return (doc.data()['materialId'] ?? '').toString() == matId;
+      });
+      const activeStatuses = {
+        'pending',
+        'pending_approval',
+        'accepted',
+        'delivered',
+        'inprogress',
+        'in_progress',
+      };
+      final activeCount = related.where((doc) {
+        final status = (doc.data()['status'] ?? '').toString().trim().toLowerCase();
+        return activeStatuses.contains(status);
+      }).length;
+      if (activeCount > 0) {
+        throw AppException(
+          'This material is used on $activeCount active order${activeCount == 1 ? '' : 's'}. Finish or cancel those orders before removing the listing.',
+        );
+      }
+
+      final payload = <String, dynamic>{
+        'archived': true,
+        'archivedAt': FieldValue.serverTimestamp(),
+      };
+      await _db.collection('materials').doc(matId).update(payload);
+      try {
+        await _db
+            .collection('companies')
+            .doc(companyId)
+            .collection('materials')
+            .doc(matId)
+            .update(payload);
+      } catch (_) {}
+    } catch (e) {
+      _error = e is AppException ? e.message : e.toString();
+      rethrow;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
   Future<void> loadMaterials(String companyId) async {
@@ -901,10 +992,57 @@ class SupplierViewModel extends ChangeNotifier {
     }
   }
 
+  Future<void> withdrawRfqBid({required String rfqId}) async {
+    final uid = _supplierUid;
+    if (uid == null) return;
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+    try {
+      final ref = _db.collection('rfq_bid_withdraw_jobs').doc();
+      await ref.set({
+        'uid': uid,
+        'rfqId': rfqId,
+        'status': 'pending',
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+      final done = await ref.snapshots().firstWhere((snap) {
+        final status = snap.data()?['status']?.toString();
+        return status == 'complete' || status == 'error';
+      }).timeout(
+        const Duration(seconds: 60),
+        onTimeout: () {
+          throw AppException(
+            'Withdrawing the bid timed out. Please try again.',
+            'deadline-exceeded',
+          );
+        },
+      );
+      final data = done.data() ?? {};
+      if (data['status'] == 'error') {
+        throw AppException(
+          (data['error'] as String?)?.trim().isNotEmpty == true
+              ? data['error'] as String
+              : 'Could not withdraw this bid. Please try again.',
+        );
+      }
+      _successMessage = 'Bid withdrawn.';
+    } catch (e) {
+      _error = e is AppException ? e.message : e.toString();
+      rethrow;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
   Future<RfqBidModel?> getMyBid(String rfqId) async {
     if (_supplierUid == null) return null;
     final doc = await _db.collection('rfqs').doc(rfqId).collection('bids').doc(_supplierUid).get();
-    return doc.exists ? RfqBidModel.fromMap(doc.id, doc.data()!) : null;
+    if (!doc.exists) return null;
+    final bid = RfqBidModel.fromMap(doc.id, doc.data()!);
+    if (bid.isWithdrawn) return null;
+    return bid;
   }
 
   void _cancelSubscriptions() {

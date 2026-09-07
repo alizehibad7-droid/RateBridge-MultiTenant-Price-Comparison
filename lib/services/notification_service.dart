@@ -360,6 +360,7 @@ class NotificationService {
     required String companyId,
     required String status,
     required String resolutionNotes,
+    String? disputeId,
   }) async {
     final rejected = status.trim().toLowerCase() == 'rejected';
     final outcome = rejected ? 'rejected' : 'resolved';
@@ -376,8 +377,12 @@ class NotificationService {
       data: {
         'orderId': orderId,
         'status': status,
-        'relatedId': orderId,
-        'relatedCollection': 'orders',
+        if (disputeId != null && disputeId.isNotEmpty) 'disputeId': disputeId,
+        'relatedId': (disputeId != null && disputeId.isNotEmpty)
+            ? disputeId
+            : orderId,
+        'relatedCollection':
+            (disputeId != null && disputeId.isNotEmpty) ? 'disputes' : 'orders',
       },
     );
   }

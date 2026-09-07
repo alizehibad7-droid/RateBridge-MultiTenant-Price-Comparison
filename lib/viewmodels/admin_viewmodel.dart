@@ -12,6 +12,7 @@ import '../models/subscription_model.dart';
 import '../models/transaction_model.dart';
 import '../services/notification_service.dart';
 import '../utils/invite_code_generator.dart';
+import '../utils/app_exception.dart';
 import '../constants/firestore_paths.dart';
 import 'auth_viewmodel.dart';
 
@@ -498,6 +499,20 @@ class AdminViewModel extends ChangeNotifier {
   }
 
   Future<void> deleteCategory(String id) async {
+    final cat = await _db.collection('categories').doc(id).get();
+    final name = (cat.data()?['name'] as String?)?.trim() ?? '';
+    if (name.isNotEmpty) {
+      final used = await _db
+          .collection('materials')
+          .where('category', isEqualTo: name)
+          .limit(1)
+          .get();
+      if (used.docs.isNotEmpty) {
+        throw AppException(
+          'Cannot delete "$name" while materials still use it. Deactivate the category instead.',
+        );
+      }
+    }
     await _db.collection('categories').doc(id).delete();
     await _logAction(actionType: 'delete_category', targetType: 'category', targetId: id, description: 'Deleted category');
   }

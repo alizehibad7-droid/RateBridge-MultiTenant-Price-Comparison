@@ -33,6 +33,46 @@ class _SupplierMaterialsViewState extends State<SupplierMaterialsView> {
     });
   }
 
+  Future<void> _confirmDelete(MaterialModel material) async {
+    final companyId = context.read<SupplierViewModel>().selectedCompanyId;
+    if (companyId == null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Remove listing?'),
+        content: Text(
+          material.archived
+              ? '${material.name} is already removed from the marketplace.'
+              : 'Remove "${material.name}" from the marketplace? Past orders keep their details. If this material has active orders, deletion will be blocked.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(backgroundColor: FieldColors.statusDanger),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await context.read<SupplierViewModel>().deleteMaterial(material.id, companyId);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Listing removed from the marketplace')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString())),
+      );
+    }
+  }
+
   IconData _categoryIcon(String category) {
     switch (category.toLowerCase()) {
       case 'steel':
@@ -208,6 +248,17 @@ class _SupplierMaterialsViewState extends State<SupplierMaterialsView> {
                               ),
                             ),
                           ),
+                          if (material.archived) ...[
+                            const SizedBox(width: 8),
+                            Text(
+                              'ARCHIVED',
+                              style: AppTextStyles.caption.copyWith(
+                                color: FieldColors.statusDanger,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
@@ -235,6 +286,12 @@ class _SupplierMaterialsViewState extends State<SupplierMaterialsView> {
                   icon: const Icon(Icons.edit_outlined, size: 20),
                   color: FieldColors.textSecondary,
                   tooltip: 'Edit material',
+                ),
+                IconButton(
+                  onPressed: () => _confirmDelete(material),
+                  icon: const Icon(Icons.delete_outline, size: 20),
+                  color: FieldColors.statusDanger,
+                  tooltip: 'Delete material',
                 ),
               ],
             ),

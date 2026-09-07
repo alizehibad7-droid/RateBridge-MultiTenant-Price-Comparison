@@ -661,6 +661,40 @@ class _CeoInviteHubViewState extends State<CeoInviteHubView>
               ),
             ),
           ],
+          if (req.status == 'pending') ...[
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: () async {
+                  final confirmed = await showDialog<bool>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text('Withdraw request?'),
+                      content: Text(
+                        'Cancel the partnership request sent to ${req.supplierName}?',
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text('Keep'),
+                        ),
+                        FilledButton(
+                          onPressed: () => Navigator.pop(context, true),
+                          child: const Text('Withdraw'),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirmed != true || !context.mounted) return;
+                  await context
+                      .read<CeoViewModel>()
+                      .withdrawPartnershipRequest(req.requestId);
+                },
+                child: const Text('Withdraw'),
+              ),
+            ),
+          ],
         ],
       ),
     );

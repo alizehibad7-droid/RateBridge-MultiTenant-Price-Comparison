@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
@@ -31,14 +30,21 @@ class _RegisterFieldUserViewState extends State<RegisterFieldUserView> {
   final _otherJobTitleController = TextEditingController();
   final _assignedSiteController = TextEditingController();
   final _inviteCodeController = TextEditingController();
+  final _inviteFocusNode = FocusNode();
+  final _inviteFieldKey = GlobalKey<FormFieldState<String>>();
 
   String _jobTitle = kFieldUserJobTitles.first;
 
-  Timer? _debounce;
+  @override
+  void initState() {
+    super.initState();
+    _inviteFocusNode.addListener(_onInviteFocusChange);
+  }
 
   @override
   void dispose() {
-    _debounce?.cancel();
+    _inviteFocusNode.removeListener(_onInviteFocusChange);
+    _inviteFocusNode.dispose();
     _nameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
@@ -56,11 +62,41 @@ class _RegisterFieldUserViewState extends State<RegisterFieldUserView> {
     return null;
   }
 
-  String? _validateEmail(String? v) {
+  String? _emailFormatError(String? v) {
     if (v == null || v.trim().isEmpty) return 'Email is required';
     final regex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
     if (!regex.hasMatch(v.trim())) return 'Enter a valid email address';
     return null;
+  }
+
+  String? _validateEmail(String? v, AuthViewModel authVm) {
+    return _emailFormatError(v) ?? authVm.registrationEmailError;
+  }
+
+  String? _validateInviteCode(String? v, AuthViewModel authVm) {
+    if (v == null || v.trim().isEmpty) return 'Invite code is required';
+    if (v.trim().length < 4) {
+      return 'Enter the full invite code from your CEO';
+    }
+    return authVm.inviteError;
+  }
+
+  void _onInviteFocusChange() {
+    if (_inviteFocusNode.hasFocus) return;
+    _verifyInviteCode();
+  }
+
+  Future<void> _verifyInviteCode() async {
+    final value = _inviteCodeController.text.trim();
+    final authVm = context.read<AuthViewModel>();
+    if (value.isEmpty) {
+      authVm.clearInviteValidation();
+      _inviteFieldKey.currentState?.validate();
+      return;
+    }
+    await authVm.validateInviteCode(value);
+    if (!mounted) return;
+    _inviteFieldKey.currentState?.validate();
   }
 
   String? _validatePassword(String? v) {
@@ -90,30 +126,13 @@ class _RegisterFieldUserViewState extends State<RegisterFieldUserView> {
     return _jobTitle;
   }
 
-  void _onInviteCodeChanged(String value) {
-    _debounce?.cancel();
-    final authVm = context.read<AuthViewModel>();
-
-    if (value.trim().length < 4) {
-      authVm.clearInviteValidation();
-      return;
-    }
-
-    _debounce = Timer(const Duration(milliseconds: 500), () {
-      authVm.validateInviteCode(value);
-    });
-  }
-
   Future<void> _submit(AuthViewModel authVm) async {
+    await _verifyInviteCode();
+    if (!mounted) return;
     if (!_formKey.currentState!.validate()) return;
 
-    if (authVm.pendingInviteCompanyId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter a valid invite code from your CEO.'),
-          backgroundColor: AppColors.error,
-        ),
-      );
+    if (authVm.pendingInviteCompanyId == null || authVm.inviteError != null) {
+      _inviteFieldKey.currentState?.validate();
       return;
     }
 
@@ -181,6 +200,7 @@ class _RegisterFieldUserViewState extends State<RegisterFieldUserView> {
                     const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 child: Form(
                   key: _formKey,
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
@@ -214,10 +234,19 @@ class _RegisterFieldUserViewState extends State<RegisterFieldUserView> {
                       Text('COMPANY INVITE CODE', style: textTheme.labelLarge?.copyWith(color: AppColors.navy)),
                       const SizedBox(height: 8),
                       TextFormField(
+                        key: _inviteFieldKey,
+                        focusNode: _inviteFocusNode,
                         controller: _inviteCodeController,
                         textCapitalization: TextCapitalization.characters,
-                        onChanged: _onInviteCodeChanged,
-                        validator: (v) => _required(v, 'Invite code'),
+                        textInputAction: TextInputAction.next,
+                        autovalidateMode: AutovalidateMode.onUserInteraction,
+                        onFieldSubmitted: (_) => _verifyInviteCode(),
+                        onChanged: (value) {
+                          if (value.trim().isEmpty) {
+                            context.read<AuthViewModel>().clearInviteValidation();
+                          }
+                        },
+                        validator: (v) => _validateInviteCode(v, authVm),
                         style: textTheme.bodyLarge?.copyWith(
                           letterSpacing: 2,
                           fontWeight: FontWeight.w600,
@@ -321,7 +350,16 @@ class _RegisterFieldUserViewState extends State<RegisterFieldUserView> {
                       prefixIcon: Icons.email_outlined,
                       placeholder: 'you@example.com',
                       keyboardType: TextInputType.emailAddress,
-                      validator: _validateEmail,
+                      validator: (v) => _validateEmail(v, authVm),
+                      onChanged: (_) {
+                        if (authVm.registrationEmailError != null) {
+                          context.read<AuthViewModel>().clearRegistrationEmailError();
+                        }
+                      },
+                      onUnfocus: (value) {
+                        if (_emailFormatError(value) != null) return;
+                        context.read<AuthViewModel>().validateRegistrationEmail(value);
+                      },
                     ),
                     const SizedBox(height: 16),
                     AuthTextField(
@@ -365,6 +403,7 @@ class _RegisterFieldUserViewState extends State<RegisterFieldUserView> {
                     DropdownButtonFormField<String>(
                       value: _jobTitle,
                       isExpanded: true,
+                      autovalidateMode: AutovalidateMode.onUserInteraction,
                       items: kFieldUserJobTitles
                           .map(
                             (title) => DropdownMenuItem(

@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../constants/app_constants.dart';
 import '../../theme/ceo_theme.dart';
+import '../field_user_invite_validity_text.dart';
 
 export '../admin/admin_widgets.dart' show AdminCard, StatusChip;
 
@@ -65,6 +66,7 @@ class CeoStatusBadge extends StatelessWidget {
 /// Amber left-accent invite code card for the CEO dashboard.
 class CeoInviteCodeCard extends StatelessWidget {
   final String inviteCode;
+  final DateTime? inviteCodeGeneratedAt;
   final VoidCallback onCopy;
   final VoidCallback onRegenerate;
   final bool isRegenerating;
@@ -72,6 +74,7 @@ class CeoInviteCodeCard extends StatelessWidget {
   const CeoInviteCodeCard({
     super.key,
     required this.inviteCode,
+    this.inviteCodeGeneratedAt,
     required this.onCopy,
     required this.onRegenerate,
     this.isRegenerating = false,
@@ -124,6 +127,11 @@ class CeoInviteCodeCard extends StatelessWidget {
                 ),
               ),
             ),
+          ),
+          const SizedBox(height: 8),
+          FieldUserInviteValidityText(
+            generatedAt: inviteCodeGeneratedAt,
+            textAlign: TextAlign.center,
           ),
           const SizedBox(height: 16),
           Row(

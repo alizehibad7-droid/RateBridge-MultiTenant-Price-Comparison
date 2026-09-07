@@ -368,13 +368,21 @@ class FieldOrdersViewModel extends ChangeNotifier {
       await _orderRepo.updateOrder(orderId, {
         'commissionAmount': commissionAmount,
         'supplierEarning': supplierEarning,
-        'commissionDeducted': true,
         'confirmedAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
-      // REMOVED: Transaction creation is now handled by Cloud Function only
-      // to prevent duplicate unsettled/settled records.
+      // Persist the unsettled commission row here. The Cloud Function is
+      // idempotent (doc id comm_{orderId}) and must not be skipped just
+      // because this client also wrote commissionAmount on the order.
+      await _transactionRepo.createUnsettledCommissionTransaction(
+        orderId: orderId,
+        companyId: companyId,
+        supplierUid: order.supplierId,
+        totalAmount: totalAmount,
+        commissionAmount: commissionAmount,
+        supplierEarning: supplierEarning,
+      );
 
       await _notificationService.notifyDeliveryConfirmed(
         supplierId: order.supplierId,

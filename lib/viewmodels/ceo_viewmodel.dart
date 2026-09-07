@@ -169,7 +169,10 @@ class CeoViewModel extends ChangeNotifier {
         'inviteCodeGeneratedAt': FieldValue.serverTimestamp(),
       });
 
-      _company = _company?.copyWith(inviteCode: newKey);
+      _company = _company?.copyWith(
+        inviteCode: newKey,
+        inviteCodeGeneratedAt: DateTime.now(),
+      );
       _successMessage = "New invite code generated.";
     } catch (e) {
       _errorMessage = "Failed to generate key.";
@@ -811,6 +814,18 @@ class CeoViewModel extends ChangeNotifier {
 
   Future<void> rejectJoinRequest(String reqId, String reason) async {
     await rejectPartnershipRequest(reqId, reason);
+  }
+
+  Future<void> withdrawPartnershipRequest(String requestId) async {
+    try {
+      await _partnershipRepo.withdrawRequest(requestId);
+      _successMessage = 'Partnership request withdrawn.';
+    } on AppException catch (e) {
+      _errorMessage = e.message;
+    } catch (e) {
+      _errorMessage = 'Failed to withdraw partnership request: $e';
+    }
+    notifyListeners();
   }
 
   Stream<List<Map<String, dynamic>>> watchMySuppliers(String companyId) {

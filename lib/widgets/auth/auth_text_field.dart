@@ -15,10 +15,13 @@ class AuthTextField extends StatefulWidget {
   final TextInputType keyboardType;
   final String? Function(String?)? validator;
   final ValueChanged<String>? onChanged;
+  final ValueChanged<String>? onUnfocus;
   final Widget? suffix;
   final bool enabled;
   final int maxLines;
   final List<TextInputFormatter>? inputFormatters;
+  final TextInputAction? textInputAction;
+  final FocusNode? focusNode;
 
   const AuthTextField({
     super.key,
@@ -31,10 +34,13 @@ class AuthTextField extends StatefulWidget {
     this.keyboardType = TextInputType.text,
     this.validator,
     this.onChanged,
+    this.onUnfocus,
     this.suffix,
     this.enabled = true,
     this.maxLines = 1,
     this.inputFormatters,
+    this.textInputAction,
+    this.focusNode,
   });
 
   @override
@@ -43,11 +49,34 @@ class AuthTextField extends StatefulWidget {
 
 class _AuthTextFieldState extends State<AuthTextField> {
   late bool _obscured;
+  late FocusNode _focusNode;
+  bool _ownsFocusNode = false;
+  final _fieldKey = GlobalKey<FormFieldState<String>>();
+  bool _showErrors = false;
 
   @override
   void initState() {
     super.initState();
     _obscured = widget.obscureText;
+    _ownsFocusNode = widget.focusNode == null;
+    _focusNode = widget.focusNode ?? FocusNode();
+    _focusNode.addListener(_handleFocusChange);
+  }
+
+  @override
+  void dispose() {
+    _focusNode.removeListener(_handleFocusChange);
+    if (_ownsFocusNode) {
+      _focusNode.dispose();
+    }
+    super.dispose();
+  }
+
+  void _handleFocusChange() {
+    if (_focusNode.hasFocus) return;
+    setState(() => _showErrors = true);
+    _fieldKey.currentState?.validate();
+    widget.onUnfocus?.call(widget.controller.text);
   }
 
   @override
@@ -66,12 +95,34 @@ class _AuthTextFieldState extends State<AuthTextField> {
         ),
         const SizedBox(height: 8),
         TextFormField(
+          key: _fieldKey,
+          focusNode: _focusNode,
           controller: widget.controller,
           obscureText: _obscured,
-          keyboardType: widget.keyboardType,
+          keyboardType: widget.maxLines > 1 &&
+                  widget.keyboardType == TextInputType.text
+              ? TextInputType.multiline
+              : widget.keyboardType,
+          textInputAction: widget.textInputAction ??
+              (widget.maxLines > 1
+                  ? TextInputAction.newline
+                  : TextInputAction.next),
           enabled: widget.enabled,
+          autovalidateMode: _showErrors
+              ? AutovalidateMode.always
+              : AutovalidateMode.disabled,
           validator: widget.validator,
-          onChanged: widget.onChanged,
+          onChanged: (value) {
+            if (_showErrors) {
+              _fieldKey.currentState?.validate();
+            }
+            widget.onChanged?.call(value);
+          },
+          onFieldSubmitted: (_) {
+            setState(() => _showErrors = true);
+            _fieldKey.currentState?.validate();
+            widget.onUnfocus?.call(widget.controller.text);
+          },
           maxLines: widget.maxLines,
           inputFormatters: widget.inputFormatters,
           style: GoogleFonts.plusJakartaSans(

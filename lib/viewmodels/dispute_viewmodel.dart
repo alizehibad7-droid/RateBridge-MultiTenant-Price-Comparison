@@ -94,6 +94,34 @@ class DisputeViewModel extends ChangeNotifier {
     return _firestoreService.streamRaisedByDisputes(uid);
   }
 
+  Stream<DisputeModel?> watchDispute(String disputeId) {
+    return _firestoreService.streamDispute(disputeId);
+  }
+
+  Future<void> withdrawDispute({
+    required String uid,
+    required String disputeId,
+  }) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+    try {
+      await _firestoreService.createDisputeWithdrawJob(
+        uid: uid,
+        disputeId: disputeId,
+      );
+    } on AppException catch (error) {
+      _error = error.message;
+      rethrow;
+    } catch (error) {
+      _error = error.toString();
+      throw AppException(_error!);
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> resolveDispute(
     String id,
     String status,
@@ -118,6 +146,7 @@ class DisputeViewModel extends ChangeNotifier {
         resolutionNotes: notes,
       );
       await _notifyRaisedByOutcome(
+        disputeId: id,
         status: status,
         notes: notes,
         raisedByUid: raisedByUid,
@@ -138,6 +167,7 @@ class DisputeViewModel extends ChangeNotifier {
   }
 
   Future<void> _notifyRaisedByOutcome({
+    required String disputeId,
     required String status,
     required String notes,
     String? raisedByUid,
@@ -160,6 +190,7 @@ class DisputeViewModel extends ChangeNotifier {
         companyId: companyId ?? '',
         status: status,
         resolutionNotes: notes,
+        disputeId: disputeId,
       );
     } catch (_) {
       // Dispute already updated; in-app alert is best-effort.

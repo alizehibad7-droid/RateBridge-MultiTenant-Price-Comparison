@@ -119,11 +119,16 @@ class _RegisterSupplierViewState extends State<RegisterSupplierView> {
     return null;
   }
 
-  String? _validateEmail(String? v) {
+  String? _emailFormatError(String? v) {
     if (v == null || v.trim().isEmpty) return 'Email is required';
     final regex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
     if (!regex.hasMatch(v.trim())) return 'Enter a valid email address';
     return null;
+  }
+
+  String? _validateEmail(String? v) {
+    return _emailFormatError(v) ??
+        context.read<AuthViewModel>().registrationEmailError;
   }
 
   String? _validatePassword(String? v) {
@@ -295,6 +300,7 @@ class _RegisterSupplierViewState extends State<RegisterSupplierView> {
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 child: Form(
                   key: _formKey,
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
@@ -369,6 +375,7 @@ class _RegisterSupplierViewState extends State<RegisterSupplierView> {
             Text('BUSINESS TYPE', style: textTheme.labelLarge?.copyWith(color: AppColors.navy)),
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(
+              autovalidateMode: AutovalidateMode.onUserInteraction,
               value: _businessType,
               items: kSupplierLegalBusinessTypes
                   .map(
@@ -456,6 +463,13 @@ class _RegisterSupplierViewState extends State<RegisterSupplierView> {
               placeholder: 'sales@business.com',
               keyboardType: TextInputType.emailAddress,
               validator: _validateEmail,
+              onChanged: (_) {
+                context.read<AuthViewModel>().clearRegistrationEmailError();
+              },
+              onUnfocus: (value) {
+                if (_emailFormatError(value) != null) return;
+                context.read<AuthViewModel>().validateRegistrationEmail(value);
+              },
             ),
             const SizedBox(height: 16),
             AuthTextField(
@@ -492,6 +506,9 @@ class _RegisterSupplierViewState extends State<RegisterSupplierView> {
           value: _selectedCity,
           hint: Text('Select city', style: textTheme.bodyMedium),
           isExpanded: true,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
+          validator: (v) =>
+              (v == null || v.isEmpty) ? 'Please select your business city' : null,
           items: kPakistanMajorCities
               .map(
                 (city) => DropdownMenuItem(

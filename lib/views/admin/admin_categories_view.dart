@@ -179,6 +179,18 @@ class _AdminCategoriesViewState extends State<AdminCategoriesView> {
               size: 22,
             ),
           ),
+          IconButton(
+            tooltip: 'Delete category',
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+            onPressed: () => _confirmDeleteCategory(context, category, adminVM),
+            icon: const Icon(
+              Icons.delete_outline_rounded,
+              color: AdminColors.red,
+              size: 22,
+            ),
+          ),
         ],
       ),
     );
@@ -238,6 +250,41 @@ class _AdminCategoriesViewState extends State<AdminCategoriesView> {
         adminVM: adminVM,
       ),
     );
+  }
+
+  Future<void> _confirmDeleteCategory(
+    BuildContext context,
+    CategoryModel category,
+    AdminViewModel adminVM,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete category?'),
+        content: Text(
+          'Delete "${category.name}"? This is only allowed if no materials use it. Otherwise deactivate it instead.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    try {
+      await adminVM.deleteCategory(category.id);
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString())),
+      );
+    }
   }
 }
 

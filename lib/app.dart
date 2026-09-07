@@ -57,6 +57,7 @@ import 'views/field_user/orders/field_order_detail_view.dart';
 import 'views/field_user/orders/field_weight_report_view.dart';
 import 'views/field_user/orders/field_rate_supplier_view.dart';
 import 'views/field_user/orders/field_my_disputes_view.dart';
+import 'views/shared/dispute_record_detail_view.dart';
 import 'views/field_user/chat/field_chat_list_view.dart';
 import 'views/field_user/chat/field_chat_thread_view.dart';
 import 'views/field_user/chat/field_chat_thread_args.dart';
@@ -243,6 +244,15 @@ class _RateBridgeAppState extends State<RateBridgeApp> {
           path: RouteNames.ceoDisputes,
           builder:
               (context, state) => CeoTheme.wrap(const CeoDisputeListView()),
+        ),
+        GoRoute(
+          path: RouteNames.ceoDisputeDetail,
+          builder: (context, state) => CeoTheme.wrap(
+            DisputeRecordDetailView(
+              disputeId: state.pathParameters['disputeId'] ?? '',
+              audience: DisputeDetailAudience.ceo,
+            ),
+          ),
         ),
         GoRoute(
           path: RouteNames.ceoNotifications,
@@ -475,6 +485,17 @@ class _RateBridgeAppState extends State<RateBridgeApp> {
               (context, state) => fieldTransitionPage(
                 key: state.pageKey,
                 child: const FieldMyDisputesView(),
+              ),
+        ),
+        GoRoute(
+          path: RouteNames.fieldDisputeDetail,
+          pageBuilder:
+              (context, state) => fieldTransitionPage(
+                key: state.pageKey,
+                child: DisputeRecordDetailView(
+                  disputeId: state.pathParameters['disputeId'] ?? '',
+                  audience: DisputeDetailAudience.field,
+                ),
               ),
         ),
         GoRoute(
@@ -737,10 +758,10 @@ class _RateBridgeAppState extends State<RateBridgeApp> {
             role != 'administrator') {
           return homeForRole();
         }
-        if (path == RouteNames.ceoDisputes && role != 'ceo') {
+        if (path.startsWith('/ceo/disputes') && role != 'ceo') {
           return homeForRole();
         }
-        if (path == RouteNames.fieldMyDisputes && role != 'fielduser') {
+        if (path.startsWith('/field/disputes') && role != 'fielduser') {
           return homeForRole();
         }
         if (path == RouteNames.supplierMyDisputes && role != 'supplier') {

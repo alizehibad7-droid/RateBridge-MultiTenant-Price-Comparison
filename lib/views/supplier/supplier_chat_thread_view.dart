@@ -25,7 +25,8 @@ class SupplierChatThreadView extends StatefulWidget {
   State<SupplierChatThreadView> createState() => _SupplierChatThreadViewState();
 }
 
-class _SupplierChatThreadViewState extends State<SupplierChatThreadView> {
+class _SupplierChatThreadViewState extends State<SupplierChatThreadView>
+    with WidgetsBindingObserver {
   final _messageController = TextEditingController();
   final _scrollController = ScrollController();
   late final String _supplierId;
@@ -41,11 +42,21 @@ class _SupplierChatThreadViewState extends State<SupplierChatThreadView> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _supplierId = context.read<AuthViewModel>().user!.uid;
     _supplierName = context.read<AuthViewModel>().user?.name ?? 'Supplier';
     _chatVm = context.read<ChatViewModel>();
     _messageController.addListener(_onComposerChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) => _openThread());
+  }
+
+  @override
+  void didChangeMetrics() {
+    super.didChangeMetrics();
+    if (!mounted) return;
+    if (View.of(context).viewInsets.bottom > 0) {
+      _scrollToBottom();
+    }
   }
 
   void _onComposerChanged() {
@@ -183,6 +194,7 @@ class _SupplierChatThreadViewState extends State<SupplierChatThreadView> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _messageController.removeListener(_onComposerChanged);
     _chatVm.stopListening();
     _messageController.dispose();
@@ -193,6 +205,7 @@ class _SupplierChatThreadViewState extends State<SupplierChatThreadView> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       backgroundColor: FieldColors.screenBackground,
       appBar: SupplierAppBar(
         titleWidget: Column(
@@ -222,144 +235,136 @@ class _SupplierChatThreadViewState extends State<SupplierChatThreadView> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          Expanded(
-            child: Consumer<ChatViewModel>(
-              builder: (context, vm, _) {
-                if (vm.isLoadingMessages) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (vm.messages.isEmpty) {
-                  return Center(
-                    child: Text(
-                      'No messages yet. Say hello!',
-                      style: TextStyle(color: Colors.grey.shade400),
-                    ),
-                  );
-                }
-                WidgetsBinding.instance.addPostFrameCallback(
-                  (_) => _scrollToBottom(),
-                );
-                return ListView.builder(
-                  controller: _scrollController,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
-                  ),
-                  itemCount: vm.messages.length,
-                  itemBuilder: (context, index) {
-                    final msg = vm.messages[index];
-                    final isMe = msg.senderId == _supplierId;
-                    return _SupplierChatBubble(
-                      message: msg,
-                      isMe: isMe,
-                    );
-                  },
-                );
-              },
+      body: Consumer<ChatViewModel>(
+        builder: (context, vm, _) {
+          if (vm.isLoadingMessages) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (vm.messages.isEmpty) {
+            return Center(
+              child: Text(
+                'No messages yet. Say hello!',
+                style: TextStyle(color: Colors.grey.shade400),
+              ),
+            );
+          }
+          WidgetsBinding.instance.addPostFrameCallback(
+            (_) => _scrollToBottom(),
+          );
+          return ListView.builder(
+            controller: _scrollController,
+            padding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 12,
             ),
+            itemCount: vm.messages.length,
+            itemBuilder: (context, index) {
+              final msg = vm.messages[index];
+              final isMe = msg.senderId == _supplierId;
+              return _SupplierChatBubble(
+                message: msg,
+                isMe: isMe,
+              );
+            },
+          );
+        },
+      ),
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            border: Border(top: BorderSide(color: FieldColors.borderSubtle)),
           ),
-          Container(
-            padding: EdgeInsets.only(
-              left: 12,
-              right: 12,
-              top: 8,
-              bottom: MediaQuery.of(context).viewInsets.bottom + 8,
-            ),
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              border: Border(top: BorderSide(color: FieldColors.borderSubtle)),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (_pendingImage != null)
-                  ChatPendingImagePreview(
-                    imageBytes: _pendingImage!.bytes,
-                    onRemove: _removePendingImage,
-                  ),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    IconButton(
-                      onPressed: _chatVm.isSending ? null : _pickImage,
-                      icon: const Icon(Icons.image_outlined),
-                      color: FieldColors.primaryNavy,
-                      tooltip: 'Attach image',
-                    ),
-                    Expanded(
-                      child: TextField(
-                        controller: _messageController,
-                        minLines: 1,
-                        maxLines: 4,
-                        style: const TextStyle(fontSize: 14),
-                        decoration: InputDecoration(
-                          hintText: 'Type a message...',
-                          hintStyle: TextStyle(color: Colors.grey.shade400),
-                          filled: true,
-                          fillColor: FieldColors.screenBackground,
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 10,
-                          ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(24),
-                            borderSide: const BorderSide(color: FieldColors.borderSubtle),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(24),
-                            borderSide: const BorderSide(color: FieldColors.borderSubtle),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(24),
-                            borderSide: const BorderSide(
-                              color: FieldColors.primaryNavy,
-                              width: 1.5,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Consumer<ChatViewModel>(
-                      builder: (_, vm, __) => GestureDetector(
-                        onTap: _canSend && !vm.isSending ? _sendMessage : null,
-                        child: Container(
-                          width: 44,
-                          height: 44,
-                          decoration: BoxDecoration(
-                            color: _canSend && !vm.isSending
-                                ? FieldColors.primaryNavy
-                                : FieldColors.primaryNavy.withValues(alpha: 0.45),
-                            shape: BoxShape.circle,
-                          ),
-                          child: vm.isSending
-                              ? const Center(
-                                  child: SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(
-                                      color: Colors.white,
-                                      strokeWidth: 2,
-                                    ),
-                                  ),
-                                )
-                              : const Icon(
-                                  Icons.send_rounded,
-                                  color: Colors.white,
-                                  size: 18,
-                                ),
-                        ),
-                      ),
-                    ),
-                  ],
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (_pendingImage != null)
+                ChatPendingImagePreview(
+                  imageBytes: _pendingImage!.bytes,
+                  onRemove: _removePendingImage,
                 ),
-              ],
-            ),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  IconButton(
+                    onPressed: _chatVm.isSending ? null : _pickImage,
+                    icon: const Icon(Icons.image_outlined),
+                    color: FieldColors.primaryNavy,
+                    tooltip: 'Attach image',
+                  ),
+                  Expanded(
+                    child: TextField(
+                      controller: _messageController,
+                      minLines: 1,
+                      maxLines: 4,
+                      style: const TextStyle(fontSize: 14),
+                      decoration: InputDecoration(
+                        hintText: 'Type a message...',
+                        hintStyle: TextStyle(color: Colors.grey.shade400),
+                        filled: true,
+                        fillColor: FieldColors.screenBackground,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 10,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(24),
+                          borderSide: const BorderSide(color: FieldColors.borderSubtle),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(24),
+                          borderSide: const BorderSide(color: FieldColors.borderSubtle),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(24),
+                          borderSide: const BorderSide(
+                            color: FieldColors.primaryNavy,
+                            width: 1.5,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Consumer<ChatViewModel>(
+                    builder: (_, vm, __) => GestureDetector(
+                      onTap: _canSend && !vm.isSending ? _sendMessage : null,
+                      child: Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: _canSend && !vm.isSending
+                              ? FieldColors.primaryNavy
+                              : FieldColors.primaryNavy.withValues(alpha: 0.45),
+                          shape: BoxShape.circle,
+                        ),
+                        child: vm.isSending
+                            ? const Center(
+                                child: SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                    strokeWidth: 2,
+                                  ),
+                                ),
+                              )
+                            : const Icon(
+                                Icons.send_rounded,
+                                color: Colors.white,
+                                size: 18,
+                              ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

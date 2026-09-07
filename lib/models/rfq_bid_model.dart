@@ -10,6 +10,7 @@ class RfqBidModel {
   final String? note;
   final DateTime createdAt;
   final double supplierRating;
+  final String? status;
 
   RfqBidModel({
     required this.id,
@@ -21,7 +22,11 @@ class RfqBidModel {
     this.note,
     required this.createdAt,
     this.supplierRating = 0.0,
+    this.status,
   });
+
+  bool get isWithdrawn =>
+      (status ?? '').trim().toLowerCase() == 'withdrawn';
 
   factory RfqBidModel.fromMap(String id, Map<String, dynamic> map) {
     return RfqBidModel(
@@ -34,6 +39,7 @@ class RfqBidModel {
       note: map['note'],
       createdAt: (map['createdAt'] as Timestamp).toDate(),
       supplierRating: (map['supplierRating'] as num?)?.toDouble() ?? 0.0,
+      status: map['status'] as String?,
     );
   }
 

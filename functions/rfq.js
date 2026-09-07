@@ -795,3 +795,153 @@ exports.onRfqAwardJobCreated = functions.firestore
     }
     return null;
   });
+
+async function performCancelRfq({ uid, user, payload }) {
+  const rfqId = requireValue(payload.rfqId, 'Quote request');
+  const rfqRef = db.collection('rfqs').doc(rfqId);
+  const rfqDoc = await rfqRef.get();
+  if (!rfqDoc.exists) {
+    throw new functions.https.HttpsError('not-found', 'Quote request not found.');
+  }
+  const rfq = rfqDoc.data();
+  const role = normalizeRole(user.role);
+  if (user.companyId !== rfq.companyId) {
+    throw new functions.https.HttpsError(
+      'permission-denied',
+      'You cannot cancel another company’s request.',
+    );
+  }
+  if (role !== 'ceo' && rfq.createdByUid !== uid) {
+    throw new functions.https.HttpsError(
+      'permission-denied',
+      'Only the company owner or the user who created this request can cancel it.',
+    );
+  }
+  if (normalize(rfq.status) !== 'open') {
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      'Only open quote requests can be cancelled.',
+    );
+  }
+
+  await rfqRef.update({
+    status: 'cancelled',
+    cancelledAt: admin.firestore.FieldValue.serverTimestamp(),
+    cancelledByUid: uid,
+  });
+  return { success: true };
+}
+
+exports.onRfqCancelJobCreated = functions.firestore
+  .document('rfq_cancel_jobs/{jobId}')
+  .onCreate(async (snap) => {
+    const job = snap.data() || {};
+    if (job.status && job.status !== 'pending') return null;
+    try {
+      const uid = requireValue(job.uid, 'User');
+      const userDoc = await db.collection('users').doc(uid).get();
+      if (!userDoc.exists) {
+        throw new functions.https.HttpsError(
+          'permission-denied',
+          'User profile not found.',
+        );
+      }
+      const user = userDoc.data();
+      if (normalize(user.status) !== 'active') {
+        throw new functions.https.HttpsError(
+          'permission-denied',
+          'Your account is not active.',
+        );
+      }
+      await performCancelRfq({ uid, user, payload: job });
+      await snap.ref.update({
+        status: 'complete',
+        completedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    } catch (error) {
+      console.error('onRfqCancelJobCreated failed:', error);
+      await snap.ref.update({
+        status: 'error',
+        error:
+          (isHttpsError(error) && error.message) ||
+          error.message ||
+          'Could not cancel this quote request. Please try again.',
+        completedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    }
+    return null;
+  });
+
+async function performWithdrawRfqBid({ uid, user, payload }) {
+  const role = normalizeRole(user.role);
+  if (role !== 'supplier') {
+    throw new functions.https.HttpsError(
+      'permission-denied',
+      'Only suppliers can withdraw bids.',
+    );
+  }
+  const rfqId = requireValue(payload.rfqId, 'Quote request');
+  const rfqRef = db.collection('rfqs').doc(rfqId);
+  const bidRef = rfqRef.collection('bids').doc(uid);
+  const [rfqDoc, bidDoc] = await Promise.all([rfqRef.get(), bidRef.get()]);
+  if (!rfqDoc.exists) {
+    throw new functions.https.HttpsError('not-found', 'Quote request not found.');
+  }
+  if (!bidDoc.exists) {
+    throw new functions.https.HttpsError('not-found', 'Bid not found.');
+  }
+  if (normalize(rfqDoc.data().status) !== 'open') {
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      'Bids can only be withdrawn while the quote request is still open.',
+    );
+  }
+  if (normalize(bidDoc.data().status) === 'withdrawn') {
+    return { success: true, alreadyWithdrawn: true };
+  }
+  await bidRef.update({
+    status: 'withdrawn',
+    withdrawnAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  return { success: true };
+}
+
+exports.onRfqBidWithdrawJobCreated = functions.firestore
+  .document('rfq_bid_withdraw_jobs/{jobId}')
+  .onCreate(async (snap) => {
+    const job = snap.data() || {};
+    if (job.status && job.status !== 'pending') return null;
+    try {
+      const uid = requireValue(job.uid, 'User');
+      const userDoc = await db.collection('users').doc(uid).get();
+      if (!userDoc.exists) {
+        throw new functions.https.HttpsError(
+          'permission-denied',
+          'User profile not found.',
+        );
+      }
+      const user = userDoc.data();
+      if (normalize(user.status) !== 'active') {
+        throw new functions.https.HttpsError(
+          'permission-denied',
+          'Your account is not active.',
+        );
+      }
+      await performWithdrawRfqBid({ uid, user, payload: job });
+      await snap.ref.update({
+        status: 'complete',
+        completedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    } catch (error) {
+      console.error('onRfqBidWithdrawJobCreated failed:', error);
+      await snap.ref.update({
+        status: 'error',
+        error:
+          (isHttpsError(error) && error.message) ||
+          error.message ||
+          'Could not withdraw this bid. Please try again.',
+        completedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    }
+    return null;
+  });

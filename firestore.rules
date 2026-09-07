@@ -181,6 +181,28 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    match /rfq_cancel_jobs/{jobId} {
+      allow create: if signedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.rfqId is string
+        && request.resource.data.rfqId.size() > 0
+        && request.resource.data.createdAt is timestamp;
+      allow read: if signedIn() && resource.data.uid == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    match /rfq_bid_withdraw_jobs/{jobId} {
+      allow create: if signedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.rfqId is string
+        && request.resource.data.rfqId.size() > 0
+        && request.resource.data.createdAt is timestamp;
+      allow read: if signedIn() && resource.data.uid == request.auth.uid;
+      allow update, delete: if false;
+    }
+
     // Dispute raise jobs. Clients write a pending payload; Cloud Functions
     // create the dispute with the Admin SDK. Avoids callable CORS on web.
     match /dispute_jobs/{jobId} {
@@ -212,8 +234,37 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    match /dispute_withdraw_jobs/{jobId} {
+      allow create: if signedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.disputeId is string
+        && request.resource.data.disputeId.size() > 0
+        && request.resource.data.createdAt is timestamp;
+      allow read: if signedIn() && resource.data.uid == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    match /commission_ensure_jobs/{jobId} {
+      allow create, update: if signedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.createdAt is timestamp;
+      allow read: if signedIn() && resource.data.uid == request.auth.uid;
+      allow delete: if false;
+    }
+
     // Field-user AI jobs. Clients create a pending prompt; Cloud Functions
     // write the model response with the Admin SDK.
+    match /commission_ensure_jobs/{jobId} {
+      allow create, update: if signedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.createdAt is timestamp;
+      allow read: if signedIn() && resource.data.uid == request.auth.uid;
+      allow delete: if false;
+    }
+
     match /ai_jobs/{jobId} {
       allow create: if signedIn()
         && request.resource.data.keys().hasOnly(['uid', 'prompt', 'status', 'createdAt'])
@@ -246,7 +297,11 @@ service cloud.firestore {
         && collection != 'dispute_jobs'
         && collection != 'dispute_update_jobs'
         && collection != 'rfq_bid_jobs'
-        && collection != 'rfq_award_jobs';
+        && collection != 'rfq_award_jobs'
+        && collection != 'rfq_cancel_jobs'
+        && collection != 'rfq_bid_withdraw_jobs'
+        && collection != 'dispute_withdraw_jobs'
+        && collection != 'commission_ensure_jobs';
     }
   }
 }

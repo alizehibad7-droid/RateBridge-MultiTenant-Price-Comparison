@@ -420,16 +420,9 @@ class _AiFloatingButtonState extends State<_AiFloatingButton>
             child: Ink(
               width: 56,
               height: 56,
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 color: FieldColors.accentAmber,
                 shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: FieldColors.primaryNavy.withValues(alpha: 0.25),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
               ),
               child: const Icon(
                 Icons.auto_awesome,

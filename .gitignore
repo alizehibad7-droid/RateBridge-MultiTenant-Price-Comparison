@@ -3,3 +3,12 @@ build/
 .dart_tool/
 .idea/
 dart_defines.json
+
+# Firebase emulator / CLI logs (can contain secrets)
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+pubsub-debug.log
+database-debug.log
+functions/firebase-debug.log
+*.log

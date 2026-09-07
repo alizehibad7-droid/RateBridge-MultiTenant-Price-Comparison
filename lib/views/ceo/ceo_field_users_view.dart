@@ -11,6 +11,7 @@ import '../../viewmodels/auth_viewmodel.dart';
 import '../../models/user_model.dart';
 import '../../widgets/ceo_nav_bar.dart';
 import '../../widgets/ceo/ceo_widgets.dart';
+import '../../widgets/field_user_invite_validity_text.dart';
 
 class CeoFieldUsersView extends StatefulWidget {
   const CeoFieldUsersView({super.key});
@@ -488,6 +489,7 @@ class _CeoFieldUsersViewState extends State<CeoFieldUsersView>
   void _showInviteCodeSheet(BuildContext context) {
     final vm = context.read<CeoViewModel>();
     final code = vm.company?.inviteCode ?? 'RB-XXXXXX';
+    final generatedAt = vm.company?.inviteCodeGeneratedAt;
 
     showModalBottomSheet(
       context: context,
@@ -575,6 +577,11 @@ class _CeoFieldUsersViewState extends State<CeoFieldUsersView>
                   ),
                 ],
               ),
+            ),
+            const SizedBox(height: 12),
+            FieldUserInviteValidityText(
+              generatedAt: generatedAt,
+              textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
             Row(

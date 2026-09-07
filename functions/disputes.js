@@ -158,6 +158,7 @@ async function performRaiseDispute({ uid, user, payload }) {
     raisedByUid: uid,
     raisedByRole,
     raisedByName: String(user.name || user.fullName || '').trim() || null,
+    materialName: String(order.materialName || order.materialDescription || '').trim() || null,
     type,
     description,
     photoUrl,
@@ -240,6 +241,7 @@ function disputeOutcomeNotification({
   companyId,
   status,
   notes,
+  disputeId,
 }) {
   const rejected = status === 'rejected';
   const outcome = rejected ? 'rejected' : 'resolved';
@@ -254,7 +256,7 @@ function disputeOutcomeNotification({
     title: rejected ? 'Dispute rejected' : 'Dispute resolved',
     body,
     message: body,
-    data: { orderId, companyId, status },
+    data: { orderId, companyId, status, disputeId },
     isRead: false,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
   };
@@ -332,6 +334,7 @@ async function performUpdateDispute({ uid, user, payload }) {
           companyId: String(dispute.companyId || ''),
           status,
           notes,
+          disputeId,
         }),
       );
     }
@@ -424,6 +427,61 @@ exports.onDisputeUpdateJobCreated = functions.firestore
         error: publicErrorMessage(
           error,
           'Could not update the dispute. Please try again.',
+        ),
+        completedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    }
+    return null;
+  });
+
+async function performWithdrawDispute({ uid, payload }) {
+  const disputeId = requiredText(payload.disputeId, 'Dispute', 200);
+  const disputeRef = db.collection('disputes').doc(disputeId);
+  const disputeDoc = await disputeRef.get();
+  if (!disputeDoc.exists) {
+    throw new functions.https.HttpsError('not-found', 'Dispute not found.');
+  }
+  const dispute = disputeDoc.data() || {};
+  if (String(dispute.raisedByUid || '') !== uid) {
+    throw new functions.https.HttpsError(
+      'permission-denied',
+      'Only the person who raised this dispute can withdraw it.',
+    );
+  }
+  if (normalize(dispute.status) !== 'open') {
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      'Only open disputes can be withdrawn.',
+    );
+  }
+  await disputeRef.update({
+    status: 'withdrawn',
+    resolutionNotes: 'Withdrawn by the reporter.',
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  return { success: true, disputeId };
+}
+
+exports.onDisputeWithdrawJobCreated = functions.firestore
+  .document('dispute_withdraw_jobs/{jobId}')
+  .onCreate(async (snap) => {
+    const job = snap.data() || {};
+    if (job.status && job.status !== 'pending') return null;
+    try {
+      const uid = requiredText(job.uid, 'User', 200);
+      await loadActiveUser(uid);
+      await performWithdrawDispute({ uid, payload: job });
+      await snap.ref.update({
+        status: 'complete',
+        completedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    } catch (error) {
+      console.error('onDisputeWithdrawJobCreated failed:', error);
+      await snap.ref.update({
+        status: 'error',
+        error: publicErrorMessage(
+          error,
+          'Could not withdraw the dispute. Please try again.',
         ),
         completedAt: admin.firestore.FieldValue.serverTimestamp(),
       });

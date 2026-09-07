@@ -194,18 +194,154 @@ exports.onPaymentProofCreated = functions.firestore
 exports.onDisputeCreated = functions.firestore
   .document('disputes/{disputeId}')
   .onCreate(async (snap, context) => {
-    const dispute = snap.data();
+    const dispute = snap.data() || {};
+    const disputeId = snap.id;
+    const orderId = String(dispute.orderId || '');
+    const companyId = String(dispute.companyId || '');
+    const raisedByUid = String(dispute.raisedByUid || '').trim();
+    const raisedByRoleRaw = String(dispute.raisedByRole || '').trim();
+    const raisedByName =
+      String(dispute.raisedByName || '').trim() || 'A team member';
+    const typeKey = String(dispute.type || 'other');
+    const typeLabel = disputeTypeLabel(typeKey);
+    const roleLabel = disputeRoleLabel(raisedByRoleRaw);
+
+    const order = await loadOrderForDispute(orderId, companyId);
+    const materialName =
+      String(dispute.materialName || order.materialName || order.materialDescription || '')
+        .trim() || `order ${shortOrderId(orderId)}`;
+
+    const payloadBase = {
+      disputeId,
+      orderId,
+      companyId,
+      materialName,
+      type: typeKey,
+      typeLabel,
+      raisedByUid,
+      raisedByName,
+      raisedByRole: raisedByRoleRaw,
+      relatedId: disputeId,
+      relatedCollection: 'disputes',
+    };
+
     const adminUids = await getAdminUids();
     for (const adminUid of adminUids) {
       await writeNotificationRecord(adminUid, {
         type: 'dispute',
         title: 'New Dispute Reported',
-        body: `Order ${dispute.orderId} has a new dispute.`,
-        data: { disputeId: snap.id, orderId: dispute.orderId }
+        body: `Order ${orderId} has a new dispute.`,
+        data: { ...payloadBase },
       });
     }
+
+    if (raisedByUid && isFieldDisputeRole(raisedByRoleRaw)) {
+      await writeNotificationRecord(raisedByUid, {
+        type: 'dispute',
+        title: 'Dispute submitted',
+        body: `Your report on ${materialName} (${typeLabel}) was submitted and is now open.`,
+        data: { ...payloadBase, audience: 'raiser' },
+      });
+    }
+
+    const ceoUid = await loadCompanyCeoUid(companyId);
+    if (ceoUid && ceoUid !== raisedByUid) {
+      await writeNotificationRecord(ceoUid, {
+        type: 'dispute',
+        title: 'Dispute on company order',
+        body: `${raisedByName} (${roleLabel}) reported ${typeLabel} on ${materialName}.`,
+        data: { ...payloadBase, audience: 'ceo' },
+      });
+    } else if (ceoUid && ceoUid === raisedByUid) {
+      await writeNotificationRecord(ceoUid, {
+        type: 'dispute',
+        title: 'Dispute submitted',
+        body: `Your report on ${materialName} (${typeLabel}) was submitted. Your company panel will track its status.`,
+        data: { ...payloadBase, audience: 'ceo' },
+      });
+    }
+
     return null;
   });
+
+function disputeTypeLabel(type) {
+  switch (String(type || '')) {
+    case 'wrongMaterial':
+      return 'Wrong Material';
+    case 'damagedGoods':
+      return 'Damaged Goods';
+    case 'quantityMismatch':
+      return 'Quantity Mismatch';
+    case 'nonDelivery':
+      return 'Non-Delivery';
+    case 'paymentIssue':
+      return 'Payment Issue';
+    default:
+      return 'Other';
+  }
+}
+
+function disputeRoleLabel(role) {
+  const normalized = String(role || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_]/g, '');
+  if (normalized === 'fielduser') return 'Field User';
+  if (normalized === 'supplier') return 'Supplier';
+  if (normalized === 'ceo') return 'CEO';
+  if (normalized === 'admin' || normalized === 'administrator') return 'Admin';
+  return role || 'Team member';
+}
+
+function isFieldDisputeRole(role) {
+  return (
+    String(role || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[\s_]/g, '') === 'fielduser'
+  );
+}
+
+function shortOrderId(orderId) {
+  const id = String(orderId || '').trim();
+  if (!id) return 'unknown';
+  return id.length <= 8 ? id : id.slice(-8);
+}
+
+async function loadOrderForDispute(orderId, companyId) {
+  if (!orderId) return {};
+  const root = await db.collection('orders').doc(orderId).get();
+  if (root.exists) return root.data() || {};
+  if (companyId) {
+    const nested = await db
+      .collection('companies')
+      .doc(companyId)
+      .collection('orders')
+      .doc(orderId)
+      .get();
+    if (nested.exists) return nested.data() || {};
+  }
+  return {};
+}
+
+async function loadCompanyCeoUid(companyId) {
+  if (!companyId) return null;
+  const company = await db.collection('companies').doc(companyId).get();
+  const fromCompany = String(company.data()?.ceoUid || '').trim();
+  if (fromCompany) return fromCompany;
+  try {
+    const ceos = await db
+      .collection('users')
+      .where('companyId', '==', companyId)
+      .where('role', 'in', ['CEO', 'ceo'])
+      .limit(1)
+      .get();
+    if (!ceos.empty) return ceos.docs[0].id;
+  } catch (error) {
+    console.error('loadCompanyCeoUid query failed:', error);
+  }
+  return null;
+}
 
 exports.onMessageSent = functions.firestore
   .document('companies/{companyId}/orders/{orderId}/chats/{msgId}')

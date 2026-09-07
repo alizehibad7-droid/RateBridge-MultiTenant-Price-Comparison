@@ -131,6 +131,13 @@ void navigateForFieldNotification(
   }
 
   if (_notifContains(notification, 'dispute')) {
+    final disputeId = _dataString(data, 'disputeId');
+    if (disputeId != null) {
+      context.push(
+        RouteNames.fieldDisputeDetail.replaceFirst(':disputeId', disputeId),
+      );
+      return;
+    }
     context.push(RouteNames.fieldMyDisputes);
     return;
   }
@@ -282,6 +289,13 @@ void navigateForCeoNotification(
   }
 
   if (_notifContains(notification, 'dispute')) {
+    final disputeId = _dataString(data, 'disputeId');
+    if (disputeId != null) {
+      context.push(
+        RouteNames.ceoDisputeDetail.replaceFirst(':disputeId', disputeId),
+      );
+      return;
+    }
     context.push(RouteNames.ceoDisputes);
     return;
   }

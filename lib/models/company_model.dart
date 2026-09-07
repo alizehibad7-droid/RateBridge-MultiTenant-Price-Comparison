@@ -12,6 +12,7 @@ class CompanyModel {
   final String status; // 'active' | 'pending' | 'suspended' | 'rejected'
   final DateTime createdAt;
   final String? inviteCode;
+  final DateTime? inviteCodeGeneratedAt;
   final String? plan; // 'free' | 'basic' | 'premium'
   final bool? aiEnabled;
   final String? ceoUid;
@@ -40,6 +41,7 @@ class CompanyModel {
     required this.status,
     required this.createdAt,
     this.inviteCode,
+    this.inviteCodeGeneratedAt,
     this.plan = 'free',
     this.aiEnabled = false,
     this.ceoUid,
@@ -69,6 +71,7 @@ class CompanyModel {
     String? status,
     DateTime? createdAt,
     String? inviteCode,
+    DateTime? inviteCodeGeneratedAt,
     String? plan,
     bool? aiEnabled,
     String? ceoUid,
@@ -97,6 +100,8 @@ class CompanyModel {
       status: status ?? this.status,
       createdAt: createdAt ?? this.createdAt,
       inviteCode: inviteCode ?? this.inviteCode,
+      inviteCodeGeneratedAt:
+          inviteCodeGeneratedAt ?? this.inviteCodeGeneratedAt,
       plan: plan ?? this.plan,
       aiEnabled: aiEnabled ?? this.aiEnabled,
       ceoUid: ceoUid ?? this.ceoUid,
@@ -130,6 +135,8 @@ class CompanyModel {
       'status': status,
       'createdAt': createdAt.toIso8601String(),
       'inviteCode': inviteCode,
+      if (inviteCodeGeneratedAt != null)
+        'inviteCodeGeneratedAt': Timestamp.fromDate(inviteCodeGeneratedAt!),
       'plan': plan,
       'aiEnabled': aiEnabled,
       'ceoUid': ceoUid,
@@ -159,6 +166,14 @@ class CompanyModel {
       return DateTime.now();
     }
 
+    DateTime? parseDateNullable(dynamic date) {
+      if (date == null) return null;
+      if (date is Timestamp) return date.toDate();
+      if (date is DateTime) return date;
+      if (date is String) return DateTime.tryParse(date);
+      return null;
+    }
+
     return CompanyModel(
       id: (map['id'] ?? '') as String,
       name: (map['name'] ?? map['companyName'] ?? 'Unknown Company') as String,
@@ -170,6 +185,7 @@ class CompanyModel {
       status: (map['status'] ?? 'pending').toString().toLowerCase(),
       createdAt: parseDate(map['createdAt']),
       inviteCode: map['inviteCode'] as String?,
+      inviteCodeGeneratedAt: parseDateNullable(map['inviteCodeGeneratedAt']),
       plan: map['plan'] as String? ?? 'free',
       aiEnabled: map['aiEnabled'] as bool? ?? false,
       ceoUid: (map['ceoUid'] ?? map['ownerUid']) as String?,

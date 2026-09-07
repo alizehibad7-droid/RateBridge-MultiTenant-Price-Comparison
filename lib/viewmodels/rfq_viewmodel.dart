@@ -100,6 +100,24 @@ class RfqViewModel extends ChangeNotifier {
     }
   }
 
+  Future<void> cancelRfq({
+    required String rfqId,
+    required String uid,
+  }) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+    try {
+      await _firestoreService.createRfqCancelJob(uid: uid, rfqId: rfqId);
+    } catch (e) {
+      _error = e is AppException ? e.message : e.toString();
+      rethrow;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
   void clearError() {
     _error = null;
     notifyListeners();

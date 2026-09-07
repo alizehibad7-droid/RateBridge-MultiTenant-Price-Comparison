@@ -94,6 +94,42 @@ class _SubmitBidViewState extends State<SubmitBidView> {
     }
   }
 
+  Future<void> _withdrawBid() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Withdraw bid?'),
+        content: const Text(
+          'The buyer will no longer see this bid. You can submit a new bid while the request is still open.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Keep bid'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Withdraw'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await context.read<SupplierViewModel>().withdrawRfqBid(rfqId: widget.rfqId);
+      if (!mounted) return;
+      setState(() => _hasExistingBid = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Bid withdrawn')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString())),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) {
@@ -186,6 +222,13 @@ class _SubmitBidViewState extends State<SubmitBidView> {
                       ? const CircularProgressIndicator(color: Colors.white)
                       : Text(_hasExistingBid ? 'UPDATE BID' : 'SUBMIT BID'),
             ),
+            if (_hasExistingBid && isOpen) ...[
+              const SizedBox(height: 12),
+              OutlinedButton(
+                onPressed: supplierVM.isLoading ? null : _withdrawBid,
+                child: const Text('WITHDRAW BID'),
+              ),
+            ],
           ],
         ),
       ),

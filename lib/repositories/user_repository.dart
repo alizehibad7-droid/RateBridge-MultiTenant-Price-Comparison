@@ -2,16 +2,23 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/user_model.dart';
 import '../services/firebase_auth_service.dart';
 import '../services/firestore_service.dart';
+import '../utils/field_user_invite_code.dart';
 
 class ActiveCompanyInvite {
   final String companyId;
   final String? companyName;
   final String? plan;
+  final String status;
+  final int fieldUserCount;
+  final DateTime? inviteCodeGeneratedAt;
 
   const ActiveCompanyInvite({
     required this.companyId,
     this.companyName,
     this.plan,
+    this.status = 'active',
+    this.fieldUserCount = 0,
+    this.inviteCodeGeneratedAt,
   });
 }
 
@@ -161,6 +168,11 @@ class UserRepository {
       companyId: doc.id,
       companyName: (data['name'] ?? data['companyName']) as String?,
       plan: data['plan'] as String? ?? 'free',
+      status: (data['status'] as String?) ?? 'active',
+      fieldUserCount: (data['fieldUserCount'] as num?)?.toInt() ?? 0,
+      inviteCodeGeneratedAt: FieldUserInviteCode.parseGeneratedAt(
+        data['inviteCodeGeneratedAt'],
+      ),
     );
   }
 
@@ -189,5 +201,9 @@ class UserRepository {
       'status': 'active',
       'joinedAt': FieldValue.serverTimestamp(),
     });
+    await _db.collection('companies').doc(companyId).set(
+      {'fieldUserCount': FieldValue.increment(1)},
+      SetOptions(merge: true),
+    );
   }
 }

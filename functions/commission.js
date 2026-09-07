@@ -5,6 +5,10 @@ const { evaluateSupplierCommissionStatus } = require('./commission_restrictions'
 
 const COMMISSION_RATE = 0.02;
 
+function normalizeStatus(value) {
+  return String(value || '').toLowerCase().trim();
+}
+
 async function findAdminUsers() {
   const adminQuery = await db
     .collection('users')
@@ -52,106 +56,219 @@ async function sendCommissionNotifications({
   await batch.commit();
 }
 
-exports.onOrderConfirmed = functions.firestore
-  .document('orders/{orderId}')
-  .onUpdate(async (change, context) => {
-    const before = change.before.data();
-    const after = change.after.data();
+/**
+ * Source of truth for commission owed: one transactions/{comm_orderId} row
+ * per confirmed order. Gross/net on the Earnings screen still come from orders.
+ *
+ * Must not skip just because orders.commissionDeducted is already true — the
+ * field-user confirm path used to set that flag before this function created
+ * the transaction, which left owed at 0.
+ */
+async function ensureCommissionForConfirmedOrder(orderId, orderRef, liveOrder) {
+  if (!liveOrder || normalizeStatus(liveOrder.status) !== 'confirmed') {
+    return null;
+  }
 
-    // Only trigger when status changes TO 'confirmed'
-    if (before.status === after.status || after.status !== 'confirmed') {
-      return null;
-    }
+  const supplierUid = liveOrder.supplierId || liveOrder.supplierUid;
+  if (!supplierUid) {
+    console.error(`Commission skip: order ${orderId} has no supplier id`);
+    return null;
+  }
 
-    const { orderId } = context.params;
-    const orderRef = change.after.ref;
+  const totalAmount = Number(liveOrder.totalAmount || 0);
+  if (!Number.isFinite(totalAmount) || totalAmount <= 0) {
+    console.error(`Commission skip: order ${orderId} has invalid totalAmount`);
+    return null;
+  }
 
-    // Fresh live read — do not rely on the stale event snapshot for idempotency.
-    const liveOrderSnap = await orderRef.get();
-    if (!liveOrderSnap.exists) return null;
-    const liveOrder = liveOrderSnap.data();
-    if (liveOrder.commissionDeducted === true) return null;
+  const commissionAmount = parseFloat((totalAmount * COMMISSION_RATE).toFixed(2));
+  const supplierEarning = parseFloat((totalAmount - commissionAmount).toFixed(2));
+  const txId = `comm_${orderId}`;
+  const txRef = db.collection('transactions').doc(txId);
 
-    const existingTx = await db
-      .collection('transactions')
-      .where('orderId', '==', orderId)
-      .limit(1)
-      .get();
-    if (!existingTx.empty) {
-      if (liveOrder.commissionDeducted !== true) {
-        await orderRef.update({ commissionDeducted: true });
-      }
-      return null;
-    }
+  const [txSnap, existingByOrder] = await Promise.all([
+    txRef.get(),
+    db.collection('transactions').where('orderId', '==', orderId).limit(5).get(),
+  ]);
 
-    const companyId = liveOrder.companyId;
-    const totalAmount = liveOrder.totalAmount;
-    const commissionAmount = parseFloat((totalAmount * COMMISSION_RATE).toFixed(2));
-    const supplierEarning = parseFloat((totalAmount - commissionAmount).toFixed(2));
-    const supplierUid = liveOrder.supplierId || liveOrder.supplierUid;
-    const txId = db.collection('transactions').doc().id;
-    const monthKey = new Date().toISOString().substring(0, 7); // YYYY-MM
+  const existingDocs = [];
+  if (txSnap.exists) existingDocs.push(txSnap);
+  for (const doc of existingByOrder.docs) {
+    if (doc.id !== txId) existingDocs.push(doc);
+  }
 
+  if (existingDocs.length > 0) {
     const batch = db.batch();
+    let patched = false;
+    for (const doc of existingDocs) {
+      const data = doc.data() || {};
+      const patch = {};
+      if (!data.supplierUid) patch.supplierUid = supplierUid;
+      if (!data.status) patch.status = 'unsettled';
+      const storedCommission = Number(data.commissionAmount || 0);
+      if (storedCommission <= 0 && commissionAmount > 0) {
+        patch.commissionAmount = commissionAmount;
+        patch.commissionRate = COMMISSION_RATE;
+        patch.supplierEarning = supplierEarning;
+        patch.totalAmount = totalAmount;
+      }
+      if (Object.keys(patch).length) {
+        batch.update(doc.ref, patch);
+        patched = true;
+      }
+    }
+    if (liveOrder.commissionDeducted !== true) {
+      batch.update(orderRef, {
+        commissionDeducted: true,
+        commissionAmount,
+        supplierEarning,
+      });
+      patched = true;
+    }
+    if (patched) await batch.commit();
+    return { success: true, existing: true };
+  }
 
-    batch.update(orderRef, {
-      commissionAmount,
-      supplierEarning,
-      commissionDeducted: true,
-    });
+  const monthKey = new Date().toISOString().substring(0, 7);
+  const batch = db.batch();
 
-    batch.set(db.collection('transactions').doc(txId), {
-      orderId,
-      companyId,
-      supplierUid,
-      totalAmount,
-      commissionRate: COMMISSION_RATE,
-      commissionAmount,
-      supplierEarning,
-      status: 'unsettled',
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
+  batch.update(orderRef, {
+    commissionAmount,
+    supplierEarning,
+    commissionDeducted: true,
+  });
 
-    batch.update(db.collection('suppliers').doc(supplierUid), {
+  batch.set(txRef, {
+    orderId,
+    companyId: liveOrder.companyId || '',
+    supplierUid,
+    totalAmount,
+    commissionRate: COMMISSION_RATE,
+    commissionAmount,
+    supplierEarning,
+    status: 'unsettled',
+    type: 'order_payment',
+    month: monthKey,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
+  batch.set(
+    db.collection('suppliers').doc(supplierUid),
+    {
       totalEarnings: admin.firestore.FieldValue.increment(supplierEarning),
       totalOrders: admin.firestore.FieldValue.increment(1),
-    });
+    },
+    { merge: true },
+  );
 
-    const earningsRef = db.collection('suppliers').doc(supplierUid)
-      .collection('earnings').doc(monthKey);
-    batch.set(earningsRef, {
+  const earningsRef = db
+    .collection('suppliers')
+    .doc(supplierUid)
+    .collection('earnings')
+    .doc(monthKey);
+  batch.set(
+    earningsRef,
+    {
       gross: admin.firestore.FieldValue.increment(totalAmount),
       commission: admin.firestore.FieldValue.increment(commissionAmount),
       net: admin.firestore.FieldValue.increment(supplierEarning),
       orderCount: admin.firestore.FieldValue.increment(1),
-    }, { merge: true });
+    },
+    { merge: true },
+  );
 
-    try {
-      await batch.commit();
-    } catch (error) {
-      console.error('Commission financial batch error:', error);
-      throw error;
-    }
+  try {
+    await batch.commit();
+  } catch (error) {
+    console.error('Commission financial batch error:', error);
+    throw error;
+  }
 
-    evaluateSupplierCommissionStatus(supplierUid).catch((error) => {
-      console.error('Post-commission restriction evaluation failed (non-fatal):', error);
+  evaluateSupplierCommissionStatus(supplierUid).catch((error) => {
+    console.error('Post-commission restriction evaluation failed (non-fatal):', error);
+  });
+
+  try {
+    const adminDocs = await findAdminUsers();
+    await sendCommissionNotifications({
+      supplierUid,
+      adminDocs,
+      orderId,
+      companyId: liveOrder.companyId,
+      txId,
+      commissionAmount,
+      supplierEarning,
     });
+  } catch (error) {
+    console.error('Commission notification error (non-fatal):', error);
+  }
 
-    // Notifications are best-effort only — must never cause financial reprocessing.
+  return { success: true };
+}
+
+async function backfillConfirmedOrdersForSupplier(supplierUid) {
+  if (!supplierUid) return { processed: 0 };
+
+  const [bySupplierId, bySupplierUid] = await Promise.all([
+    db.collection('orders').where('supplierId', '==', supplierUid).where('status', '==', 'confirmed').get(),
+    db.collection('orders').where('supplierUid', '==', supplierUid).where('status', '==', 'confirmed').get(),
+  ]);
+
+  const orders = new Map();
+  for (const doc of bySupplierId.docs) orders.set(doc.id, doc);
+  for (const doc of bySupplierUid.docs) orders.set(doc.id, doc);
+
+  let processed = 0;
+  for (const doc of orders.values()) {
+    await ensureCommissionForConfirmedOrder(doc.id, doc.ref, doc.data());
+    processed += 1;
+  }
+  return { processed };
+}
+
+exports.ensureCommissionForConfirmedOrder = ensureCommissionForConfirmedOrder;
+
+exports.onOrderConfirmed = functions.firestore
+  .document('orders/{orderId}')
+  .onWrite(async (change, context) => {
+    if (!change.after.exists) return null;
+    const liveOrder = change.after.data();
+    if (normalizeStatus(liveOrder.status) !== 'confirmed') return null;
+    return ensureCommissionForConfirmedOrder(
+      context.params.orderId,
+      change.after.ref,
+      liveOrder,
+    );
+  });
+
+exports.onCommissionEnsureJobCreated = functions.firestore
+  .document('commission_ensure_jobs/{jobId}')
+  .onWrite(async (change) => {
+    if (!change.after.exists) return null;
+    const job = change.after.data() || {};
+    if (job.status && job.status !== 'pending') return null;
+
+    const supplierUid = job.uid || job.supplierUid;
     try {
-      const adminDocs = await findAdminUsers();
-      await sendCommissionNotifications({
-        supplierUid,
-        adminDocs,
-        orderId,
-        companyId,
-        txId,
-        commissionAmount,
-        supplierEarning,
-      });
+      const result = await backfillConfirmedOrdersForSupplier(supplierUid);
+      await change.after.ref.set(
+        {
+          status: 'complete',
+          processed: result.processed,
+          completedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      );
     } catch (error) {
-      console.error('Commission notification error (non-fatal):', error);
+      console.error('onCommissionEnsureJobCreated failed:', error);
+      await change.after.ref.set(
+        {
+          status: 'error',
+          error: error.message || 'Could not ensure commission transactions.',
+          completedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      );
     }
-
-    return { success: true };
+    return null;
   });

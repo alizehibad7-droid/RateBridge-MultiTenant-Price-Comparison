@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../models/dispute_model.dart';
+import '../../constants/route_names.dart';
 import '../../theme/ceo_theme.dart';
 import '../../widgets/admin/admin_widgets.dart';
 import '../../utils/chat_image_utils.dart';
@@ -112,7 +114,14 @@ class _DisputeCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final statusColor = _getStatusColor(dispute.status);
-    return AdminCard(
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => context.push(
+          RouteNames.ceoDisputeDetail.replaceFirst(':disputeId', dispute.id),
+        ),
+        borderRadius: BorderRadius.circular(16),
+        child: AdminCard(
       margin: const EdgeInsets.only(bottom: 12),
       child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -166,6 +175,15 @@ class _DisputeCard extends StatelessWidget {
               child: Text(
                 dispute.description, 
                 style: GoogleFonts.plusJakartaSans(fontSize: 14, height: 1.5, color: CeoColors.navy)
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              _raisedByLine(dispute),
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: CeoColors.textGrey,
               ),
             ),
             if (dispute.photoUrl != null && dispute.photoUrl!.isNotEmpty) ...[
@@ -259,7 +277,20 @@ class _DisputeCard extends StatelessWidget {
             ),
           ],
         ),
+        ),
+      ),
     );
+  }
+
+  String _raisedByLine(DisputeModel dispute) {
+    final name = dispute.raisedByName?.trim() ?? '';
+    final role = dispute.raisedByRole.replaceAll('_', ' ');
+    final who = name.isEmpty ? role : '$name ($role)';
+    final material = dispute.materialName?.trim();
+    if (material != null && material.isNotEmpty) {
+      return '$who · $material';
+    }
+    return who;
   }
 
   IconData _getIconForType(String label) {

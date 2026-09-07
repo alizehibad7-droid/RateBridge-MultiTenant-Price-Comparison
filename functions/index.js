@@ -2,7 +2,7 @@ const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 admin.initializeApp();
 
-const { onOrderConfirmed } = require('./commission');
+const { onOrderConfirmed, onCommissionEnsureJobCreated } = require('./commission');
 const {
   scheduledCommissionOverdueCheck,
   onCommissionTransactionChange,
@@ -26,16 +26,20 @@ const {
   onRfqJobCreated,
   onRfqBidJobCreated,
   onRfqAwardJobCreated,
+  onRfqCancelJobCreated,
+  onRfqBidWithdrawJobCreated,
 } = require('./rfq');
 const {
   raiseDispute,
   updateDispute,
   onDisputeJobCreated,
   onDisputeUpdateJobCreated,
+  onDisputeWithdrawJobCreated,
 } = require('./disputes');
 const { generateAiText, onAiJobCreated } = require('./ai_assistant');
 
 exports.onOrderConfirmed = onOrderConfirmed;
+exports.onCommissionEnsureJobCreated = onCommissionEnsureJobCreated;
 exports.scheduledCommissionOverdueCheck = scheduledCommissionOverdueCheck;
 exports.onCommissionTransactionChange = onCommissionTransactionChange;
 exports.onInviteAccepted = onInviteAccepted;
@@ -58,9 +62,12 @@ exports.awardRfq = awardRfq;
 exports.onRfqJobCreated = onRfqJobCreated;
 exports.onRfqBidJobCreated = onRfqBidJobCreated;
 exports.onRfqAwardJobCreated = onRfqAwardJobCreated;
+exports.onRfqCancelJobCreated = onRfqCancelJobCreated;
+exports.onRfqBidWithdrawJobCreated = onRfqBidWithdrawJobCreated;
 exports.raiseDispute = raiseDispute;
 exports.onDisputeJobCreated = onDisputeJobCreated;
 exports.updateDispute = updateDispute;
 exports.onDisputeUpdateJobCreated = onDisputeUpdateJobCreated;
+exports.onDisputeWithdrawJobCreated = onDisputeWithdrawJobCreated;
 exports.generateAiText = generateAiText;
 exports.onAiJobCreated = onAiJobCreated;

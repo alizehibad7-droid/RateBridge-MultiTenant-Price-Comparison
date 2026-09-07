@@ -12,6 +12,7 @@ import '../services/category_seed_service.dart';
 import '../services/plan_limit_service.dart';
 import '../services/notification_service.dart';
 import '../utils/app_exception.dart';
+import '../utils/field_user_invite_code.dart';
 import '../utils/invite_code_generator.dart';
 import '../utils/pakistan_validators.dart';
 
@@ -36,6 +37,8 @@ class AuthViewModel extends ChangeNotifier {
   String? pendingInvitePlan;
   bool isValidatingInvite = false;
   String? inviteError;
+  String? registrationEmailError;
+  bool isCheckingEmail = false;
 
   AuthViewModel(this._userRepo, this._authService, [this._notificationService]) {
     _initSession();
@@ -322,6 +325,7 @@ class AuthViewModel extends ChangeNotifier {
         'createdAt': FieldValue.serverTimestamp(),
         'plan': 'free',
         'aiEnabled': false,
+        'fieldUserCount': 0,
       });
 
       final userData = UserModel(
@@ -557,7 +561,38 @@ class AuthViewModel extends ChangeNotifier {
         pendingInviteCompanyName = null;
         pendingInvitePlan = null;
         inviteError =
-            'Invalid invite code. Confirm the code from your CEO and that the company is approved.';
+            'This invite code is invalid, expired, or already inactive. Ask your CEO for the current company code.';
+        return false;
+      }
+
+      final status = match.status.trim().toLowerCase();
+      if (status != 'active') {
+        pendingInviteCompanyId = null;
+        pendingInviteCompanyName = null;
+        pendingInvitePlan = null;
+        inviteError = status == 'pending'
+            ? 'This company is not approved yet. You can join after an administrator activates it.'
+            : 'This invite code is no longer active. Ask your CEO for a new code.';
+        return false;
+      }
+
+      final plan = PlanLimitService.planForKey(match.plan);
+      if (plan.maxFieldUsers != -1 &&
+          match.fieldUserCount >= plan.maxFieldUsers) {
+        pendingInviteCompanyId = null;
+        pendingInviteCompanyName = null;
+        pendingInvitePlan = null;
+        inviteError =
+            'This invite code has already been used by the maximum number of Field Users '
+            '(${plan.maxFieldUsers} on the ${plan.name} plan). Ask your CEO to upgrade or free a seat.';
+        return false;
+      }
+
+      if (FieldUserInviteCode.isExpired(match.inviteCodeGeneratedAt)) {
+        pendingInviteCompanyId = null;
+        pendingInviteCompanyName = null;
+        pendingInvitePlan = null;
+        inviteError = FieldUserInviteCode.expiredRegistrationMessage;
         return false;
       }
 
@@ -600,6 +635,36 @@ class AuthViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> validateRegistrationEmail(String email) async {
+    final trimmed = email.trim();
+    if (trimmed.isEmpty) {
+      registrationEmailError = null;
+      notifyListeners();
+      return;
+    }
+    isCheckingEmail = true;
+    registrationEmailError = null;
+    notifyListeners();
+    try {
+      final taken = await _authService.emailAlreadyRegistered(trimmed);
+      registrationEmailError = taken
+          ? 'An account already exists with this email.'
+          : null;
+    } catch (_) {
+      registrationEmailError = null;
+    } finally {
+      isCheckingEmail = false;
+      notifyListeners();
+    }
+  }
+
+  void clearRegistrationEmailError() {
+    if (registrationEmailError == null && !isCheckingEmail) return;
+    registrationEmailError = null;
+    isCheckingEmail = false;
+    notifyListeners();
+  }
+
   Future<void> registerFieldUser({
     required String fullName,
     required String email,
@@ -624,12 +689,13 @@ class AuthViewModel extends ChangeNotifier {
       // Force refresh token to ensure Firestore rules recognize the new user session immediately
       await cred.user?.getIdToken(true);
 
-      // 2. Use cached validation if available, else re-validate
-      if (pendingInviteCompanyId == null) {
-        final valid = await validateInviteCode(inviteCode);
-        if (!valid || pendingInviteCompanyId == null) {
-          throw AppException(inviteError ?? 'Invalid invite code. Ask your CEO.');
-        }
+      // Re-check the live company code so a code that expired after the
+      // last on-blur validation cannot still create an account.
+      final valid = await validateInviteCode(inviteCode);
+      if (!valid || pendingInviteCompanyId == null) {
+        throw AppException(
+          inviteError ?? 'Invalid invite code. Ask your CEO.',
+        );
       }
 
       final companyId = pendingInviteCompanyId!;

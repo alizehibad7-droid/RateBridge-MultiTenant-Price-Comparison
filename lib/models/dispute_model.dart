@@ -36,6 +36,7 @@ class DisputeModel {
   final String raisedByUid;
   final String raisedByRole;
   final String? raisedByName;
+  final String? materialName;
   final DisputeType type;
   final String description;
   final String? photoUrl;
@@ -52,6 +53,7 @@ class DisputeModel {
     required this.raisedByUid,
     required this.raisedByRole,
     this.raisedByName,
+    this.materialName,
     required this.type,
     required this.description,
     this.photoUrl,
@@ -71,6 +73,7 @@ class DisputeModel {
 
     final photoUrl = map['photoUrl']?.toString().trim();
     final notes = map['resolutionNotes']?.toString().trim();
+    final materialName = map['materialName']?.toString().trim();
     return DisputeModel(
       id: id,
       orderId: map['orderId'] ?? '',
@@ -79,6 +82,9 @@ class DisputeModel {
       raisedByUid: map['raisedByUid'] ?? '',
       raisedByRole: map['raisedByRole'] ?? '',
       raisedByName: map['raisedByName']?.toString(),
+      materialName: (materialName == null || materialName.isEmpty)
+          ? null
+          : materialName,
       type: DisputeType.values.firstWhere(
         (e) => e.name == map['type'],
         orElse: () => DisputeType.other,
@@ -100,6 +106,7 @@ class DisputeModel {
       'raisedByUid': raisedByUid,
       'raisedByRole': raisedByRole,
       'raisedByName': raisedByName,
+      'materialName': materialName,
       'type': type.name,
       'description': description,
       'photoUrl': photoUrl,

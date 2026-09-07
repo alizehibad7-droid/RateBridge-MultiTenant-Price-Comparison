@@ -21,8 +21,11 @@ class AppConstants {
   static const int maxImageSizeBytes = 200 * 1024; // 200KB
   static const int maxImageDimension = 800;
 
-  // Invite token expiry
+  // Invite token expiry (supplier partnership invitations collection)
   static const Duration inviteTokenExpiry = Duration(days: 7);
+
+  /// CEO company invite code used by Field Users at registration.
+  static const Duration fieldUserInviteCodeExpiry = Duration(minutes: 30);
 
   // AI rate limit
   static const int geminiRateLimit = 14;

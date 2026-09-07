@@ -17,6 +17,7 @@ import '../../utils/chat_image_utils.dart';
 import '../../viewmodels/auth_viewmodel.dart';
 import '../../viewmodels/ceo_viewmodel.dart';
 import '../../widgets/ceo_nav_bar.dart';
+import '../../widgets/field_user_invite_validity_text.dart';
 import '../../widgets/profile_layout.dart';
 
 class CeoCompanyProfileView extends StatefulWidget {
@@ -28,9 +29,12 @@ class CeoCompanyProfileView extends StatefulWidget {
 
 class _CeoCompanyProfileViewState extends State<CeoCompanyProfileView> {
   final _thresholdController = TextEditingController();
+  final _nameController = TextEditingController();
+  final _designationController = TextEditingController();
   String? _lastCompanyId;
   Stream<Map<String, dynamic>>? _statsStream;
   bool _isUploadingImage = false;
+  bool _savingCompany = false;
 
   @override
   void initState() {
@@ -39,6 +43,8 @@ class _CeoCompanyProfileViewState extends State<CeoCompanyProfileView> {
     if (company != null) {
       _thresholdController.text =
           company.autoApprovalThreshold.toStringAsFixed(0);
+      _nameController.text = company.name;
+      _designationController.text = company.designation ?? '';
       _lastCompanyId = company.id;
       _statsStream =
           context.read<CeoViewModel>().watchDashboardStats(company.id);
@@ -56,6 +62,8 @@ class _CeoCompanyProfileViewState extends State<CeoCompanyProfileView> {
         _statsStream = ceoVM.watchDashboardStats(company.id);
         _thresholdController.text =
             company.autoApprovalThreshold.toStringAsFixed(0);
+        _nameController.text = company.name;
+        _designationController.text = company.designation ?? '';
       });
     }
   }
@@ -63,6 +71,8 @@ class _CeoCompanyProfileViewState extends State<CeoCompanyProfileView> {
   @override
   void dispose() {
     _thresholdController.dispose();
+    _nameController.dispose();
+    _designationController.dispose();
     super.dispose();
   }
 
@@ -164,6 +174,36 @@ class _CeoCompanyProfileViewState extends State<CeoCompanyProfileView> {
     }
   }
 
+  Future<void> _saveCompanyDetails() async {
+    final name = _nameController.text.trim();
+    if (name.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Company name is required')),
+      );
+      return;
+    }
+    final threshold = double.tryParse(_thresholdController.text.trim()) ?? 0;
+    setState(() => _savingCompany = true);
+    try {
+      await context.read<CeoViewModel>().updateCompanyProfile({
+        'name': name,
+        'designation': _designationController.text.trim(),
+        'autoApprovalThreshold': threshold,
+      });
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Company details saved')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not save: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _savingCompany = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final authVM = context.watch<AuthViewModel>();
@@ -250,10 +290,28 @@ class _CeoCompanyProfileViewState extends State<CeoCompanyProfileView> {
                     ProfileSectionCard(
                       title: 'Company Information',
                       children: [
-                        ProfileDetailRow(
-                          icon: Icons.apartment_rounded,
-                          label: 'Company Name',
-                          value: company.name,
+                        TextField(
+                          controller: _nameController,
+                          decoration: const InputDecoration(
+                            labelText: 'Company name',
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: _designationController,
+                          decoration: const InputDecoration(
+                            labelText: 'Your designation',
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: _thresholdController,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: 'Auto-approval threshold (Rs)',
+                            helperText:
+                                'Orders at or below this amount skip CEO approval',
+                          ),
                         ),
                         ProfileDetailRow(
                           icon: Icons.app_registration_rounded,
@@ -267,15 +325,10 @@ class _CeoCompanyProfileViewState extends State<CeoCompanyProfileView> {
                           label: 'Company Type',
                           value: company.companyType ?? 'N/A',
                         ),
-                        ProfileDetailRow(
-                          icon: Icons.bar_chart_rounded,
-                          label: 'Monthly Volume',
-                          value: company.estimatedMonthlyVolume ?? 'N/A',
-                        ),
-                        ProfileDetailRow(
-                          icon: Icons.location_on_outlined,
-                          label: 'Active Sites',
-                          value: '${company.activeSitesCount ?? 0}',
+                        const SizedBox(height: 12),
+                        ElevatedButton(
+                          onPressed: _savingCompany ? null : _saveCompanyDetails,
+                          child: Text(_savingCompany ? 'Saving…' : 'Save company details'),
                         ),
                       ],
                     ),
@@ -284,7 +337,32 @@ class _CeoCompanyProfileViewState extends State<CeoCompanyProfileView> {
                     const SizedBox(height: 12),
                     _SubscriptionCard(company: company),
                     const SizedBox(height: 12),
-                    _InviteKeyCard(company: company),
+                    _InviteKeyCard(
+                      company: company,
+                      onRegenerate: () async {
+                        final confirmed = await showDialog<bool>(
+                          context: context,
+                          builder: (context) => AlertDialog(
+                            title: const Text('Regenerate invite code?'),
+                            content: const Text(
+                              'The current field-user invite code will stop working immediately.',
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(context, false),
+                                child: const Text('Keep current'),
+                              ),
+                              FilledButton(
+                                onPressed: () => Navigator.pop(context, true),
+                                child: const Text('Regenerate'),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (confirmed != true || !context.mounted) return;
+                        await context.read<CeoViewModel>().regenerateInviteCode();
+                      },
+                    ),
                     const SizedBox(height: 12),
                     ProfileSignOutCard(
                       label: 'Logout Session',
@@ -480,8 +558,12 @@ class _SubscriptionCard extends StatelessWidget {
 
 class _InviteKeyCard extends StatelessWidget {
   final CompanyModel company;
+  final VoidCallback onRegenerate;
 
-  const _InviteKeyCard({required this.company});
+  const _InviteKeyCard({
+    required this.company,
+    required this.onRegenerate,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -548,6 +630,17 @@ class _InviteKeyCard extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 8),
+        FieldUserInviteValidityText(
+          generatedAt: company.inviteCodeGeneratedAt,
+        ),
+        const SizedBox(height: 8),
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton(
+            onPressed: onRegenerate,
+            child: const Text('Regenerate code'),
+          ),
+        ),
         Text(
           'Share this code with your field engineers to link them to your company.',
           style: GoogleFonts.plusJakartaSans(

@@ -24,6 +24,8 @@ class MaterialModel {
   final String? deliveryCoverageArea;
   final String? deliveryCharges;
   final DateTime? createdAt;
+  /// When true the listing is hidden from buyers but kept so past orders/RFQs still resolve.
+  final bool archived;
 
   MaterialModel({
     required this.id,
@@ -48,7 +50,10 @@ class MaterialModel {
     this.deliveryCoverageArea,
     this.deliveryCharges,
     this.createdAt,
+    this.archived = false,
   });
+
+  bool get isListed => !archived;
 
   // Getters to support UI components
   String get city => originCity;
@@ -77,6 +82,7 @@ class MaterialModel {
     String? deliveryCoverageArea,
     String? deliveryCharges,
     DateTime? createdAt,
+    bool? archived,
   }) {
     return MaterialModel(
       id: id ?? this.id,
@@ -103,6 +109,7 @@ class MaterialModel {
           deliveryCoverageArea ?? this.deliveryCoverageArea,
       deliveryCharges: deliveryCharges ?? this.deliveryCharges,
       createdAt: createdAt ?? this.createdAt,
+      archived: archived ?? this.archived,
     );
   }
 
@@ -134,6 +141,7 @@ class MaterialModel {
         'deliveryCoverageArea': deliveryCoverageArea,
       if (deliveryCharges != null) 'deliveryCharges': deliveryCharges,
       if (createdAt != null) 'createdAt': createdAt,
+      'archived': archived,
     };
   }
 
@@ -186,6 +194,7 @@ class MaterialModel {
       createdAt: map['createdAt'] is Timestamp
           ? (map['createdAt'] as Timestamp).toDate()
           : DateTime.tryParse(map['createdAt']?.toString() ?? ''),
+      archived: map['archived'] == true || map['isActive'] == false,
     );
   }
 }

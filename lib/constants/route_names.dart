@@ -42,6 +42,7 @@ class RouteNames {
   static const String ceoCreateRfq = '/ceo/rfqs/create';
   static const String ceoRfqDetail = '/ceo/rfqs/:rfqId';
   static const String ceoDisputes = '/ceo/disputes';
+  static const String ceoDisputeDetail = '/ceo/disputes/:disputeId';
   static const String ceoNotifications = '/ceo/notifications';
 
   // Supplier
@@ -89,6 +90,7 @@ class RouteNames {
   static const String fieldNotifications = '/field/notifications';
   static const String fieldProfile = '/field/profile';
   static const String fieldMyDisputes = '/field/disputes';
+  static const String fieldDisputeDetail = '/field/disputes/:disputeId';
   static const String fieldRfqs = '/field/rfqs';
   static const String fieldCreateRfq = '/field/rfqs/create';
   static const String fieldRfqDetail = '/field/rfqs/:rfqId';

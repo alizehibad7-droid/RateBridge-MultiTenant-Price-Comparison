@@ -86,11 +86,16 @@ class _RegisterCeoViewState extends State<RegisterCeoView> {
     return null;
   }
 
-  String? _validateEmail(String? v) {
+  String? _emailFormatError(String? v) {
     if (v == null || v.trim().isEmpty) return 'Email is required';
     final regex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
     if (!regex.hasMatch(v.trim())) return 'Enter a valid email address';
     return null;
+  }
+
+  String? _validateEmail(String? v) {
+    return _emailFormatError(v) ??
+        context.read<AuthViewModel>().registrationEmailError;
   }
 
   String? _validatePassword(String? v) {
@@ -264,6 +269,7 @@ class _RegisterCeoViewState extends State<RegisterCeoView> {
                     const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 child: Form(
                   key: _formKey,
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
@@ -339,6 +345,7 @@ class _RegisterCeoViewState extends State<RegisterCeoView> {
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(
               value: _companyType,
+              autovalidateMode: AutovalidateMode.onUserInteraction,
               items: kCompanyTypes
                   .map(
                     (t) => DropdownMenuItem(
@@ -385,6 +392,7 @@ class _RegisterCeoViewState extends State<RegisterCeoView> {
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(
               value: _designation,
+              autovalidateMode: AutovalidateMode.onUserInteraction,
               items: kCeoDesignations
                   .map(
                     (d) => DropdownMenuItem(
@@ -441,6 +449,13 @@ class _RegisterCeoViewState extends State<RegisterCeoView> {
               placeholder: 'ceo@company.com',
               keyboardType: TextInputType.emailAddress,
               validator: _validateEmail,
+              onChanged: (_) {
+                context.read<AuthViewModel>().clearRegistrationEmailError();
+              },
+              onUnfocus: (value) {
+                if (_emailFormatError(value) != null) return;
+                context.read<AuthViewModel>().validateRegistrationEmail(value);
+              },
             ),
             const SizedBox(height: 16),
             AuthTextField(
@@ -477,6 +492,9 @@ class _RegisterCeoViewState extends State<RegisterCeoView> {
           value: _selectedCity,
           hint: Text('Select city', style: textTheme.bodyMedium),
           isExpanded: true,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
+          validator: (v) =>
+              (v == null || v.isEmpty) ? 'Please select your company city' : null,
           items: kPakistanMajorCities
               .map(
                 (city) => DropdownMenuItem(
@@ -504,6 +522,10 @@ class _RegisterCeoViewState extends State<RegisterCeoView> {
           value: _estimatedVolume,
           hint: Text('Select volume band', style: textTheme.bodyMedium),
           isExpanded: true,
+          autovalidateMode: AutovalidateMode.onUserInteraction,
+          validator: (v) => (v == null || v.isEmpty)
+              ? 'Select estimated monthly procurement volume'
+              : null,
           items: kProcurementVolumeBands
               .map(
                 (band) => DropdownMenuItem(

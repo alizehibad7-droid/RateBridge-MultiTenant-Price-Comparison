@@ -80,6 +80,20 @@ class FirebaseAuthService {
     await _auth.sendPasswordResetEmail(email: email);
   }
 
+  /// Returns true when Firebase Auth already has this email.
+  /// Email-enumeration protection may hide accounts; then this returns false
+  /// and createUser still enforces uniqueness.
+  Future<bool> emailAlreadyRegistered(String email) async {
+    final trimmed = email.trim();
+    if (trimmed.isEmpty) return false;
+    try {
+      final methods = await _auth.fetchSignInMethodsForEmail(trimmed);
+      return methods.isNotEmpty;
+    } on FirebaseAuthException {
+      return false;
+    }
+  }
+
   Future<void> changePassword({
     required String currentPassword,
     required String newPassword,

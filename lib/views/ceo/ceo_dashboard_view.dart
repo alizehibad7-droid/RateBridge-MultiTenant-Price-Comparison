@@ -155,6 +155,8 @@ class _CeoDashboardViewState extends State<CeoDashboardView> {
                           children: [
                             CeoInviteCodeCard(
                               inviteCode: inviteCode,
+                              inviteCodeGeneratedAt:
+                                  vm.company?.inviteCodeGeneratedAt,
                               onCopy: () => _copyInviteCode(inviteCode),
                               onRegenerate: () => _regenerateCode(vm),
                               isRegenerating: _regeneratingCode,

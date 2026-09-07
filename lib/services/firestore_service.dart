@@ -152,6 +152,7 @@ class FirestoreService {
           (snap) =>
               snap.docs
                   .map((doc) => MaterialModel.fromMap(doc.data() as Map<String, dynamic>))
+                  .where((m) => m.isListed)
                   .toList(),
         );
   }
@@ -226,6 +227,7 @@ class FirestoreService {
             SeedDataGuard.isSeedId(material.supplierId)) {
           continue;
         }
+        if (!material.isListed) continue;
         if (seenIds.add(material.id)) {
           allMaterials.add(material);
         }
@@ -270,6 +272,7 @@ class FirestoreService {
     final snap = await _db.collection('materials').limit(10).get();
     return snap.docs
         .map((doc) => _materialFromDoc(doc.id, doc.data()))
+        .where((m) => m.isListed)
         .toList();
   }
 
@@ -286,7 +289,10 @@ class FirestoreService {
             .collection('materials')
             .where(FieldPath.documentId, whereIn: ids)
             .get();
-    return snap.docs.map((doc) => MaterialModel.fromMap(doc.data() as Map<String, dynamic>)).toList();
+    return snap.docs
+        .map((doc) => MaterialModel.fromMap(doc.data() as Map<String, dynamic>))
+        .where((m) => m.isListed)
+        .toList();
   }
 
   Future<List<MaterialModel>> searchMaterials(String query) async {
@@ -296,7 +302,10 @@ class FirestoreService {
             .where('name', isGreaterThanOrEqualTo: query)
             .where('name', isLessThanOrEqualTo: '$query\uf8ff')
             .get();
-    return snap.docs.map((doc) => MaterialModel.fromMap(doc.data() as Map<String, dynamic>)).toList();
+    return snap.docs
+        .map((doc) => MaterialModel.fromMap(doc.data() as Map<String, dynamic>))
+        .where((m) => m.isListed)
+        .toList();
   }
 
   Stream<List<MaterialModel>> streamCategoryMaterials(
@@ -351,9 +360,11 @@ class FirestoreService {
 
                   final materialsSnap = await query.get();
                   filteredMaterials.addAll(
-                    materialsSnap.docs.map(
-                      (doc) => MaterialModel.fromMap(_queryDocData(doc)),
-                    ),
+                    materialsSnap.docs
+                        .map(
+                          (doc) => MaterialModel.fromMap(_queryDocData(doc)),
+                        )
+                        .where((m) => m.isListed),
                   );
                 }
 
@@ -392,6 +403,7 @@ class FirestoreService {
       (snap) =>
           snap.docs
               .map((doc) => MaterialModel.fromMap(_queryDocData(doc)))
+              .where((m) => m.isListed)
               .toList(),
     );
   }
@@ -404,7 +416,10 @@ class FirestoreService {
             .collection('materials')
             .where('name', isEqualTo: materialName)
             .get();
-    final materials = snap.docs.map((doc) => MaterialModel.fromMap(doc.data() as Map<String, dynamic>)).toList();
+    final materials = snap.docs
+        .map((doc) => MaterialModel.fromMap(doc.data() as Map<String, dynamic>))
+        .where((m) => m.isListed)
+        .toList();
     if (materials.isEmpty) return materials;
 
     final supplierIds = materials
@@ -545,6 +560,7 @@ class FirestoreService {
 
     void addMatches(Iterable<MaterialModel> items) {
       for (final material in items) {
+        if (!material.isListed) continue;
         if (seenIds.add(material.id)) {
           matched.add(material);
         }
@@ -605,7 +621,10 @@ class FirestoreService {
             .collection('materials')
             .where('supplierId', isEqualTo: supplierId)
             .get();
-    return snap.docs.map((doc) => MaterialModel.fromMap(doc.data() as Map<String, dynamic>)).toList();
+    return snap.docs
+        .map((doc) => MaterialModel.fromMap(doc.data() as Map<String, dynamic>))
+        .where((m) => m.isListed)
+        .toList();
   }
 
   /// Average rating from the ratings collection, matching supplier_viewmodel logic.
@@ -1297,6 +1316,79 @@ class FirestoreService {
     }
   }
 
+  /// Writes a cancel payload to [rfq_cancel_jobs] and waits for
+  /// [onRfqCancelJobCreated].
+  Future<void> createRfqCancelJob({
+    required String uid,
+    required String rfqId,
+  }) async {
+    final ref = _db.collection('rfq_cancel_jobs').doc();
+    await ref.set({
+      'uid': uid,
+      'rfqId': rfqId,
+      'status': 'pending',
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+
+    final done = await ref.snapshots().firstWhere((snap) {
+      final status = snap.data()?['status']?.toString();
+      return status == 'complete' || status == 'error';
+    }).timeout(
+      const Duration(seconds: 60),
+      onTimeout: () {
+        throw AppException(
+          'Cancelling the quote request timed out. Please try again.',
+          'deadline-exceeded',
+        );
+      },
+    );
+
+    final data = done.data() ?? {};
+    if (data['status'] == 'error') {
+      throw AppException(
+        (data['error'] as String?)?.trim().isNotEmpty == true
+            ? data['error'] as String
+            : 'Could not cancel this quote request. Please try again.',
+      );
+    }
+  }
+
+  /// Writes a bid-withdraw payload to [rfq_bid_withdraw_jobs].
+  Future<void> createRfqBidWithdrawJob({
+    required String uid,
+    required String rfqId,
+  }) async {
+    final ref = _db.collection('rfq_bid_withdraw_jobs').doc();
+    await ref.set({
+      'uid': uid,
+      'rfqId': rfqId,
+      'status': 'pending',
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+
+    final done = await ref.snapshots().firstWhere((snap) {
+      final status = snap.data()?['status']?.toString();
+      return status == 'complete' || status == 'error';
+    }).timeout(
+      const Duration(seconds: 60),
+      onTimeout: () {
+        throw AppException(
+          'Withdrawing the bid timed out. Please try again.',
+          'deadline-exceeded',
+        );
+      },
+    );
+
+    final data = done.data() ?? {};
+    if (data['status'] == 'error') {
+      throw AppException(
+        (data['error'] as String?)?.trim().isNotEmpty == true
+            ? data['error'] as String
+            : 'Could not withdraw this bid. Please try again.',
+      );
+    }
+  }
+
   /// Writes a report payload to [dispute_jobs] and waits for
   /// [onDisputeJobCreated]. Used instead of the `raiseDispute` HTTPS callable,
   /// which is blocked by CORS on Flutter web.
@@ -1398,6 +1490,41 @@ class FirestoreService {
     }
   }
 
+  Future<void> createDisputeWithdrawJob({
+    required String uid,
+    required String disputeId,
+  }) async {
+    final ref = _db.collection('dispute_withdraw_jobs').doc();
+    await ref.set({
+      'uid': uid,
+      'disputeId': disputeId,
+      'status': 'pending',
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+
+    final done = await ref.snapshots().firstWhere((snap) {
+      final jobStatus = snap.data()?['status']?.toString();
+      return jobStatus == 'complete' || jobStatus == 'error';
+    }).timeout(
+      const Duration(seconds: 60),
+      onTimeout: () {
+        throw AppException(
+          'Withdrawing the dispute timed out. Please try again.',
+          'deadline-exceeded',
+        );
+      },
+    );
+
+    final data = done.data() ?? {};
+    if (data['status'] == 'error') {
+      throw AppException(
+        (data['error'] as String?)?.trim().isNotEmpty == true
+            ? data['error'] as String
+            : 'Could not withdraw this dispute. Please try again.',
+      );
+    }
+  }
+
   /// Writes a prompt to [ai_jobs] and waits for [onAiJobCreated] to fill it.
   /// Used instead of the `generateAiText` HTTPS callable, which 403s on Flutter web.
   Future<String> generateAiText({
@@ -1493,6 +1620,7 @@ class FirestoreService {
         await _db.collection('rfqs').doc(rfqId).collection('bids').get();
     final bids = snap.docs
         .map((doc) => RfqBidModel.fromMap(doc.id, doc.data()))
+        .where((b) => !b.isWithdrawn)
         .toList();
     bids.sort((a, b) => a.bidPrice.compareTo(b.bidPrice));
     return bids;
@@ -1504,6 +1632,7 @@ class FirestoreService {
         final bids =
             snap.docs
                 .map((doc) => RfqBidModel.fromMap(doc.id, doc.data() as Map<String, dynamic>))
+                .where((b) => !b.isWithdrawn)
                 .toList();
         bids.sort((a, b) => a.bidPrice.compareTo(b.bidPrice));
         return bids;
@@ -1589,6 +1718,16 @@ class FirestoreService {
           disputes.sort((a, b) => b.createdAt.compareTo(a.createdAt));
           return disputes;
         });
+  }
+
+  Stream<DisputeModel?> streamDispute(String disputeId) {
+    final id = disputeId.trim();
+    if (id.isEmpty) return Stream.value(null);
+    return _db.collection('disputes').doc(id).snapshots().map((doc) {
+      final data = doc.data();
+      if (!doc.exists || data == null) return null;
+      return DisputeModel.fromMap(doc.id, data);
+    });
   }
 
   Future<bool> isSupplierLinkedToCompany(

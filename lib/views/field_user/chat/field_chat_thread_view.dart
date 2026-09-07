@@ -29,7 +29,8 @@ class FieldChatThreadView extends StatefulWidget {
   State<FieldChatThreadView> createState() => _FieldChatThreadViewState();
 }
 
-class _FieldChatThreadViewState extends State<FieldChatThreadView> {
+class _FieldChatThreadViewState extends State<FieldChatThreadView>
+    with WidgetsBindingObserver {
   final _messageController = TextEditingController();
   final _scrollController = ScrollController();
   FieldChatViewModel? _chatVm;
@@ -49,8 +50,18 @@ class _FieldChatThreadViewState extends State<FieldChatThreadView> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _messageController.addListener(_onComposerChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) => _openThread());
+  }
+
+  @override
+  void didChangeMetrics() {
+    super.didChangeMetrics();
+    if (!mounted) return;
+    if (View.of(context).viewInsets.bottom > 0) {
+      _scrollToBottom(force: true);
+    }
   }
 
   void _onComposerChanged() {
@@ -81,6 +92,7 @@ class _FieldChatThreadViewState extends State<FieldChatThreadView> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _messageController.removeListener(_onComposerChanged);
     _chatVm?.closeThread();
     _messageController.dispose();
@@ -190,6 +202,7 @@ class _FieldChatThreadViewState extends State<FieldChatThreadView> {
     return Theme(
       data: FieldTheme.theme,
       child: Scaffold(
+        resizeToAvoidBottomInset: true,
         backgroundColor: FieldColors.screenBackground,
         appBar: FieldAppBar(
           titleWidget: Column(
@@ -220,45 +233,43 @@ class _FieldChatThreadViewState extends State<FieldChatThreadView> {
             ),
           ],
         ),
-        body: Column(
-          children: [
-            Expanded(
-              child: vm.errorMessage != null && vm.messages.isEmpty
-                  ? FieldErrorState(
-                      title: 'Could not load messages',
-                      message: vm.errorMessage!,
-                      onRetry: _openThread,
-                    )
-                  : vm.isLoadingMessages
-                      ? const FieldChatThreadSkeleton()
-                      : vm.messages.isEmpty
-                          ? const _ThreadEmpty()
-                          : ListView.builder(
-                          controller: _scrollController,
-                          padding: const EdgeInsets.fromLTRB(
-                            FieldSpacing.lg,
-                            FieldSpacing.md,
-                            FieldSpacing.lg,
-                            FieldSpacing.md,
-                          ),
-                          itemCount: groups.length,
-                          itemBuilder: (context, index) {
-                            return _MessageGroupBubble(
-                              group: groups[index],
-                              currentUid: currentUid,
-                            );
-                          },
+        body: vm.errorMessage != null && vm.messages.isEmpty
+            ? FieldErrorState(
+                title: 'Could not load messages',
+                message: vm.errorMessage!,
+                onRetry: _openThread,
+              )
+            : vm.isLoadingMessages
+                ? const FieldChatThreadSkeleton()
+                : vm.messages.isEmpty
+                    ? const _ThreadEmpty()
+                    : ListView.builder(
+                        controller: _scrollController,
+                        padding: const EdgeInsets.fromLTRB(
+                          FieldSpacing.lg,
+                          FieldSpacing.md,
+                          FieldSpacing.lg,
+                          FieldSpacing.md,
                         ),
-            ),
-            _MessageInputBar(
-              controller: _messageController,
-              isSending: vm.isSending,
-              canSend: _canSend,
-              pendingImage: _pendingImage,
-              onAttach: _pickImage,
-              onRemoveImage: _removePendingImage,
-              onSend: _send,
-            ),          ],
+                        itemCount: groups.length,
+                        itemBuilder: (context, index) {
+                          return _MessageGroupBubble(
+                            group: groups[index],
+                            currentUid: currentUid,
+                          );
+                        },
+                      ),
+        bottomNavigationBar: SafeArea(
+          top: false,
+          child: _MessageInputBar(
+            controller: _messageController,
+            isSending: vm.isSending,
+            canSend: _canSend,
+            pendingImage: _pendingImage,
+            onAttach: _pickImage,
+            onRemoveImage: _removePendingImage,
+            onSend: _send,
+          ),
         ),
       ),
     );
@@ -434,11 +445,11 @@ class _MessageInputBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: EdgeInsets.fromLTRB(
+      padding: const EdgeInsets.fromLTRB(
         FieldSpacing.lg,
         FieldSpacing.sm,
         FieldSpacing.lg,
-        FieldSpacing.sm + MediaQuery.paddingOf(context).bottom,
+        FieldSpacing.sm,
       ),
       decoration: const BoxDecoration(
         color: FieldColors.surfaceWhite,

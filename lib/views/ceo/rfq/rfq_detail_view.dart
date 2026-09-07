@@ -14,6 +14,43 @@ class RfqDetailView extends StatelessWidget {
   final String rfqId;
   const RfqDetailView({super.key, required this.rfqId});
 
+  Future<void> _cancelRfq(BuildContext context, RfqModel rfq) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Cancel this request?'),
+        content: const Text(
+          'Suppliers will no longer be able to bid. This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Keep open'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Cancel request'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    final uid = context.read<AuthViewModel>().user?.uid;
+    if (uid == null) return;
+    try {
+      await context.read<RfqViewModel>().cancelRfq(rfqId: rfq.id, uid: uid);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Quote request cancelled')),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString())),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final rfqVM = context.read<RfqViewModel>();
@@ -41,6 +78,14 @@ class RfqDetailView extends StatelessWidget {
                 padding: const EdgeInsets.all(24),
                 children: [
                   _buildRfqHeader(rfq),
+                  if (rfq.status.toLowerCase() == 'open') ...[
+                    const SizedBox(height: 16),
+                    OutlinedButton.icon(
+                      onPressed: () => _cancelRfq(context, rfq),
+                      icon: const Icon(Icons.cancel_outlined),
+                      label: const Text('Cancel quote request'),
+                    ),
+                  ],
                   const SizedBox(height: 32),
                   CeoSectionLabel('Supplier Bids (${bids.length})'),
                   const SizedBox(height: 16),
