@@ -1,0 +1,15 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "RateBridge Dev (Edge)",
+      "request": "launch",
+      "type": "dart",
+      "args": [
+        "-d",
+        "edge",
+        "--dart-define-from-file=dart_defines.json"
+      ]
+    }
+  ]
+}

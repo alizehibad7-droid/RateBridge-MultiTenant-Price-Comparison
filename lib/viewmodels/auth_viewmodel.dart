@@ -1,0 +1,900 @@
+import 'dart:async';
+import 'dart:typed_data';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import '../models/user_model.dart';
+import '../services/firebase_auth_service.dart';
+import '../services/cloudinary_service.dart';
+import '../repositories/user_repository.dart';
+import '../services/category_seed_service.dart';
+import '../services/plan_limit_service.dart';
+import '../services/notification_service.dart';
+import '../utils/app_exception.dart';
+import '../utils/field_user_invite_code.dart';
+import '../utils/invite_code_generator.dart';
+import '../utils/pakistan_validators.dart';
+
+enum AuthStatus { loading, authenticated, unauthenticated, error }
+
+class AuthViewModel extends ChangeNotifier {
+  final UserRepository _userRepo;
+  final FirebaseAuthService _authService;
+  final NotificationService? _notificationService;
+  FirebaseFirestore get _firestore => FirebaseFirestore.instance;
+
+  UserModel? _user;
+  AuthStatus _status = AuthStatus.loading;
+  String? _errorMessage;
+  StreamSubscription? _userSubscription;
+  String? _listeningUid;
+  Completer<UserModel?>? _profileReady;
+
+  bool isRegistered = false;
+  String? pendingInviteCompanyId;
+  String? pendingInviteCompanyName;
+  String? pendingInvitePlan;
+  bool isValidatingInvite = false;
+  String? inviteError;
+  String? registrationEmailError;
+  bool isCheckingEmail = false;
+
+  AuthViewModel(this._userRepo, this._authService, [this._notificationService]) {
+    _initSession();
+    _authService.authStateChanges.listen((User? firebaseUser) {
+      if (firebaseUser == null) {
+        _cancelUserSubscription();
+        _user = null;
+        _status = AuthStatus.unauthenticated;
+        notifyListeners();
+      } else if (_listeningUid != firebaseUser.uid ||
+          (_user == null &&
+              (_profileReady == null || _profileReady!.isCompleted))) {
+        _initSession();
+      }
+    });
+  }
+
+  UserModel? get user => _user;
+  UserModel? get currentUser => _user; 
+  String? get companyId => _user?.companyId; 
+  AuthStatus get status => _status;
+  String? get errorMessage => _errorMessage;
+  bool get isLoading => _status == AuthStatus.loading;
+  bool get isAuthenticated => _user != null;
+  String? get role => _user?.role;
+
+  Future<void> _initSession() async {
+    try {
+      final firebaseUser = _authService.currentUser;
+      if (firebaseUser != null) {
+        if (_listeningUid == firebaseUser.uid && _user != null) {
+          _status = AuthStatus.authenticated;
+          notifyListeners();
+          return;
+        }
+        await firebaseUser.getIdToken();
+        final profile = await _attachUserListener(firebaseUser.uid);
+        if (profile == null) {
+          _status = AuthStatus.unauthenticated;
+          notifyListeners();
+          return;
+        }
+        _status = AuthStatus.authenticated;
+        notifyListeners();
+        await updateFcmToken(profile.uid);
+        try {
+          await CategorySeedService(_firestore).seedIfEmpty();
+        } catch (e) {
+          debugPrint('Category seed skipped: $e');
+        }
+        return;
+      }
+
+      final user = await _userRepo.getSessionUser();
+      if (user != null) {
+        _user = user;
+        _status = AuthStatus.authenticated;
+        _startUserSubscription(user.uid);
+        notifyListeners();
+        await updateFcmToken(user.uid);
+        try {
+          await CategorySeedService(_firestore).seedIfEmpty();
+        } catch (e) {
+          debugPrint('Category seed skipped: $e');
+        }
+      } else {
+        _status = AuthStatus.unauthenticated;
+        notifyListeners();
+      }
+    } catch (e) {
+      _status = AuthStatus.unauthenticated;
+      _errorMessage = _mapAuthError(e);
+      notifyListeners();
+    }
+  }
+
+  Future<UserModel?> _awaitProfile({
+    Duration timeout = const Duration(seconds: 20),
+  }) {
+    final pending = _profileReady;
+    if (pending == null) return Future.value(_user);
+    if (pending.isCompleted) return Future.value(_user);
+    return pending.future.timeout(
+      timeout,
+      onTimeout: () {
+        throw AppException(
+          'Could not load your profile. Refresh the page and try again.',
+        );
+      },
+    );
+  }
+
+  Future<UserModel?> _attachUserListener(String uid) {
+    if (_listeningUid == uid && _user != null) {
+      return Future.value(_user);
+    }
+    if (_listeningUid == uid &&
+        _userSubscription != null &&
+        _profileReady != null &&
+        !_profileReady!.isCompleted) {
+      return _awaitProfile();
+    }
+
+    _profileReady = Completer<UserModel?>();
+    _bindUserListener(uid);
+    return _awaitProfile();
+  }
+
+  void _completeProfile(UserModel? user, {Object? error}) {
+    final pending = _profileReady;
+    if (pending == null || pending.isCompleted) return;
+    if (error != null) {
+      pending.completeError(error);
+      return;
+    }
+    pending.complete(user);
+  }
+
+  void _bindUserListener(String uid) {
+    if (_listeningUid == uid && _userSubscription != null) {
+      if (_user != null) _completeProfile(_user);
+      return;
+    }
+
+    _listeningUid = uid;
+    _userSubscription?.cancel();
+    _userSubscription = _userRepo.watchUserDoc(uid).listen(
+      (updatedUser) {
+        _user = updatedUser;
+        _completeProfile(updatedUser);
+        notifyListeners();
+      },
+      onError: (Object e) {
+        debugPrint('Error watching user doc: $e');
+        _completeProfile(null, error: e);
+      },
+    );
+  }
+
+  void _startUserSubscription(String uid) {
+    _bindUserListener(uid);
+  }
+
+  void _cancelUserSubscription() {
+    _userSubscription?.cancel();
+    _userSubscription = null;
+    _listeningUid = null;
+    if (_profileReady != null && !_profileReady!.isCompleted) {
+      _profileReady!.complete(null);
+    }
+    _profileReady = null;
+  }
+
+  Future<void> checkAuthState() => _initSession();
+
+  Future<bool> signIn(String email, String password) async {
+    _status = AuthStatus.loading;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      final userCredential = await _authService.signIn(email, password);
+      final firebaseUser = userCredential.user;
+      final uid = firebaseUser?.uid;
+      if (uid == null) throw Exception("Authentication failed");
+
+      await firebaseUser!.getIdToken(true);
+      _user = await _attachUserListener(uid);
+      if (_user == null) {
+        throw Exception('User model not found for UID: $uid');
+      }
+      _status = AuthStatus.authenticated;
+      notifyListeners();
+      await updateFcmToken(uid);
+      return true;
+    } catch (e) {
+      _status = AuthStatus.error;
+      _errorMessage = _mapAuthError(e);
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<void> registerCEO({
+    required String fullName,
+    required String email,
+    required String password,
+    required String phone,
+    required String companyName,
+    required String companyType,
+    required int yearsInOperation,
+    String? registrationNumber,
+    required String designation,
+    required String cnic,
+    required String city,
+    required String address,
+    required String estimatedMonthlyVolume,
+    required int activeSitesCount,
+    required Uint8List cnicFrontBytes,
+    required Uint8List cnicBackBytes,
+    Uint8List? registrationCertBytes,
+    Uint8List? officePhotoBytes,
+  }) async {
+    _status = AuthStatus.loading;
+    _errorMessage = null;
+    isRegistered = false;
+    notifyListeners();
+
+    UserCredential? cred;
+    try {
+      cred = await _authService.createUser(email.trim(), password);
+      final uid = cred.user!.uid;
+      
+      // Ensure session is recognized
+      await cred.user?.getIdToken(true);
+
+      final companyRef = _firestore.collection('companies').doc();
+      final companyId = companyRef.id;
+      final uploadFolder = 'ratebridge/companies/$companyId';
+
+      final cnicFrontUrl = await CloudinaryService.uploadImageBytes(
+        bytes: cnicFrontBytes,
+        folder: uploadFolder,
+        filename: 'cnic_front.jpg',
+      );
+      final cnicBackUrl = await CloudinaryService.uploadImageBytes(
+        bytes: cnicBackBytes,
+        folder: uploadFolder,
+        filename: 'cnic_back.jpg',
+      );
+
+      if (cnicFrontUrl == null || cnicBackUrl == null) {
+        await cred.user?.delete();
+        _status = AuthStatus.error;
+        _errorMessage =
+            'Could not upload CNIC photos. Please check your connection and try again.';
+        return;
+      }
+
+      String? registrationCertUrl;
+      String? officePhotoUrl;
+
+      if (registrationCertBytes != null) {
+        registrationCertUrl = await CloudinaryService.uploadImageBytes(
+          bytes: registrationCertBytes,
+          folder: uploadFolder,
+          filename: 'registration_cert.jpg',
+        );
+      }
+      if (officePhotoBytes != null) {
+        officePhotoUrl = await CloudinaryService.uploadImageBytes(
+          bytes: officePhotoBytes,
+          folder: uploadFolder,
+          filename: 'office_photo.jpg',
+        );
+      }
+
+      final normalizedPhone = PakistanValidators.normalizePhone(phone);
+      final normalizedCnic = PakistanValidators.digitsOnly(cnic);
+      final trimmedRegNo = registrationNumber?.trim() ?? '';
+
+      await companyRef.set({
+        'id': companyId,
+        'name': companyName.trim(),
+        'companyName': companyName.trim(),
+        'registrationNumber': trimmedRegNo,
+        'companyType': companyType,
+        'yearsInOperation': yearsInOperation,
+        'ceoFullName': fullName.trim(),
+        'designation': designation,
+        'cnicNumber': normalizedCnic,
+        'cnicFrontUrl': cnicFrontUrl,
+        'cnicBackUrl': cnicBackUrl,
+        'city': city.trim(),
+        'address': address.trim(),
+        'phone': normalizedPhone,
+        'estimatedMonthlyVolume': estimatedMonthlyVolume,
+        'activeSitesCount': activeSitesCount,
+        if (registrationCertUrl != null)
+          'registrationCertUrl': registrationCertUrl,
+        if (officePhotoUrl != null) 'officePhotoUrl': officePhotoUrl,
+        'ceoUid': uid,
+        'status': 'pending',
+        'inviteCode': null,
+        'createdAt': FieldValue.serverTimestamp(),
+        'plan': 'free',
+        'aiEnabled': false,
+        'fieldUserCount': 0,
+      });
+
+      final userData = UserModel(
+        uid: uid,
+        email: email.trim(),
+        name: fullName.trim(),
+        role: 'CEO',
+        companyId: companyId,
+        phone: normalizedPhone,
+        city: city.trim(),
+        address: address.trim(),
+        cnic: normalizedCnic,
+        status: 'pending',
+        approved: false,
+        createdAt: DateTime.now(),
+      );
+
+      await _userRepo.createUserDoc(uid, userData);
+      
+      // Notify Admins
+      if (_notificationService != null) {
+        await _notificationService!.notifyAllAdminsOfNewRegistration(
+          name: fullName.trim(),
+          role: 'CEO',
+          targetUid: uid,
+        );
+      }
+
+      _user = userData;
+      isRegistered = true;
+      _status = AuthStatus.authenticated;
+      _startUserSubscription(uid);
+    } on FirebaseAuthException catch (e) {
+      _status = AuthStatus.error;
+      _errorMessage = _mapAuthError(e);
+    } catch (e) {
+      await cred?.user?.delete();
+      _status = AuthStatus.error;
+      _errorMessage = _mapAuthError(e);
+    } finally {
+      notifyListeners();
+    }
+  }
+
+  Future<void> registerSupplier({
+    required String ownerName,
+    required String businessName,
+    required String email,
+    required String password,
+    required String phone,
+    required String city,
+    required String cnic,
+    required String businessType,
+    required String businessAddress,
+    required List<String> categories,
+    required int yearsInBusiness,
+    String? businessRegistrationNumber,
+    required List<String> deliveryCoverageAreas,
+    required Uint8List cnicFrontBytes,
+    required Uint8List cnicBackBytes,
+    Uint8List? shopPhotoBytes,
+    Uint8List? businessLicenseBytes,
+    Uint8List? certificationBytes,
+  }) async {
+    _status = AuthStatus.loading;
+    _errorMessage = null;
+    isRegistered = false;
+    notifyListeners();
+
+    UserCredential? cred;
+    try {
+      cred = await _authService.createUser(email.trim(), password);
+      final uid = cred.user!.uid;
+      
+      // Ensure session is recognized
+      await cred.user?.getIdToken(true);
+
+      final uploadFolder = 'ratebridge/suppliers/$uid';
+
+      final cnicFrontUrl = await CloudinaryService.uploadImageBytes(
+        bytes: cnicFrontBytes,
+        folder: uploadFolder,
+        filename: 'cnic_front.jpg',
+      );
+      final cnicBackUrl = await CloudinaryService.uploadImageBytes(
+        bytes: cnicBackBytes,
+        folder: uploadFolder,
+        filename: 'cnic_back.jpg',
+      );
+
+      if (cnicFrontUrl == null || cnicBackUrl == null) {
+        await cred.user?.delete();
+        _status = AuthStatus.error;
+        _errorMessage =
+            'Could not upload CNIC photos. Please check your connection and try again.';
+        return;
+      }
+
+      String? shopPhotoUrl;
+      String? businessLicenseUrl;
+      String? certificationUrl;
+
+      if (shopPhotoBytes != null) {
+        shopPhotoUrl = await CloudinaryService.uploadImageBytes(
+          bytes: shopPhotoBytes,
+          folder: uploadFolder,
+          filename: 'shop_photo.jpg',
+        );
+      }
+      if (businessLicenseBytes != null) {
+        businessLicenseUrl = await CloudinaryService.uploadImageBytes(
+          bytes: businessLicenseBytes,
+          folder: uploadFolder,
+          filename: 'business_license.jpg',
+        );
+      }
+      if (certificationBytes != null) {
+        certificationUrl = await CloudinaryService.uploadImageBytes(
+          bytes: certificationBytes,
+          folder: uploadFolder,
+          filename: 'certification.jpg',
+        );
+      }
+
+      if (shopPhotoUrl == null &&
+          businessLicenseUrl == null &&
+          certificationUrl == null) {
+        await cred.user?.delete();
+        _status = AuthStatus.error;
+        _errorMessage =
+            'Upload at least one business proof document (shop photo, license, or certification).';
+        return;
+      }
+
+      final normalizedPhone = PakistanValidators.normalizePhone(phone);
+      final normalizedCnic = PakistanValidators.formatCnic(cnic);
+      final trimmedNtn = businessRegistrationNumber?.trim();
+      final declaredCategories = categories;
+
+      final userData = UserModel(
+        uid: uid,
+        email: email.trim(),
+        name: ownerName.trim(),
+        role: 'Supplier',
+        companyId: '',
+        phone: normalizedPhone,
+        city: city.trim(),
+        address: businessAddress.trim(),
+        cnic: normalizedCnic,
+        businessType: businessType,
+        status: 'pending',
+        approved: false,
+        createdAt: DateTime.now(),
+      );
+
+      await _userRepo.createUserDoc(uid, userData);
+
+      await _firestore.collection('suppliers').doc(uid).set({
+        'id': uid,
+        'name': businessName.trim(),
+        'businessName': businessName.trim(),
+        'ownerName': ownerName.trim(),
+        'ownerFullName': ownerName.trim(),
+        'email': email.trim(),
+        'phone': normalizedPhone,
+        'contact': normalizedPhone,
+        'city': city.trim(),
+        'cnic': normalizedCnic,
+        'cnicNumber': normalizedCnic,
+        'cnicFrontUrl': cnicFrontUrl,
+        'cnicBackUrl': cnicBackUrl,
+        'businessType': businessType,
+        'materialType': businessType,
+        'businessAddress': businessAddress.trim(),
+        'deliveryCoverageAreas': deliveryCoverageAreas,
+        'categories': declaredCategories,
+        'declaredCategories': declaredCategories,
+        'yearsInBusiness': yearsInBusiness,
+        if (trimmedNtn != null && trimmedNtn.isNotEmpty)
+          'businessRegistrationNumber': trimmedNtn,
+        if (shopPhotoUrl != null) 'shopPhotoUrl': shopPhotoUrl,
+        if (businessLicenseUrl != null) 'businessLicenseUrl': businessLicenseUrl,
+        if (certificationUrl != null) 'certificationUrl': certificationUrl,
+        'status': 'pending',
+        'onboardingComplete': false,
+        'totalCompanies': 0,
+        'rating': 0.0,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      // Notify Admins
+      if (_notificationService != null) {
+        await _notificationService!.notifyAllAdminsOfNewRegistration(
+          name: businessName.trim(),
+          role: 'Supplier',
+          targetUid: uid,
+        );
+      }
+
+      _user = userData;
+      isRegistered = true;
+      _status = AuthStatus.authenticated;
+      _startUserSubscription(uid);
+      await CategorySeedService(_firestore).seedIfEmpty();
+    } on FirebaseAuthException catch (e) {
+      _status = AuthStatus.error;
+      _errorMessage = _mapAuthError(e);
+    } catch (e) {
+      await cred?.user?.delete();
+      _status = AuthStatus.error;
+      _errorMessage = _mapAuthError(e);
+    } finally {
+      notifyListeners();
+    }
+  }
+
+  Future<bool> validateInviteCode(String code) async {
+    final trimmed = code.trim().toUpperCase();
+    if (trimmed.isEmpty) {
+      clearInviteValidation();
+      return false;
+    }
+
+    isValidatingInvite = true;
+    inviteError = null;
+    notifyListeners();
+
+    try {
+      final match = await _userRepo.findActiveCompanyByInviteCode(trimmed);
+
+      if (match == null) {
+        pendingInviteCompanyId = null;
+        pendingInviteCompanyName = null;
+        pendingInvitePlan = null;
+        inviteError =
+            'This invite code is invalid, expired, or already inactive. Ask your CEO for the current company code.';
+        return false;
+      }
+
+      final status = match.status.trim().toLowerCase();
+      if (status != 'active') {
+        pendingInviteCompanyId = null;
+        pendingInviteCompanyName = null;
+        pendingInvitePlan = null;
+        inviteError = status == 'pending'
+            ? 'This company is not approved yet. You can join after an administrator activates it.'
+            : 'This invite code is no longer active. Ask your CEO for a new code.';
+        return false;
+      }
+
+      final plan = PlanLimitService.planForKey(match.plan);
+      if (plan.maxFieldUsers != -1 &&
+          match.fieldUserCount >= plan.maxFieldUsers) {
+        pendingInviteCompanyId = null;
+        pendingInviteCompanyName = null;
+        pendingInvitePlan = null;
+        inviteError =
+            'This invite code has already been used by the maximum number of Field Users '
+            '(${plan.maxFieldUsers} on the ${plan.name} plan). Ask your CEO to upgrade or free a seat.';
+        return false;
+      }
+
+      if (FieldUserInviteCode.isExpired(match.inviteCodeGeneratedAt)) {
+        pendingInviteCompanyId = null;
+        pendingInviteCompanyName = null;
+        pendingInvitePlan = null;
+        inviteError = FieldUserInviteCode.expiredRegistrationMessage;
+        return false;
+      }
+
+      pendingInviteCompanyId = match.companyId;
+      pendingInviteCompanyName = match.companyName;
+      pendingInvitePlan = match.plan ?? 'free';
+      inviteError = null;
+      return true;
+    } on FirebaseException catch (e) {
+      pendingInviteCompanyId = null;
+      pendingInviteCompanyName = null;
+      pendingInvitePlan = null;
+      if (e.code == 'permission-denied') {
+        inviteError =
+            'Could not verify code. Firestore access denied — deploy the latest security rules.';
+      } else if (e.code == 'failed-precondition') {
+        inviteError =
+            'Could not verify code. Firestore index is building — try again in a minute.';
+      } else {
+        inviteError = 'Could not verify code. Check your connection.';
+      }
+      return false;
+    } catch (_) {
+      pendingInviteCompanyId = null;
+      pendingInviteCompanyName = null;
+      pendingInvitePlan = null;
+      inviteError = 'Could not verify code. Check your connection.';
+      return false;
+    } finally {
+      isValidatingInvite = false;
+      notifyListeners();
+    }
+  }
+
+  void clearInviteValidation() {
+    inviteError = null;
+    pendingInviteCompanyId = null;
+    pendingInviteCompanyName = null;
+    pendingInvitePlan = null;
+    notifyListeners();
+  }
+
+  Future<void> validateRegistrationEmail(String email) async {
+    final trimmed = email.trim();
+    if (trimmed.isEmpty) {
+      registrationEmailError = null;
+      notifyListeners();
+      return;
+    }
+    isCheckingEmail = true;
+    registrationEmailError = null;
+    notifyListeners();
+    try {
+      final taken = await _authService.emailAlreadyRegistered(trimmed);
+      registrationEmailError = taken
+          ? 'An account already exists with this email.'
+          : null;
+    } catch (_) {
+      registrationEmailError = null;
+    } finally {
+      isCheckingEmail = false;
+      notifyListeners();
+    }
+  }
+
+  void clearRegistrationEmailError() {
+    if (registrationEmailError == null && !isCheckingEmail) return;
+    registrationEmailError = null;
+    isCheckingEmail = false;
+    notifyListeners();
+  }
+
+  Future<void> registerFieldUser({
+    required String fullName,
+    required String email,
+    required String password,
+    required String phone,
+    required String inviteCode,
+    required String cnicNumber,
+    required String jobTitle,
+    required String assignedSite,
+  }) async {
+    _status = AuthStatus.loading;
+    _errorMessage = null;
+    isRegistered = false;
+    notifyListeners();
+
+    UserCredential? cred;
+    try {
+      // 1. Authenticate FIRST.
+      cred = await _authService.createUser(email.trim(), password);
+      final uid = cred.user!.uid;
+      
+      // Force refresh token to ensure Firestore rules recognize the new user session immediately
+      await cred.user?.getIdToken(true);
+
+      // Re-check the live company code so a code that expired after the
+      // last on-blur validation cannot still create an account.
+      final valid = await validateInviteCode(inviteCode);
+      if (!valid || pendingInviteCompanyId == null) {
+        throw AppException(
+          inviteError ?? 'Invalid invite code. Ask your CEO.',
+        );
+      }
+
+      final companyId = pendingInviteCompanyId!;
+
+      // 3. Check team size limit (Authenticated context)
+      try {
+        await PlanLimitService.ensureFieldUserCapacity(
+          _firestore,
+          companyId,
+          planKey: pendingInvitePlan,
+        );
+      } on AppException {
+        rethrow;
+      } catch (e) {
+        debugPrint('Ignoring capacity check error: $e');
+      }
+
+      final normalizedPhone = PakistanValidators.normalizePhone(phone);
+      final normalizedCnic = PakistanValidators.formatCnic(cnicNumber);
+
+      final userData = UserModel(
+        uid: uid,
+        email: email.trim(),
+        name: fullName.trim(),
+        role: 'field_user',
+        companyId: companyId,
+        phone: normalizedPhone,
+        city: '',
+        cnic: normalizedCnic,
+        jobTitle: jobTitle.trim(),
+        assignedSite: assignedSite.trim(),
+        status: 'active',
+        approved: true,
+        createdAt: DateTime.now(),
+      );
+
+      // Create user profile in Firestore
+      await _userRepo.createUserDoc(uid, userData);
+
+      await _userRepo.linkFieldUserToCompany(
+        companyId: companyId,
+        uid: uid,
+        fullName: fullName.trim(),
+        email: email.trim(),
+        phone: normalizedPhone,
+        cnicNumber: normalizedCnic,
+        jobTitle: jobTitle.trim(),
+        assignedSite: assignedSite.trim(),
+      );
+
+      _user = userData;
+      isRegistered = true;
+      _status = AuthStatus.authenticated;
+      _startUserSubscription(uid);
+    } on AppException catch (e) {
+      await cred?.user?.delete();
+      _status = AuthStatus.error;
+      _errorMessage = e.message;
+    } on FirebaseAuthException catch (e) {
+      _status = AuthStatus.error;
+      _errorMessage = _mapAuthError(e);
+    } catch (e) {
+      await cred?.user?.delete();
+      _status = AuthStatus.error;
+      _errorMessage = _mapAuthError(e);
+    } finally {
+      notifyListeners();
+    }
+  }
+
+  Future<void> updateFcmToken(String uid) async {
+    try {
+      final messaging = FirebaseMessaging.instance;
+      await messaging.requestPermission(alert: true, badge: true, sound: true);
+      final token = await messaging.getToken();
+      if (token != null) await _userRepo.updateFcmToken(uid, token);
+    } catch (e) {
+      debugPrint("Error updating FCM token: $e");
+    }
+  }
+
+  Future<void> clearFcmToken(String uid) async {
+    try {
+      await _userRepo.updateFcmToken(uid, null);
+    } catch (e) {
+      debugPrint('Error clearing FCM token: $e');
+    }
+  }
+
+  Future<String?> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    try {
+      await _authService.changePassword(
+        currentPassword: currentPassword,
+        newPassword: newPassword,
+      );
+      return null;
+    } catch (e) {
+      return _mapAuthError(e);
+    }
+  }
+
+  Future<String?> sendPasswordResetEmail(String email) async {
+    try {
+      await _authService.sendPasswordResetEmail(email);
+      return null;
+    } catch (e) {
+      return _mapAuthError(e);
+    }
+  }
+
+  Future<void> logout() async {
+    _status = AuthStatus.loading;
+    notifyListeners();
+    try {
+      _cancelUserSubscription();
+      await _userRepo.logout();
+      _user = null;
+      _status = AuthStatus.unauthenticated;
+      isRegistered = false;
+      pendingInviteCompanyId = null;
+      pendingInviteCompanyName = null;
+      pendingInvitePlan = null;
+      notifyListeners();
+    } catch (e) {
+      _status = AuthStatus.error;
+      _errorMessage = e.toString();
+      notifyListeners();
+    }
+  }
+
+  Future<void> signOut() => logout();
+
+  Future<void> deleteAccount() async {
+    try {
+      final uid = _user?.uid;
+      if (uid != null) {
+        await _authService.deleteAccount();
+        await logout();
+      }
+    } catch (e) {
+      _errorMessage = e.toString();
+      notifyListeners();
+    }
+  }
+
+  void clearError() {
+    _errorMessage = null;
+    notifyListeners();
+  }
+
+  String _mapAuthError(dynamic e) {
+    if (e is FirebaseAuthException) {
+      switch (e.code) {
+        case 'user-not-found':
+        case 'wrong-password':
+        case 'invalid-credential':
+          return 'Incorrect email or password.';
+        case 'invalid-email':
+          return 'Please enter a valid email address.';
+        case 'user-disabled':
+          return 'This account has been disabled.';
+        case 'email-already-in-use':
+          return 'An account already exists with this email.';
+        case 'weak-password':
+          return 'Password is too weak (minimum 8 characters).';
+        case 'requires-recent-login':
+          return 'Please sign out and sign in again, then retry changing your password.';
+        case 'too-many-requests':
+          return 'Too many attempts. Please try again later.';
+        default:
+          return e.message ?? 'Authentication error. Please try again.';
+      }
+    }
+    if (e is FirebaseException && e.plugin == 'cloud_firestore') {
+      if (e.code == 'permission-denied') {
+        return 'Firestore access denied. Please check your security rules or connectivity.';
+      }
+    }
+    final message = e.toString();
+    if (message.contains('INTERNAL ASSERTION FAILED') ||
+        message.contains('Unexpected state (ID:')) {
+      return 'Connection to the database was interrupted. Refresh the page and sign in again.';
+    }
+    if (message.contains('User model not found') ||
+        message.contains('User doc does not exist')) {
+      return 'Signed in, but no profile was found. Please register or contact your company admin.';
+    }
+    if (e is AppException) return e.message;
+    return message;
+  }
+
+  static String generateInviteCode() => InviteCodeGenerator.generate();
+
+  @override
+  void dispose() {
+    _cancelUserSubscription();
+    super.dispose();
+  }
+}

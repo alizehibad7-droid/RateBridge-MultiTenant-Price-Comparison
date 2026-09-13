@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "851726073630",
+    "project_id": "ratebridge-2cd72",
+    "storage_bucket": "ratebridge-2cd72.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:851726073630:android:ff992af285bb01ec41530f",
+        "android_client_info": {
+          "package_name": "com.example.construction_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC1RGSPu7OY4j0Ux1fXm_fRwQpYQ9vHvnI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
