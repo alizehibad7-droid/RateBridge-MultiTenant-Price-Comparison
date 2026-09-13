@@ -347,61 +347,64 @@ class _SupplierChatThreadViewState extends State<SupplierChatThreadView>
                 ),
               ],
       ),
-      body: Consumer<ChatViewModel>(
-        builder: (context, vm, _) {
-          if (vm.isLoadingMessages) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (vm.messages.isEmpty) {
-            return Center(
-              child: Text(
-                'No messages yet. Say hello!',
-                style: TextStyle(color: Colors.grey.shade400),
-              ),
-            );
-          }
-          if (!_isSelectionMode) {
-            WidgetsBinding.instance.addPostFrameCallback(
-              (_) => _scrollToBottom(),
-            );
-          }
-          return ListView.builder(
-            controller: _scrollController,
-            padding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 12,
+      body: Column(
+        children: [
+          Expanded(
+            child: Consumer<ChatViewModel>(
+              builder: (context, vm, _) {
+                if (vm.isLoadingMessages) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (vm.messages.isEmpty) {
+                  return Center(
+                    child: Text(
+                      'No messages yet. Say hello!',
+                      style: TextStyle(color: Colors.grey.shade400),
+                    ),
+                  );
+                }
+                if (!_isSelectionMode) {
+                  WidgetsBinding.instance.addPostFrameCallback(
+                    (_) => _scrollToBottom(),
+                  );
+                }
+                return ListView.builder(
+                  controller: _scrollController,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                  itemCount: vm.messages.length,
+                  itemBuilder: (context, index) {
+                    final msg = vm.messages[index];
+                    final isMe = msg.senderId == _supplierId;
+                    final isSelected = _selectedMessageIds.contains(msg.id);
+                    return _SupplierChatBubble(
+                      message: msg,
+                      isMe: isMe,
+                      isSelected: isSelected,
+                      isSelectionMode: _isSelectionMode,
+                      onTap: () {
+                        if (_isSelectionMode) {
+                          _toggleMessageSelection(msg.id);
+                        }
+                      },
+                      onLongPress: () {
+                        if (!_isSelectionMode && !msg.isDeletedForEveryone) {
+                          setState(() {
+                            _isSelectionMode = true;
+                            _selectedMessageIds.add(msg.id);
+                          });
+                        }
+                      },
+                    );
+                  },
+                );
+              },
             ),
-            itemCount: vm.messages.length,
-            itemBuilder: (context, index) {
-              final msg = vm.messages[index];
-              final isMe = msg.senderId == _supplierId;
-              final isSelected = _selectedMessageIds.contains(msg.id);
-              return _SupplierChatBubble(
-                message: msg,
-                isMe: isMe,
-                isSelected: isSelected,
-                isSelectionMode: _isSelectionMode,
-                onTap: () {
-                  if (_isSelectionMode) {
-                    _toggleMessageSelection(msg.id);
-                  }
-                },
-                onLongPress: () {
-                  if (!_isSelectionMode && !msg.isDeletedForEveryone) {
-                    setState(() {
-                      _isSelectionMode = true;
-                      _selectedMessageIds.add(msg.id);
-                    });
-                  }
-                },
-              );
-            },
-          );
-        },
-      ),
-      bottomNavigationBar: _isSelectionMode
-          ? null
-          : SafeArea(
+          ),
+          if (!_isSelectionMode)
+            SafeArea(
               top: false,
               child: Container(
                 padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
@@ -498,6 +501,8 @@ class _SupplierChatThreadViewState extends State<SupplierChatThreadView>
                 ),
               ),
             ),
+        ],
+      ),
     );
   }
 }

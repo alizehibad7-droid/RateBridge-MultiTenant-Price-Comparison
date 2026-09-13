@@ -583,6 +583,7 @@ class _HistorySegment extends StatelessWidget {
   }
 }
 
+
 class _SegmentChip extends StatelessWidget {
   final String label;
   final bool selected;
@@ -596,21 +597,30 @@ class _SegmentChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: selected ? FieldColors.surfaceWhite : Colors.transparent,
-      borderRadius: BorderRadius.circular(FieldRadius.button - 2),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(FieldRadius.button - 2),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          child: Text(
-            label,
-            textAlign: TextAlign.center,
-            style: AppTextStyles.caption.copyWith(
-              fontWeight: FontWeight.w700,
-              color: selected ? FieldColors.primaryNavy : FieldColors.textMuted,
-            ),
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(
+          color: selected ? Colors.white : Colors.transparent,
+          borderRadius: BorderRadius.circular(FieldRadius.button - 2),
+          boxShadow: selected
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
+        ),
+        child: Text(
+          label,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+            color: selected ? FieldColors.primaryNavy : FieldColors.textMuted,
           ),
         ),
       ),
@@ -627,95 +637,108 @@ class _OrderCommissionCard extends StatelessWidget {
 
   const _OrderCommissionCard({
     required this.transaction,
-    this.isSelected = false,
-    this.isSelectionMode = false,
+    required this.isSelected,
+    required this.isSelectionMode,
     required this.onTap,
     required this.onLongPress,
   });
 
-  String get _shortId {
-    final id = transaction.orderId;
-    if (id.isEmpty) return '—';
-    return id.length <= 6 ? id.toUpperCase() : id.substring(id.length - 6).toUpperCase();
-  }
-
   @override
   Widget build(BuildContext context) {
-    final settled = transaction.isSettled;
-    final status = _chipStyle(
-      settled,
-      settledLabel: 'Settled',
-      pendingLabel: 'Unsettled',
-    );
+    final status = transaction.status.toLowerCase();
+    final isSettled = status == 'settled' || status == 'paid';
 
-    return InkWell(
-      onTap: onTap,
-      onLongPress: onLongPress,
-      borderRadius: BorderRadius.circular(FieldRadius.card),
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: SupplierTheme.cardDecoration(
-          borderColor: isSelected ? FieldColors.accentAmber : null,
-        ).copyWith(
-          color: isSelected ? FieldColors.accentAmber.withValues(alpha: 0.05) : Colors.white,
-        ),
-        child: Row(
-          children: [
-            if (isSelectionMode) ...[
-              Checkbox(
-                value: isSelected,
-                onChanged: (_) => onTap(),
-                activeColor: FieldColors.accentAmber,
-              ),
-              const SizedBox(width: 8),
-            ],
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: FieldColors.primaryNavy.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(AppRadius.sm),
-              ),
-              child: const Icon(
-                Icons.receipt_long_outlined,
-                color: FieldColors.primaryNavy,
-                size: 22,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
+    return Container(
+      decoration: SupplierTheme.cardDecoration(
+        borderColor: isSelected ? FieldColors.accentAmber : null,
+      ),
+      child: InkWell(
+        onTap: onTap,
+        onLongPress: onLongPress,
+        borderRadius: BorderRadius.circular(FieldRadius.card),
+        child: Padding(
+          padding: const EdgeInsets.all(FieldSpacing.md),
+          child: Column(
+            children: [
+              Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Order #$_shortId',
-                    style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w700),
+                  if (isSelectionMode) ...[
+                    Checkbox(
+                      value: isSelected,
+                      onChanged: (_) => onTap(),
+                      activeColor: FieldColors.accentAmber,
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: FieldColors.primaryNavy.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.inventory_2_outlined,
+                      size: 20,
+                      color: FieldColors.primaryNavy,
+                    ),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    DateFormat('MMM d, yyyy').format(transaction.createdAt),
-                    style: AppTextStyles.caption,
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Order #${transaction.orderId.substring(transaction.orderId.length > 6 ? transaction.orderId.length - 6 : 0).toUpperCase()}',
+                          style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w700),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          DateFormat('MMM dd, yyyy').format(transaction.createdAt),
+                          style: AppTextStyles.caption,
+                        ),
+                      ],
+                    ),
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        '- ${CurrencyFormatter.formatPKR(transaction.commissionAmount)}',
+                        style: AppTextStyles.body.copyWith(
+                          color: FieldColors.statusDanger,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      _StatusDot(
+                        label: transaction.status.toUpperCase(),
+                        color: isSettled ? FieldColors.statusSuccess : FieldColors.statusWarning,
+                      ),
+                    ],
                   ),
                 ],
               ),
-            ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  CurrencyFormatter.formatPKR(transaction.commissionAmount),
-                  style: AppTextStyles.body.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: settled
-                        ? FieldColors.statusSuccess
-                        : FieldColors.statusDanger,
+              const Divider(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Net Payout',
+                    style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.w600),
                   ),
-                ),
-                const SizedBox(height: 4),
-                _StatusChip(bg: status.bg, fg: status.fg, label: status.label),
-              ],
-            ),
-          ],
+                  Text(
+                    CurrencyFormatter.formatPKR(transaction.supplierEarning),
+                    style: AppTextStyles.body.copyWith(
+                      color: FieldColors.statusSuccess,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -732,30 +755,28 @@ class _PaymentProofCard extends StatelessWidget {
 
   const _PaymentProofCard({
     required this.payment,
-    this.onOpenImage,
-    this.isSelected = false,
-    this.isSelectionMode = false,
+    required this.onOpenImage,
+    required this.isSelected,
+    required this.isSelectionMode,
     required this.onTap,
     required this.onLongPress,
   });
 
   @override
   Widget build(BuildContext context) {
-    final status = _paymentStatusStyle(payment.status);
+    final status = payment.status.toLowerCase();
+    final isConfirmed = status == 'confirmed' || status == 'approved' || status == 'settled';
 
-    return Material(
-      color: isSelected ? FieldColors.accentAmber.withValues(alpha: 0.05) : FieldColors.surfaceWhite,
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(FieldRadius.card),
-        side: BorderSide(color: isSelected ? FieldColors.accentAmber : FieldColors.borderSubtle, width: isSelected ? 1.5 : 1),
+    return Container(
+      decoration: SupplierTheme.cardDecoration(
+        borderColor: isSelected ? FieldColors.accentAmber : null,
       ),
-      clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
         onLongPress: onLongPress,
+        borderRadius: BorderRadius.circular(FieldRadius.card),
         child: Padding(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(FieldSpacing.md),
           child: Row(
             children: [
               if (isSelectionMode) ...[
@@ -766,7 +787,28 @@ class _PaymentProofCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
               ],
-              _ProofThumbnail(imageUrl: payment.screenshotUrl),
+              GestureDetector(
+                onTap: onOpenImage,
+                child: Container(
+                  width: 50,
+                  height: 50,
+                  decoration: BoxDecoration(
+                    color: FieldColors.screenBackground,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: FieldColors.borderSubtle),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: payment.screenshotUrl.isEmpty
+                      ? const Icon(Icons.image_not_supported_outlined, size: 20, color: FieldColors.textMuted)
+                      : AppNetworkImage(
+                          url: payment.screenshotUrl,
+                          fallback: const Icon(Icons.image_not_supported_outlined, size: 20, color: FieldColors.textMuted),
+                          fit: BoxFit.cover,
+                          width: 50,
+                          height: 50,
+                        ),
+                ),
+              ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -774,35 +816,25 @@ class _PaymentProofCard extends StatelessWidget {
                   children: [
                     Text(
                       CurrencyFormatter.formatPKR(payment.amount),
-                      style: AppTextStyles.body.copyWith(
-                        fontWeight: FontWeight.w700,
-                        color: FieldColors.primaryNavy,
-                      ),
+                      style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w700),
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      [
-                        if (payment.method.trim().isNotEmpty) payment.method,
-                        DateFormat('MMM d, yyyy').format(payment.createdAt),
-                      ].join(' · '),
+                      'via ${payment.method}',
                       style: AppTextStyles.caption,
                     ),
-                    const SizedBox(height: 6),
-                    _StatusChip(bg: status.bg, fg: status.fg, label: status.label),
+                    const SizedBox(height: 2),
+                    Text(
+                      DateFormat('MMM dd, yyyy').format(payment.createdAt),
+                      style: AppTextStyles.caption.copyWith(fontSize: 10),
+                    ),
                   ],
                 ),
               ),
-              if (!isSelectionMode)
-                GestureDetector(
-                  onTap: onOpenImage,
-                  child: Icon(
-                    onOpenImage == null
-                        ? Icons.image_not_supported_outlined
-                        : Icons.zoom_in_outlined,
-                    size: 18,
-                    color: FieldColors.textMuted,
-                  ),
-                ),
+              _StatusDot(
+                label: payment.status.toUpperCase(),
+                color: isConfirmed ? FieldColors.statusSuccess : FieldColors.statusWarning,
+              ),
             ],
           ),
         ),
@@ -811,93 +843,33 @@ class _PaymentProofCard extends StatelessWidget {
   }
 }
 
-class _ProofThumbnail extends StatelessWidget {
-  final String imageUrl;
-
-  const _ProofThumbnail({required this.imageUrl});
-
-  @override
-  Widget build(BuildContext context) {
-    final url = imageUrl.trim();
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(AppRadius.sm),
-      child: SizedBox(
-        width: 56,
-        height: 56,
-        child: url.isEmpty
-            ? const _ImageFallback(icon: Icons.image_not_supported_outlined)
-            : AppNetworkImage(
-                url: url,
-                fit: BoxFit.cover,
-                width: 56,
-                height: 56,
-                debugLabel: 'proof-thumb',
-                loading: const _ImageFallback(
-                  icon: Icons.image_outlined,
-                  loading: true,
-                ),
-                fallback: const _ImageFallback(
-                  icon: Icons.broken_image_outlined,
-                ),
-              ),
-      ),
-    );
-  }
-}
-
-class _ImageFallback extends StatelessWidget {
-  final IconData icon;
-  final bool loading;
-
-  const _ImageFallback({
-    required this.icon,
-    this.loading = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return ColoredBox(
-      color: FieldColors.primaryNavy.withValues(alpha: 0.06),
-      child: Center(
-        child: loading
-            ? const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            : Icon(icon, size: 22, color: FieldColors.textMuted),
-      ),
-    );
-  }
-}
-
-class _StatusChip extends StatelessWidget {
-  final Color bg;
-  final Color fg;
+class _StatusDot extends StatelessWidget {
   final String label;
+  final Color color;
 
-  const _StatusChip({
-    required this.bg,
-    required this.fg,
-    required this.label,
-  });
+  const _StatusDot({required this.label, required this.color});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(AppRadius.pill),
-      ),
-      child: Text(
-        label,
-        style: AppTextStyles.caption.copyWith(
-          color: fg,
-          fontWeight: FontWeight.w700,
-          fontSize: 11,
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 6,
+          height: 6,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
-      ),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            color: color,
+            letterSpacing: 0.5,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -912,80 +884,21 @@ class _FullScreenProofView extends StatelessWidget {
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
-        automaticallyImplyLeading: false,
-        leading: AppNavigation.leading(context, color: Colors.white),
         backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
         iconTheme: const IconThemeData(color: Colors.white),
-        title: const Text('Payment proof'),
+        title: const Text('Payment Proof', style: TextStyle(color: Colors.white)),
       ),
       body: Center(
         child: InteractiveViewer(
           child: AppNetworkImage(
             url: imageUrl,
+            fallback: const Icon(Icons.broken_image_outlined, size: 48, color: Colors.white),
+            width: double.infinity,
+            height: double.infinity,
             fit: BoxFit.contain,
-            debugLabel: 'proof-full',
-            loading: const CircularProgressIndicator(
-              color: FieldColors.accentAmber,
-            ),
-            fallback: const Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.broken_image_outlined, color: Colors.white54, size: 48),
-                SizedBox(height: 12),
-                Text(
-                  'Could not load this image',
-                  style: TextStyle(color: Colors.white70),
-                ),
-              ],
-            ),
           ),
         ),
       ),
     );
   }
-}
-
-({Color bg, Color fg, String label}) _chipStyle(
-  bool positive, {
-  required String settledLabel,
-  required String pendingLabel,
-}) {
-  if (positive) {
-    return (
-      bg: FieldColors.statusSuccess.withValues(alpha: 0.12),
-      fg: FieldColors.statusSuccess,
-      label: settledLabel,
-    );
-  }
-  return (
-    bg: FieldColors.accentAmberSoft,
-    fg: FieldColors.statusWarning,
-    label: pendingLabel,
-  );
-}
-
-({Color bg, Color fg, String label}) _paymentStatusStyle(String status) {
-  final value = status.toLowerCase();
-  if (value.contains('reject')) {
-    return (
-      bg: FieldColors.statusDanger.withValues(alpha: 0.12),
-      fg: FieldColors.statusDanger,
-      label: 'Rejected',
-    );
-  }
-  if (value.contains('settle') ||
-      value.contains('confirm') ||
-      value.contains('approv')) {
-    return (
-      bg: FieldColors.statusSuccess.withValues(alpha: 0.12),
-      fg: FieldColors.statusSuccess,
-      label: 'Settled',
-    );
-  }
-  return (
-    bg: FieldColors.accentAmberSoft,
-    fg: FieldColors.statusWarning,
-    label: 'Pending review',
-  );
 }

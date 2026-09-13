@@ -108,47 +108,50 @@ class _SupplierMaterialsViewState extends State<SupplierMaterialsView> {
 
   @override
   Widget build(BuildContext context) {
-    return RootTabPopScope(
-      isHome: false,
-      homeRoute: RouteNames.supplierDashboard,
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        context.go(RouteNames.supplierDashboard);
+      },
       child: Scaffold(
-      backgroundColor: FieldColors.screenBackground,
-      appBar: const SupplierAppBar(title: 'My Materials'),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => context.push(RouteNames.supplierAddMaterial),
-        child: const Icon(Icons.add),
-      ),
-      bottomNavigationBar: const SupplierNavBar(currentIndex: 1),
-      body: Consumer<SupplierViewModel>(
-        builder: (context, vm, child) {
-          if (vm.isLoading && vm.materials.isEmpty) {
-            return const SupplierMaterialListSkeleton(itemCount: 4);
-          }
+        backgroundColor: FieldColors.screenBackground,
+        appBar: const SupplierAppBar(title: 'My Materials'),
+        floatingActionButton: FloatingActionButton(
+          onPressed: () => context.push(RouteNames.supplierAddMaterial),
+          child: const Icon(Icons.add),
+        ),
+        bottomNavigationBar: const SupplierNavBar(currentIndex: 1),
+        body: Consumer<SupplierViewModel>(
+          builder: (context, vm, child) {
+            if (vm.isLoading && vm.materials.isEmpty) {
+              return const SupplierMaterialListSkeleton(itemCount: 4);
+            }
 
-          if (vm.materials.isEmpty) {
-            return SupplierEmptyState(
-              icon: Icons.inventory_2_outlined,
-              title: 'No materials yet',
-              subtitle: 'Tap + to add your first material listing',
-              action: FilledButton.icon(
-                onPressed: () => context.push(RouteNames.supplierAddMaterial),
-                icon: const Icon(Icons.add, size: 18),
-                label: const Text('Add Material'),
-              ),
+            if (vm.materials.isEmpty) {
+              return SupplierEmptyState(
+                icon: Icons.inventory_2_outlined,
+                title: 'No materials yet',
+                subtitle: 'Tap + to add your first material listing',
+                action: FilledButton.icon(
+                  onPressed: () => context.push(RouteNames.supplierAddMaterial),
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('Add Material'),
+                ),
+              );
+            }
+
+            return ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: vm.materials.length,
+              itemBuilder: (context, index) {
+                final material = vm.materials[index];
+                return _buildMaterialCard(material);
+              },
             );
-          }
-
-          return ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: vm.materials.length,
-            itemBuilder: (context, index) {
-              final material = vm.materials[index];
-              return _buildMaterialCard(material);
-            },
-          );
-        },
+          },
+        ),
       ),
-    ),
     );
   }
 

@@ -1,19 +1,15 @@
 import 'dart:async';
-import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mocktail/mocktail.dart';
-import 'package:ratebridge/constants/app_constants.dart';
-import 'package:ratebridge/constants/firestore_paths.dart';
 import 'package:ratebridge/models/company_model.dart';
 import 'package:ratebridge/models/material_model.dart';
 import 'package:ratebridge/models/order_model.dart';
 import 'package:ratebridge/models/partnership_request_model.dart';
-import 'package:ratebridge/models/rating_model.dart';
-import 'package:ratebridge/models/transaction_model.dart';
 import 'package:ratebridge/models/user_model.dart';
 import 'package:ratebridge/utils/app_exception.dart';
 import 'package:ratebridge/viewmodels/auth_viewmodel.dart';
@@ -381,7 +377,7 @@ void main() {
     test('pastRequestStatusLabel maps removed and rejected states', () {
       expect(
         viewModel.pastRequestStatusLabel(_request(status: 'removed')),
-        'Removed',
+        'Partnership Ended',
       );
       expect(
         viewModel.pastRequestStatusLabel(
@@ -393,7 +389,7 @@ void main() {
         viewModel.pastRequestStatusLabel(
           _request(status: 'rejected', initiatedBy: 'ceo'),
         ),
-        'You Declined',
+        'Declined by You',
       );
     });
 

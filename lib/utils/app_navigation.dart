@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 /// Central back-navigation for the whole app.
@@ -124,11 +125,15 @@ class RootTabPopScope extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: isHome || AppNavigation.canPop(context),
+      canPop: AppNavigation.canPop(context),
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
-        // Use go() to switch back to home without adding to stack
-        context.go(homeRoute);
+        if (isHome) {
+          SystemNavigator.pop();
+        } else {
+          // Use go() to switch back to home without adding to stack
+          context.go(homeRoute);
+        }
       },
       child: child,
     );

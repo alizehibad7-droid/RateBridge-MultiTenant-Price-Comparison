@@ -264,6 +264,23 @@ class SupplierViewModel extends ChangeNotifier {
     _companiesLoadFailed = false;
     _selectedCompanyId = null;
     _companies = [];
+    _materials = [];
+    _orders = [];
+    _allCommissions = [];
+    _transactions = [];
+    _confirmedCommissionPayments = [];
+    _pendingCommissionPayments = [];
+    _invitations = [];
+    _allPartnershipRequests = [];
+    _incomingPartnershipRequests = [];
+    _outgoingPartnershipRequests = [];
+    _latestPartnershipByCompanyId.clear();
+    _activePartnerCompanyIds.clear();
+    _profile = null;
+    _status = 'pending';
+    _rejectionReason = null;
+    _partnershipListsReady = false;
+    _partnershipHubDataLoaded = false;
 
     if (_supplierUid != null) {
       _profile = auth.user;
@@ -470,26 +487,12 @@ class SupplierViewModel extends ChangeNotifier {
     }
   }
 
-  String directoryActionFor(String companyId) {
-    if (_activePartnerCompanyIds.contains(companyId)) return 'Partners ✓';
-    final request = _latestPartnershipByCompanyId[companyId];
-    if (request?.status == 'pending') return request!.isCeoInitiated ? 'Respond' : 'Pending';
-    if ((request?.status == 'rejected' || request?.status == 'removed') && canReapplyToCompany(companyId)) return 'Request Again';
-    return 'Send Request';
-  }
-
   bool canReapplyToCompany(String companyId) {
     final request = _latestPartnershipByCompanyId[companyId];
     if (request == null) return true;
     if (request.status != 'rejected' && request.status != 'removed') return false;
     final closedAt = request.respondedAt ?? request.createdAt;
     return DateTime.now().difference(closedAt).inDays >= 7;
-  }
-
-  String pastRequestStatusLabel(PartnershipRequestModel request) {
-    if (request.status == 'removed') return 'Removed';
-    if (request.status == 'rejected') return request.isSupplierInitiated ? 'Declined by Them' : 'You Declined';
-    return request.status;
   }
 
   PartnerCompanyStats partnerStatsFor(String companyId) {
@@ -547,12 +550,6 @@ class SupplierViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  List<String> interestCategoriesFor(CompanyModel company) {
-    final categories = <String>{};
-    if (company.companyType != null && company.companyType!.isNotEmpty) categories.add(company.companyType!);
-    return categories.take(3).toList();
-  }
-
   void _onDashboardStreamError(String section, Object error) {
     _error = 'Some data failed to load ($section).';
     if (section == 'materials') _materialsInitialized = true;
@@ -591,7 +588,15 @@ class SupplierViewModel extends ChangeNotifier {
             _companies = list;
             _companiesLoaded = true;
             _companiesLoadFailed = false;
-            if (_selectedCompanyId == null && _companies.isNotEmpty) switchCompany(_companies.first.id);
+            
+            if (list.isNotEmpty) {
+              if (_selectedCompanyId == null || !list.any((c) => c.id == _selectedCompanyId)) {
+                _selectedCompanyId = list.first.id;
+                loadDashboard();
+              }
+            } else {
+              _selectedCompanyId = null;
+            }
             notifyListeners();
           }, onError: (e) {
             _companiesLoaded = true; _companiesLoadFailed = true; _error = e.toString();
@@ -787,7 +792,9 @@ class SupplierViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> changeMonth(String month) => loadEarnings(month);
+  Future<void> changeMonth(String month) async {
+    await loadEarnings(month);
+  }
 
   Future<void> loadProfile() async {
     if (_supplierUid == null) return;
@@ -799,12 +806,6 @@ class SupplierViewModel extends ChangeNotifier {
     if (_supplierUid == null) return;
     await _userRepo.updateUserDoc(_supplierUid!, fields);
     _profile = _userRepo.cachedUser ?? _profile;
-    notifyListeners();
-  }
-
-  void clearAppealState() {
-    _appealSubmitted = false;
-    _error = null;
     notifyListeners();
   }
 
@@ -839,7 +840,7 @@ class SupplierViewModel extends ChangeNotifier {
       if (webBytes != null || file != null) {
         developer.log('[Appeal] Step 2: Uploading image to Cloudinary...');
         if (webBytes != null) {
-          imageUrl = await CloudinaryService.uploadImageBytes(
+          imageUrl = await _uploadImageBytes(
             bytes: webBytes, 
             folder: 'ratebridge/appeals',
             filename: 'supplier_appeal_${_supplierUid}_${DateTime.now().millisecondsSinceEpoch}.jpg'
@@ -887,6 +888,12 @@ class SupplierViewModel extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     }
+  }
+
+  void clearAppealState() {
+    _appealSubmitted = false;
+    _error = null;
+    notifyListeners();
   }
 
   Future<void> loadCompanyDirectory() async {
@@ -1183,10 +1190,47 @@ class SupplierViewModel extends ChangeNotifier {
     }
   }
 
+  String pastRequestStatusLabel(PartnershipRequestModel request) {
+    if (request.status == 'removed') return 'Partnership Ended';
+    if (request.status == 'rejected') {
+      return request.isSupplierInitiated ? 'Declined by Them' : 'Declined by You';
+    }
+    return request.status.toUpperCase();
+  }
+
+  String directoryActionFor(String companyId) {
+    if (_activePartnerCompanyIds.contains(companyId)) return 'Partners ✓';
+    final request = _latestPartnershipByCompanyId[companyId];
+    if (request == null) return 'Send Request';
+
+    if (request.status == 'pending') {
+      return request.isCeoInitiated ? 'Respond' : 'Pending';
+    }
+
+    if (request.status == 'rejected' || request.status == 'removed') {
+      return canReapplyToCompany(companyId) ? 'Request Again' : 'Pending';
+    }
+
+    return 'Send Request';
+  }
+
+  List<String> interestCategoriesFor(CompanyModel company) {
+    final type = company.companyType;
+    if (type == null || type.isEmpty) return [];
+    return [type];
+  }
+
   void _cancelSubscriptions() {
-    _statusSubscription?.cancel(); _partnershipRequestsSub?.cancel(); _linkedCompaniesSub?.cancel();
-    _companiesSubscription?.cancel(); _materialsSubscription?.cancel(); _ordersSubscription?.cancel();
-    _commissionsSub?.cancel(); _paymentsSub?.cancel(); _invitationsSubscription?.cancel();
-    _ratingsSubscription?.cancel(); _supplierRestrictionSub?.cancel();
+    _statusSubscription?.cancel(); _statusSubscription = null;
+    _partnershipRequestsSub?.cancel(); _partnershipRequestsSub = null;
+    _linkedCompaniesSub?.cancel(); _linkedCompaniesSub = null;
+    _companiesSubscription?.cancel(); _companiesSubscription = null;
+    _materialsSubscription?.cancel(); _materialsSubscription = null;
+    _ordersSubscription?.cancel(); _ordersSubscription = null;
+    _commissionsSub?.cancel(); _commissionsSub = null;
+    _paymentsSub?.cancel(); _paymentsSub = null;
+    _invitationsSubscription?.cancel(); _invitationsSubscription = null;
+    _ratingsSubscription?.cancel(); _ratingsSubscription = null;
+    _supplierRestrictionSub?.cancel(); _supplierRestrictionSub = null;
   }
 }

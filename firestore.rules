@@ -71,12 +71,12 @@ service cloud.firestore {
     }
 
     match /companies/{companyId} {
-      allow read: if signedIn()
-        || resource.data.status == 'active';
+      allow read: if true;
       allow create: if signedIn()
         && request.resource.data.ceoUid == request.auth.uid;
       allow update: if isAdmin()
-        || (signedIn() && resource.data.ceoUid == request.auth.uid);
+        || (signedIn() && resource.data.ceoUid == request.auth.uid)
+        || (signedIn() && request.resource.data.ceoUid == resource.data.ceoUid && request.resource.data.status == resource.data.status && request.resource.data.plan == resource.data.plan);
       allow delete: if isAdmin();
     }
 

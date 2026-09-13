@@ -280,12 +280,16 @@ class _SupplierProfileViewState extends State<SupplierProfileView> {
     final imageUrl = profile?.profileImageUrl;
 
     if (!_profileLoaded && viewModel.isLoading) {
-      return Scaffold(
-        backgroundColor: FieldColors.screenBackground,
-        extendBodyBehindAppBar: true,
-        appBar: _buildAppBar(profile, viewModel),
-        bottomNavigationBar: const SupplierNavBar(currentIndex: 5),
-        body: const Center(child: CircularProgressIndicator()),
+      return RootTabPopScope(
+        isHome: false,
+        homeRoute: RouteNames.supplierDashboard,
+        child: Scaffold(
+          backgroundColor: FieldColors.screenBackground,
+          extendBodyBehindAppBar: true,
+          appBar: _buildAppBar(profile, viewModel),
+          bottomNavigationBar: const SupplierNavBar(currentIndex: 5),
+          body: const Center(child: CircularProgressIndicator()),
+        ),
       );
     }
 
@@ -296,100 +300,104 @@ class _SupplierProfileViewState extends State<SupplierProfileView> {
     final materialsCount = viewModel.totalMaterialsCount;
     final ordersDone = _completedOrdersCount(viewModel);
 
-    return Scaffold(
-      backgroundColor: FieldColors.screenBackground,
-      extendBodyBehindAppBar: true,
-      appBar: _buildAppBar(profile, viewModel),
-      bottomNavigationBar: const SupplierNavBar(currentIndex: 5),
-      body: SingleChildScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _ProfileHeader(
-              imageUrl: imageUrl,
-              initials: _initials(profile?.name),
-              businessName: profile?.name ?? 'Business Name',
-              city: profile?.city ?? '—',
-              joinedYear: joinedYear,
-              isUploadingImage: _isUploadingImage,
-              onPickImage: _pickProfileImage,
-            ),
-            const SizedBox(height: 16),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: _SellerStatsRow(
-                materialsCount: materialsCount,
-                avgRating: avgRating,
-                ordersDone: ordersDone,
-                onMaterialsTap: () => context.push(RouteNames.supplierMaterials),
-                onOrdersTap: () => context.push(RouteNames.supplierOrders),
+    return RootTabPopScope(
+      isHome: false,
+      homeRoute: RouteNames.supplierDashboard,
+      child: Scaffold(
+        backgroundColor: FieldColors.screenBackground,
+        extendBodyBehindAppBar: true,
+        appBar: _buildAppBar(profile, viewModel),
+        bottomNavigationBar: const SupplierNavBar(currentIndex: 5),
+        body: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _ProfileHeader(
+                imageUrl: imageUrl,
+                initials: _initials(profile?.name),
+                businessName: profile?.name ?? 'Business Name',
+                city: profile?.city ?? '—',
+                joinedYear: joinedYear,
+                isUploadingImage: _isUploadingImage,
+                onPickImage: _pickProfileImage,
               ),
-            ),
-            const SizedBox(height: 16),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Form(
-                key: _formKey,
-                child: _BusinessInfoCard(
-                  isEditing: _isEditing,
-                  onToggleEdit: () => _toggleEditMode(profile),
-                  onCancel: () => _cancelEdit(profile),
-                  onSave: viewModel.isLoading
-                      ? null
-                      : () => _saveProfile(viewModel, profile),
-                  isSaving: viewModel.isLoading,
-                  nameController: _nameController,
-                  phoneController: _phoneController,
-                  cityController: _cityController,
-                  businessType: _businessType,
-                  onBusinessTypeChanged: (v) {
-                    if (v != null) setState(() => _businessType = v);
-                  },
-                  viewName: _nameController.text.isNotEmpty
+              const SizedBox(height: 16),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: _SellerStatsRow(
+                  materialsCount: materialsCount,
+                  avgRating: avgRating,
+                  ordersDone: ordersDone,
+                  onMaterialsTap: () => context.push(RouteNames.supplierMaterials),
+                  onOrdersTap: () => context.push(RouteNames.supplierOrders),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Form(
+                  key: _formKey,
+                  child: _BusinessInfoCard(
+                    isEditing: _isEditing,
+                    onToggleEdit: () => _toggleEditMode(profile),
+                    onCancel: () => _cancelEdit(profile),
+                    onSave: viewModel.isLoading
+                        ? null
+                        : () => _saveProfile(viewModel, profile),
+                    isSaving: viewModel.isLoading,
+                    nameController: _nameController,
+                    phoneController: _phoneController,
+                    cityController: _cityController,
+                    businessType: _businessType,
+                    onBusinessTypeChanged: (v) {
+                      if (v != null) setState(() => _businessType = v);
+                    },
+                    viewName: _nameController.text.isNotEmpty
                       ? _nameController.text
                       : (profile?.name ?? '—'),
-                  viewCity: _cityController.text.isNotEmpty
+                    viewCity: _cityController.text.isNotEmpty
                       ? _cityController.text
                       : (profile?.city ?? '—'),
-                  viewPhone: _phoneController.text.isNotEmpty
+                    viewPhone: _phoneController.text.isNotEmpty
                       ? _phoneController.text
                       : (profile?.phone ?? '—'),
-                  viewCnic: _maskedCnic(profile?.cnic ?? _cnicController.text),
-                  viewBusinessType: _businessType,
+                    viewCnic: _maskedCnic(profile?.cnic ?? _cnicController.text),
+                    viewBusinessType: _businessType,
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 16),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: _AccountSettingsCard(
-                email: profile?.email ?? authVM.user?.email ?? '',
-                onNotifications: _openNotificationPrefs,
-                onChangePassword: () => _openChangePassword(
-                  profile?.email ?? authVM.user?.email ?? '',
+              const SizedBox(height: 16),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: _AccountSettingsCard(
+                  email: profile?.email ?? authVM.user?.email ?? '',
+                  onNotifications: _openNotificationPrefs,
+                  onChangePassword: () => _openChangePassword(
+                    profile?.email ?? authVM.user?.email ?? '',
+                  ),
+                  onTerms: _showTermsDialog,
+                  onRatings: () => context.push(RouteNames.supplierRatings),
+                  onDisputes: () => context.push(RouteNames.supplierMyDisputes),
+                  onEarnings: () => context.push(RouteNames.supplierEarnings),
+                  onPartnerships: () =>
+                      context.push(RouteNames.supplierMyCompanies),
+                  onFindCompanies: () =>
+                      context.push(RouteNames.supplierCompanyDirectory),
                 ),
-                onTerms: _showTermsDialog,
-                onRatings: () => context.push(RouteNames.supplierRatings),
-                onDisputes: () => context.push(RouteNames.supplierMyDisputes),
-                onEarnings: () => context.push(RouteNames.supplierEarnings),
-                onPartnerships: () =>
-                    context.push(RouteNames.supplierMyCompanies),
-                onFindCompanies: () =>
-                    context.push(RouteNames.supplierCompanyDirectory),
               ),
-            ),
-            const SizedBox(height: 16),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: _DangerZoneCard(
-                onSignOut: () => _confirmSignOut(authVM),
+              const SizedBox(height: 16),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: _DangerZoneCard(
+                  onSignOut: () => _confirmSignOut(authVM),
+                ),
               ),
-            ),
-            const SizedBox(height: 24),
-            const _AppVersionFooter(),
-            const SizedBox(height: 24),
-          ],
+              const SizedBox(height: 24),
+              const _AppVersionFooter(),
+              const SizedBox(height: 24),
+            ],
+          ),
         ),
       ),
     );

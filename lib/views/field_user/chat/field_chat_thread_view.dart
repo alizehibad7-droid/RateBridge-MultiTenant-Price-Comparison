@@ -344,51 +344,54 @@ class _FieldChatThreadViewState extends State<FieldChatThreadView>
                   ),
                 ],
         ),
-        body: vm.errorMessage != null && vm.messages.isEmpty
-            ? FieldErrorState(
-                title: 'Could not load messages',
-                message: vm.errorMessage!,
-                onRetry: _openThread,
-              )
-            : vm.isLoadingMessages
-                ? const FieldChatThreadSkeleton()
-                : vm.messages.isEmpty
-                    ? const _ThreadEmpty()
-                    : ListView.builder(
-                        controller: _scrollController,
-                        padding: const EdgeInsets.fromLTRB(
-                          FieldSpacing.lg,
-                          FieldSpacing.md,
-                          FieldSpacing.lg,
-                          FieldSpacing.md,
-                        ),
-                        itemCount: groups.length,
-                        itemBuilder: (context, index) {
-                          return _MessageGroupBubble(
-                            group: groups[index],
-                            currentUid: currentUid,
-                            isSelectionMode: _isSelectionMode,
-                            selectedIds: _selectedMessageIds,
-                            onMessageTap: (id) {
-                              if (_isSelectionMode) {
-                                _toggleMessageSelection(id);
-                              }
-                            },
-                            onMessageLongPress: (id) {
-                              final msg = vm.messages.firstWhere((m) => m.id == id);
-                              if (!_isSelectionMode && !msg.isDeletedForEveryone) {
-                                setState(() {
-                                  _isSelectionMode = true;
-                                  _selectedMessageIds.add(id);
-                                });
-                              }
-                            },
-                          );
-                        },
-                      ),
-        bottomNavigationBar: _isSelectionMode
-            ? null
-            : SafeArea(
+        body: Column(
+          children: [
+            Expanded(
+              child: vm.errorMessage != null && vm.messages.isEmpty
+                  ? FieldErrorState(
+                      title: 'Could not load messages',
+                      message: vm.errorMessage!,
+                      onRetry: _openThread,
+                    )
+                  : vm.isLoadingMessages
+                      ? const FieldChatThreadSkeleton()
+                      : vm.messages.isEmpty
+                          ? const _ThreadEmpty()
+                          : ListView.builder(
+                              controller: _scrollController,
+                              padding: const EdgeInsets.fromLTRB(
+                                FieldSpacing.lg,
+                                FieldSpacing.md,
+                                FieldSpacing.lg,
+                                FieldSpacing.md,
+                              ),
+                              itemCount: groups.length,
+                              itemBuilder: (context, index) {
+                                return _MessageGroupBubble(
+                                  group: groups[index],
+                                  currentUid: currentUid,
+                                  isSelectionMode: _isSelectionMode,
+                                  selectedIds: _selectedMessageIds,
+                                  onMessageTap: (id) {
+                                    if (_isSelectionMode) {
+                                      _toggleMessageSelection(id);
+                                    }
+                                  },
+                                  onMessageLongPress: (id) {
+                                    final msg = vm.messages.firstWhere((m) => m.id == id);
+                                    if (!_isSelectionMode && !msg.isDeletedForEveryone) {
+                                      setState(() {
+                                        _isSelectionMode = true;
+                                        _selectedMessageIds.add(id);
+                                      });
+                                    }
+                                  },
+                                );
+                              },
+                            ),
+            ),
+            if (!_isSelectionMode)
+              SafeArea(
                 top: false,
                 child: _MessageInputBar(
                   controller: _messageController,
@@ -400,6 +403,8 @@ class _FieldChatThreadViewState extends State<FieldChatThreadView>
                   onSend: _send,
                 ),
               ),
+          ],
+        ),
       ),
     );
   }

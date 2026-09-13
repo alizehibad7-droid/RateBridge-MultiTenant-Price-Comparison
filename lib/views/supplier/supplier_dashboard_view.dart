@@ -1427,16 +1427,19 @@ class _MaterialsCarousel extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    SizedBox(
-                      height: 80,
-                      width: double.infinity,
-                      child: AppNetworkImage(
-                        url: imageUrl,
-                        fit: BoxFit.cover,
-                        width: 150,
+                    Theme(
+                      data: ThemeData(),
+                      child: SizedBox(
                         height: 80,
-                        debugLabel: 'dashboard:${m.id}',
-                        fallback: _categoryFallback(m),
+                        width: double.infinity,
+                        child: AppNetworkImage(
+                          url: imageUrl,
+                          fit: BoxFit.cover,
+                          width: 150,
+                          height: 80,
+                          debugLabel: 'dashboard:${m.id}',
+                          fallback: _categoryFallback(m),
+                        ),
                       ),
                     ),
                     Expanded(
@@ -1521,7 +1524,10 @@ class _AddFirstMaterialCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
+    return RootTabPopScope(
+      isHome: true,
+      homeRoute: RouteNames.supplierDashboard,
+      child: Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
@@ -1563,6 +1569,7 @@ class _AddFirstMaterialCard extends StatelessWidget {
           ),
         ),
       ),
+    ),
     );
   }
 }
@@ -1776,10 +1783,7 @@ class _RfqBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return RootTabPopScope(
-      isHome: true,
-      homeRoute: RouteNames.supplierDashboard,
-      child: Material(
+    return Material(
       color: FieldColors.surfaceWhite,
       elevation: 0,
       clipBehavior: Clip.antiAlias,
@@ -1798,7 +1802,6 @@ class _RfqBanner extends StatelessWidget {
         trailing: const Icon(Icons.arrow_forward_ios, size: 14),
         onTap: onTap,
       ),
-    ),
     );
   }
 }

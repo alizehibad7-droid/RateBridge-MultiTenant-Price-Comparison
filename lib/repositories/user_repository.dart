@@ -103,9 +103,8 @@ class UserRepository {
   Stream<UserModel> watchUserDoc(String uid) {
     return _db.collection('users').doc(uid).snapshots().expand((doc) {
       if (!doc.exists || doc.data() == null) {
-        // Cache can emit an empty doc before the server snapshot arrives.
-        if (doc.metadata.isFromCache) return const <UserModel>[];
-        throw Exception("User doc does not exist");
+        // Yield empty array to wait gracefully for document creation or sync, avoiding premature exceptions
+        return const <UserModel>[];
       }
       final data = Map<String, dynamic>.from(doc.data()!);
       if (data['uid'] == null || data['uid'].toString().isEmpty) {
