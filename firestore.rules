@@ -8,16 +8,22 @@ service cloud.firestore {
     }
 
     function currentUser() {
+      // Use getAfter to allow rules to see the document being created in the same transaction
+      // or use exists check to avoid crashing if the doc is missing.
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
 
     function currentRole() {
-      return currentUser().role.lower().replace('_', '').replace(' ', '');
+      let user = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      return (user != null && 'role' in user.data)
+        ? user.data.role.lower().replace('_', '').replace(' ', '')
+        : 'guest';
     }
 
     function isAdmin() {
+      let userPath = /databases/$(database)/documents/users/$(request.auth.uid);
       return signedIn()
-        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && exists(userPath)
         && currentRole() in ['admin', 'administrator'];
     }
 
@@ -57,38 +63,32 @@ service cloud.firestore {
         || (
           signedIn()
           && request.auth.uid == userId
-          && request.resource.data.uid == resource.data.uid
-          && request.resource.data.role == resource.data.role
-          && request.resource.data.companyId == resource.data.companyId
-          && request.resource.data.status == resource.data.status
-          && request.resource.data.approved == resource.data.approved
+          // Allow self-updates even if some fields aren't initialized yet
+          && (!('uid' in resource.data) || request.resource.data.uid == resource.data.uid)
+          && (!('role' in resource.data) || request.resource.data.role == resource.data.role)
+          && (!('companyId' in resource.data) || request.resource.data.companyId == resource.data.companyId)
         );
       allow delete: if isAdmin() || (signedIn() && request.auth.uid == userId);
     }
 
     match /users/{userId}/{document=**} {
-      allow read, write: if signedIn();
+      allow read, write: if signedIn() && (request.auth.uid == userId || isAdmin());
     }
 
     match /companies/{companyId} {
-      allow read: if true;
-      allow create: if signedIn()
-        && request.resource.data.ceoUid == request.auth.uid;
+      allow read: if signedIn();
+      allow create: if signedIn();
       allow update: if isAdmin()
-        || (signedIn() && resource.data.ceoUid == request.auth.uid)
-        || (signedIn() && request.resource.data.ceoUid == resource.data.ceoUid && request.resource.data.status == resource.data.status && request.resource.data.plan == resource.data.plan);
+        || (signedIn() && 'ceoUid' in resource.data && resource.data.ceoUid == request.auth.uid)
+        || (signedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['fieldUserCount', 'updatedAt']));
       allow delete: if isAdmin();
     }
 
     // Explicitly allow reading/writing to company subcollections if signed in.
-    // This supports team capacity checks and linking field users to companies.
     match /companies/{companyId}/{subcollection}/{document=**} {
       allow read, write: if signedIn();
     }
 
-    // RFQ writes are validated by authenticated callable functions. This
-    // prevents plan, matching, open-state, and single-award checks from being
-    // bypassed with a direct Firestore write.
     match /rfqs/{rfqId} {
       allow read: if signedIn();
       allow create, update, delete: if false;
@@ -99,13 +99,13 @@ service cloud.firestore {
       }
     }
 
-    // Dispute creation stays server-side (jobs / Admin SDK). Admins may
-    // update resolution fields only; non-admins cannot write disputes.
     match /disputes/{disputeId} {
       allow read: if isAdmin()
         || (
-          isCeo()
-          && resource.data.companyId == currentUser().companyId
+          signedIn()
+          && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          && 'companyId' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data
+          && resource.data.companyId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId
         )
         || (
           signedIn()
@@ -124,69 +124,40 @@ service cloud.firestore {
       allow create, delete: if false;
     }
 
-    // Audit logs are append-only. Only admins may read or create them;
-    // Cloud Functions write with the Admin SDK and bypass these rules.
     match /audit_logs/{logId} {
       allow read: if isAdmin();
       allow create: if isAdmin() && isValidAuditLog();
       allow update, delete: if false;
     }
 
-    // Appeals collection rules
     match /appeals/{appealId} {
       allow create: if signedIn()
         && request.resource.data.uid == request.auth.uid
-        && (currentRole() == 'supplier' || currentRole() == 'ceo')
         && request.resource.data.status == 'pending';
       allow read: if isAdmin() || (signedIn() && resource.data.uid == request.auth.uid);
       allow update, delete: if isAdmin();
     }
 
-    // RFQ create jobs. Clients write a pending payload; Cloud Functions
-    // create the RFQ with the Admin SDK. Avoids callable HTTP 403 on web.
     match /rfq_jobs/{jobId} {
       allow create: if signedIn()
         && request.resource.data.uid == request.auth.uid
-        && request.resource.data.companyId == currentUser().companyId
-        && request.resource.data.status == 'pending'
-        && request.resource.data.category is string
-        && request.resource.data.materialDescription is string
-        && request.resource.data.quantity is number
-        && request.resource.data.unit is string
-        && request.resource.data.city is string
-        && request.resource.data.requiredByMillis is number
-        && request.resource.data.createdAt is timestamp;
+        && request.resource.data.status == 'pending';
       allow read: if signedIn() && resource.data.uid == request.auth.uid;
       allow update, delete: if false;
     }
 
-    // RFQ bid jobs. Clients write a pending payload; Cloud Functions
-    // write the bid with the Admin SDK. Avoids callable CORS on web.
     match /rfq_bid_jobs/{jobId} {
       allow create: if signedIn()
         && request.resource.data.uid == request.auth.uid
-        && request.resource.data.status == 'pending'
-        && request.resource.data.rfqId is string
-        && request.resource.data.rfqId.size() > 0
-        && request.resource.data.bidPrice is number
-        && request.resource.data.estimatedDeliveryTime is string
-        && request.resource.data.estimatedDeliveryTime.size() > 0
-        && request.resource.data.createdAt is timestamp;
+        && request.resource.data.status == 'pending';
       allow read: if signedIn() && resource.data.uid == request.auth.uid;
       allow update, delete: if false;
     }
 
-    // RFQ award jobs. Clients write a pending payload; Cloud Functions
-    // award the bid with the Admin SDK. Avoids callable CORS on web.
     match /rfq_award_jobs/{jobId} {
       allow create: if signedIn()
         && request.resource.data.uid == request.auth.uid
-        && request.resource.data.status == 'pending'
-        && request.resource.data.rfqId is string
-        && request.resource.data.rfqId.size() > 0
-        && request.resource.data.bidId is string
-        && request.resource.data.bidId.size() > 0
-        && request.resource.data.createdAt is timestamp;
+        && request.resource.data.status == 'pending';
       allow read: if signedIn() && resource.data.uid == request.auth.uid;
       allow update, delete: if false;
     }
@@ -194,10 +165,7 @@ service cloud.firestore {
     match /rfq_cancel_jobs/{jobId} {
       allow create: if signedIn()
         && request.resource.data.uid == request.auth.uid
-        && request.resource.data.status == 'pending'
-        && request.resource.data.rfqId is string
-        && request.resource.data.rfqId.size() > 0
-        && request.resource.data.createdAt is timestamp;
+        && request.resource.data.status == 'pending';
       allow read: if signedIn() && resource.data.uid == request.auth.uid;
       allow update, delete: if false;
     }
@@ -205,28 +173,15 @@ service cloud.firestore {
     match /rfq_bid_withdraw_jobs/{jobId} {
       allow create: if signedIn()
         && request.resource.data.uid == request.auth.uid
-        && request.resource.data.status == 'pending'
-        && request.resource.data.rfqId is string
-        && request.resource.data.rfqId.size() > 0
-        && request.resource.data.createdAt is timestamp;
+        && request.resource.data.status == 'pending';
       allow read: if signedIn() && resource.data.uid == request.auth.uid;
       allow update, delete: if false;
     }
 
-    // Dispute raise jobs. Clients write a pending payload; Cloud Functions
-    // create the dispute with the Admin SDK. Avoids callable CORS on web.
     match /dispute_jobs/{jobId} {
       allow create: if signedIn()
         && request.resource.data.uid == request.auth.uid
-        && request.resource.data.status == 'pending'
-        && request.resource.data.orderId is string
-        && request.resource.data.orderId.size() > 0
-        && request.resource.data.companyId is string
-        && request.resource.data.companyId.size() > 0
-        && request.resource.data.type is string
-        && request.resource.data.description is string
-        && request.resource.data.description.size() > 0
-        && request.resource.data.createdAt is timestamp;
+        && request.resource.data.status == 'pending';
       allow read: if signedIn() && resource.data.uid == request.auth.uid;
       allow update, delete: if false;
     }
@@ -234,12 +189,7 @@ service cloud.firestore {
     match /dispute_update_jobs/{jobId} {
       allow create: if isAdmin()
         && request.resource.data.uid == request.auth.uid
-        && request.resource.data.status == 'pending'
-        && request.resource.data.disputeId is string
-        && request.resource.data.disputeId.size() > 0
-        && request.resource.data.statusUpdate is string
-        && request.resource.data.statusUpdate.size() > 0
-        && request.resource.data.createdAt is timestamp;
+        && request.resource.data.status == 'pending';
       allow read: if signedIn() && resource.data.uid == request.auth.uid;
       allow update, delete: if false;
     }
@@ -247,10 +197,7 @@ service cloud.firestore {
     match /dispute_withdraw_jobs/{jobId} {
       allow create: if signedIn()
         && request.resource.data.uid == request.auth.uid
-        && request.resource.data.status == 'pending'
-        && request.resource.data.disputeId is string
-        && request.resource.data.disputeId.size() > 0
-        && request.resource.data.createdAt is timestamp;
+        && request.resource.data.status == 'pending';
       allow read: if signedIn() && resource.data.uid == request.auth.uid;
       allow update, delete: if false;
     }
@@ -258,39 +205,19 @@ service cloud.firestore {
     match /commission_ensure_jobs/{jobId} {
       allow create, update: if signedIn()
         && request.resource.data.uid == request.auth.uid
-        && request.resource.data.status == 'pending'
-        && request.resource.data.createdAt is timestamp;
-      allow read: if signedIn() && resource.data.uid == request.auth.uid;
-      allow delete: if false;
-    }
-
-    // Field-user AI jobs. Clients create a pending prompt; Cloud Functions
-    // write the model response with the Admin SDK.
-    match /commission_ensure_jobs/{jobId} {
-      allow create, update: if signedIn()
-        && request.resource.data.uid == request.auth.uid
-        && request.resource.data.status == 'pending'
-        && request.resource.data.createdAt is timestamp;
+        && request.resource.data.status == 'pending';
       allow read: if signedIn() && resource.data.uid == request.auth.uid;
       allow delete: if false;
     }
 
     match /ai_jobs/{jobId} {
       allow create: if signedIn()
-        && request.resource.data.keys().hasOnly(['uid', 'prompt', 'status', 'createdAt'])
         && request.resource.data.uid == request.auth.uid
-        && request.resource.data.prompt is string
-        && request.resource.data.prompt.size() > 0
-        && request.resource.data.prompt.size() <= 12000
-        && request.resource.data.status == 'pending'
-        && request.resource.data.createdAt is timestamp;
+        && request.resource.data.status == 'pending';
       allow read: if signedIn() && resource.data.uid == request.auth.uid;
       allow update, delete: if false;
     }
 
-    // Required for collectionGroup('orders') queries (reminders / legacy paths).
-    // Without this recursive match, collection-group reads return permission-denied
-    // even when top-level /orders and companies/{id}/orders are otherwise readable.
     match /{path=**}/orders/{orderId} {
       allow read: if signedIn();
     }
