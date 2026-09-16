@@ -102,7 +102,12 @@ class _FieldSearchViewState extends State<FieldSearchView> {
     context.read<RecentlyViewedService>().persistView(material.id);
     context.push(
       RouteNames.fieldCompareOf(material.name),
-      extra: material.name,
+      extra: RouteNames.fieldCompareExtra(
+        name: material.name,
+        category: material.category,
+        qualityGrade: material.qualityGrade,
+        unit: material.unit,
+      ),
     );
   }
 

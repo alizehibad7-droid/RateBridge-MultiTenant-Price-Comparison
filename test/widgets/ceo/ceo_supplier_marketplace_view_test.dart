@@ -56,7 +56,7 @@ void main() {
 
     expect(find.text('Skyline Materials'), findsOneWidget);
 
-    await tapVisible(tester, find.text('REQUEST PARTNERSHIP'));
+    await tapVisible(tester, find.text('SEND PARTNERSHIP REQUEST'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     await tester.tap(find.text('SEND REQUEST'));

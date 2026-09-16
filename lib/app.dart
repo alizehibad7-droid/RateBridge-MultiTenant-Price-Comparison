@@ -350,7 +350,18 @@ class _RateBridgeAppState extends State<RateBridgeApp> {
             );
             return fieldTransitionPage(
               key: state.pageKey,
-              child: FieldCompareView(materialName: materialName),
+              child: FieldCompareView(
+                materialName: materialName,
+                category: RouteNames.compareExtraString(
+                  state.extra,
+                  'category',
+                ),
+                qualityGrade: RouteNames.compareExtraString(
+                  state.extra,
+                  'qualityGrade',
+                ),
+                unit: RouteNames.compareExtraString(state.extra, 'unit'),
+              ),
             );
           },
         ),

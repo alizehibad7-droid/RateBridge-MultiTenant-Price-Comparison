@@ -111,10 +111,39 @@ class RouteNames {
   }
 
   static String pathParam(String? raw, [Object? extra]) {
+    if (extra is Map) {
+      final name = extra['name'] ?? extra['materialName'];
+      if (name is String && name.trim().isNotEmpty) return name.trim();
+    }
     if (extra is String && extra.trim().isNotEmpty) return extra;
     return decodeParam(raw ?? '');
   }
 
+  static String? compareExtraString(Object? extra, String key) {
+    if (extra is! Map) return null;
+    final value = extra[key];
+    if (value is! String) return null;
+    final trimmed = value.trim();
+    return trimmed.isEmpty ? null : trimmed;
+  }
+
   static String fieldCompareOf(String materialName) =>
       fieldCompare.replaceFirst(':materialId', encodeParam(materialName));
+
+  /// Shared navigation payload for Field Compare (name + category context).
+  static Map<String, String> fieldCompareExtra({
+    required String name,
+    String? category,
+    String? qualityGrade,
+    String? unit,
+  }) {
+    return {
+      'name': name,
+      if (category != null && category.trim().isNotEmpty)
+        'category': category.trim(),
+      if (qualityGrade != null && qualityGrade.trim().isNotEmpty)
+        'qualityGrade': qualityGrade.trim(),
+      if (unit != null && unit.trim().isNotEmpty) 'unit': unit.trim(),
+    };
+  }
 }

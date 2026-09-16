@@ -106,9 +106,12 @@ exports.onInviteAccepted = functions.https.onCall(async (data, context) => {
 
       transaction.set(capacity.mirrorRef, {
         supplierUid,
-        supplierName: supplierData.businessName,
+        name: supplierData.name || supplierData.businessName || 'Supplier',
+        businessName: supplierData.businessName || supplierData.name || 'Supplier',
+        supplierName: supplierData.businessName || supplierData.name || 'Supplier',
         city: supplierData.city,
         categories: supplierData.categories || [],
+        materialType: supplierData.materialType || supplierData.businessType || 'General',
         globalAvgRating: supplierData.globalAvgRating || 0,
         status: 'active',
         joinedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -237,6 +240,7 @@ exports.acceptPartnershipRequest = functions.https.onCall(async (data, context) 
       }
 
       const companyData = companyDoc.data();
+      const supplierData = supplierDoc.data();
       const capacity = await assertSupplierCapacity(
         transaction,
         companyRef,
@@ -247,6 +251,8 @@ exports.acceptPartnershipRequest = functions.https.onCall(async (data, context) 
       const supplierCompanyRef = supplierRef
         .collection('companies')
         .doc(request.companyId);
+      const displayName =
+        supplierData.name || supplierData.businessName || 'Supplier';
 
       transaction.update(requestRef, {
         status: 'accepted',
@@ -254,6 +260,11 @@ exports.acceptPartnershipRequest = functions.https.onCall(async (data, context) 
       });
       transaction.set(capacity.mirrorRef, {
         id: request.supplierId,
+        name: displayName,
+        businessName: supplierData.businessName || supplierData.name || displayName,
+        city: supplierData.city || '',
+        materialType: supplierData.materialType || supplierData.businessType || 'General',
+        email: supplierData.email || '',
         status: 'active',
         linkedAt: admin.firestore.FieldValue.serverTimestamp(),
         joinedAt: admin.firestore.FieldValue.serverTimestamp(),

@@ -42,7 +42,13 @@ class CeoViewModel extends ChangeNotifier {
   String? _errorMessage;
   String? _successMessage;
   CompanyModel? _company;
+  List<SupplierModel> _allMarketplaceSuppliers = [];
   List<SupplierModel> _marketplaceSuppliers = [];
+  String _marketplaceSearchQuery = '';
+  String _marketplaceCity = 'All';
+  String _marketplaceCategory = 'All';
+  bool _marketplaceVerifiedOnly = false;
+  String _marketplaceSortBy = 'Rating';
 
   String? _partnershipWatchCompanyId;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>?
@@ -413,7 +419,8 @@ class CeoViewModel extends ChangeNotifier {
       case 'pending':
         return 'Request Pending';
       case 'accepted':
-        return 'Already Partners';
+        // Stale accepted request without an active link is not a partner.
+        return 'Not Invited';
       case 'rejected':
         return 'Request Rejected';
       case 'removed':
@@ -666,13 +673,15 @@ class CeoViewModel extends ChangeNotifier {
           .snapshots()
           .listen(
         (snap) {
-          _marketplaceSuppliers = _suppliersFromDocs(snap.docs);
+          _allMarketplaceSuppliers = _suppliersFromDocs(snap.docs);
+          _applyMarketplaceFilters();
           _isLoading = false;
           notifyListeners();
         },
         onError: (_) {
           _fetchMarketplaceSuppliers().then((suppliers) {
-            _marketplaceSuppliers = suppliers;
+            _allMarketplaceSuppliers = suppliers;
+            _applyMarketplaceFilters();
             _isLoading = false;
             notifyListeners();
           });
@@ -686,88 +695,91 @@ class CeoViewModel extends ChangeNotifier {
   }
 
   Future<void> searchSuppliers(String queryText) async {
-    if (queryText.isEmpty) {
+    _marketplaceSearchQuery = queryText.trim();
+    if (_allMarketplaceSuppliers.isEmpty && queryText.isEmpty) {
       return loadMarketplace();
     }
-    _isLoading = true;
+    _applyMarketplaceFilters();
     notifyListeners();
-    try {
-      final lowercaseQuery = queryText.toLowerCase().trim();
-      
-      Query query = _db.collection('suppliers').where('status', whereIn: _marketplaceStatuses);
-
-      // Support search by email directly if it looks like one
-      if (lowercaseQuery.contains('@')) {
-        query = query.where('email', isEqualTo: lowercaseQuery);
-      } else {
-        // Range filter on business name
-        query = query.where('businessName', isGreaterThanOrEqualTo: queryText)
-                     .where('businessName', isLessThanOrEqualTo: '$queryText\uf8ff');
-      }
-
-      final snap = await query.get();
-      _marketplaceSuppliers = _suppliersFromDocs(snap.docs);
-    } catch (_) {
-      try {
-        _marketplaceSuppliers = await _fetchMarketplaceSuppliers();
-      } catch (_) {
-        _errorMessage = 'Search failed. Note: Searching by name is case-sensitive.';
-      }
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
   }
 
-  Future<void> applyFilters({String? city, String? category, bool? verifiedOnly}) async {
-    _isLoading = true;
-    notifyListeners();
-    try {
-      Query query = _db.collection('suppliers').where('status', whereIn: _marketplaceStatuses);
+  Future<void> applyFilters({
+    String? city,
+    String? category,
+    bool? verifiedOnly,
+  }) async {
+    if (city != null) _marketplaceCity = city;
+    if (category != null) _marketplaceCategory = category;
+    if (verifiedOnly != null) _marketplaceVerifiedOnly = verifiedOnly;
 
-      if (city != null && city != 'All') {
-        query = query.where('city', isEqualTo: city);
-      }
-      if (category != null && category != 'All') {
-        query = query.where('materialType', isEqualTo: category);
-      }
-      if (verifiedOnly == true) {
-        query = query.where('isVerified', isEqualTo: true);
-      }
-
-      final snap = await query.get();
-      _marketplaceSuppliers = _suppliersFromDocs(snap.docs);
-    } catch (_) {
-      try {
-        final all = await _fetchMarketplaceSuppliers();
-        _marketplaceSuppliers = all.where((supplier) {
-          if (city != null && city != 'All' && supplier.city != city) {
-            return false;
-          }
-          if (category != null &&
-              category != 'All' &&
-              supplier.materialType != category) {
-            return false;
-          }
-          if (verifiedOnly == true && !supplier.isVerified) return false;
-          return true;
-        }).toList();
-      } catch (_) {
-        _errorMessage = 'Failed to apply filters. Please try again.';
-      }
-    } finally {
-      _isLoading = false;
-      notifyListeners();
+    if (_allMarketplaceSuppliers.isEmpty) {
+      await loadMarketplace();
+      return;
     }
+
+    _applyMarketplaceFilters();
+    notifyListeners();
   }
 
   Future<void> sortSuppliers(String criteria) async {
-    if (criteria == 'Rating') {
-      _marketplaceSuppliers.sort((a, b) => b.rating.compareTo(a.rating));
-    } else if (criteria == 'Name') {
-      _marketplaceSuppliers.sort((a, b) => a.name.compareTo(b.name));
-    }
+    _marketplaceSortBy = criteria;
+    _applyMarketplaceFilters();
     notifyListeners();
+  }
+
+  void _applyMarketplaceFilters() {
+    final query = _marketplaceSearchQuery.toLowerCase();
+    final city = _marketplaceCity;
+    final category = _marketplaceCategory;
+
+    var list = _allMarketplaceSuppliers.where((supplier) {
+      if (query.isNotEmpty) {
+        final haystacks = [
+          supplier.name,
+          supplier.email,
+          supplier.city,
+          supplier.materialType,
+          supplier.businessType,
+          supplier.ownerFullName,
+        ];
+        final matchesQuery = haystacks.any(
+          (value) => (value ?? '').toString().toLowerCase().contains(query),
+        );
+        if (!matchesQuery) return false;
+      }
+
+      if (city != 'All' &&
+          supplier.city.trim().toLowerCase() != city.trim().toLowerCase()) {
+        return false;
+      }
+
+      if (category != 'All') {
+        final material = supplier.materialType.trim().toLowerCase();
+        final businessType = (supplier.businessType ?? '').trim().toLowerCase();
+        final cats = supplier.categories
+            .map((c) => c.trim().toLowerCase())
+            .where((c) => c.isNotEmpty);
+        final target = category.trim().toLowerCase();
+        final matchesCategory = material == target ||
+            businessType == target ||
+            cats.contains(target);
+        if (!matchesCategory) return false;
+      }
+
+      if (_marketplaceVerifiedOnly && !supplier.isVerified) {
+        return false;
+      }
+
+      return true;
+    }).toList();
+
+    if (_marketplaceSortBy == 'Name') {
+      list.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    } else {
+      list.sort((a, b) => b.rating.compareTo(a.rating));
+    }
+
+    _marketplaceSuppliers = list;
   }
 
   Future<void> sendPartnershipRequest(
@@ -933,8 +945,87 @@ class CeoViewModel extends ChangeNotifier {
   }
 
   Stream<List<Map<String, dynamic>>> watchMySuppliers(String companyId) {
-    return _db.collection('companies').doc(companyId).collection('suppliers')
-        .snapshots().map((snap) => snap.docs.map((doc) => {...doc.data(), 'id': doc.id}).toList());
+    if (companyId.isEmpty) return Stream.value(const []);
+
+    return _db
+        .collection('companies')
+        .doc(companyId)
+        .collection('suppliers')
+        .snapshots()
+        .asyncMap((snap) async {
+      if (snap.docs.isEmpty) return <Map<String, dynamic>>[];
+
+      final profiles = await Future.wait(
+        snap.docs.map(
+          (doc) => _db.collection('suppliers').doc(doc.id).get(),
+        ),
+      );
+
+      final results = <Map<String, dynamic>>[];
+      for (var i = 0; i < snap.docs.length; i++) {
+        final doc = snap.docs[i];
+        final link = Map<String, dynamic>.from(doc.data());
+        link['id'] = doc.id;
+
+        final profileSnap = profiles[i];
+        final profile = profileSnap.exists && profileSnap.data() != null
+            ? Map<String, dynamic>.from(profileSnap.data()!)
+            : const <String, dynamic>{};
+
+        // Link docs from some accept paths only store status/ids (or
+        // `supplierName`). Prefer link fields, then profile name/businessName.
+        final displayName = _firstNonEmpty([
+          link['name'],
+          link['supplierName'],
+          link['businessName'],
+          profile['name'],
+          profile['businessName'],
+        ]) ??
+            'Supplier';
+
+        link['name'] = displayName;
+        link['businessName'] = _firstNonEmpty([
+              link['businessName'],
+              profile['businessName'],
+              profile['name'],
+            ]) ??
+            displayName;
+        link['supplierName'] = _firstNonEmpty([
+              link['supplierName'],
+              displayName,
+            ]) ??
+            displayName;
+        link['city'] = _firstNonEmpty([
+              link['city'],
+              profile['city'],
+            ]) ??
+            '';
+        link['materialType'] = _firstNonEmpty([
+              link['materialType'],
+              profile['materialType'],
+              profile['businessType'],
+            ]) ??
+            'General';
+        link['email'] = _firstNonEmpty([
+              link['email'],
+              profile['email'],
+            ]) ??
+            '';
+        link['rating'] =
+            link['rating'] ?? profile['rating'] ?? profile['globalAvgRating'] ?? 0;
+
+        results.add(link);
+      }
+      return results;
+    });
+  }
+
+  String? _firstNonEmpty(List<dynamic> values) {
+    for (final value in values) {
+      final text = value?.toString().trim() ?? '';
+      if (text.isNotEmpty) return text;
+    }
+    return null;
   }
 
   Future<void> removeSupplier(String supplierId) async {

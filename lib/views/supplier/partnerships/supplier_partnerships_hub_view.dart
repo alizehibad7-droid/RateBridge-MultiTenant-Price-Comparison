@@ -279,20 +279,6 @@ class _ActivePartnerCard extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: OutlinedButton(
-                  onPressed: () {
-                    vm.openCompanyContext(company.id);
-                    context.push(RouteNames.supplierChat);
-                  },
-                  style: OutlinedButton.styleFrom(
-                    minimumSize: const Size(0, 36),
-                    foregroundColor: FieldColors.primaryNavy,
-                  ),
-                  child: const Text('Chat', style: TextStyle(fontSize: 12)),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: OutlinedButton(
                   onPressed: () => _showRemoveSheet(context, company),
                   style: OutlinedButton.styleFrom(
                     minimumSize: const Size(0, 36),

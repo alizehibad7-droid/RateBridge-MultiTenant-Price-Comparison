@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
@@ -20,10 +18,10 @@ void main() {
     stubCeoViewModel(ceo);
   });
 
-  testWidgets('shows a spinner while linked suppliers are loading',
+  testWidgets('shows a spinner while marketplace suppliers are loading',
       (tester) async {
-    final controller = StreamController<List<Map<String, dynamic>>>();
-    when(() => ceo.watchMySuppliers(any())).thenAnswer((_) => controller.stream);
+    when(() => ceo.isLoading).thenReturn(true);
+    when(() => ceo.marketplaceSuppliers).thenReturn(const []);
 
     await pumpCeoScreen(
       tester,
@@ -32,10 +30,9 @@ void main() {
     );
 
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
-    await controller.close();
   });
 
-  testWidgets('shows empty copy when there are no linked partners',
+  testWidgets('shows empty copy when there are no platform suppliers',
       (tester) async {
     await pumpCeoScreen(
       tester,
@@ -44,14 +41,16 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('No partners linked yet'), findsOneWidget);
+    expect(
+      find.text('No active suppliers on the platform yet'),
+      findsOneWidget,
+    );
   });
 
-  testWidgets('renders a partner and Remove calls removeSupplier',
+  testWidgets('renders available supplier and can open request sheet',
       (tester) async {
-    when(() => ceo.watchMySuppliers(any())).thenAnswer(
-      (_) => Stream<List<Map<String, dynamic>>>.value([sampleLinkedSupplier()]),
-    );
+    when(() => ceo.marketplaceSuppliers).thenReturn([sampleSupplier()]);
+    when(() => ceo.linkStatusFor('sup-1')).thenReturn('Not Invited');
 
     await pumpCeoScreen(
       tester,
@@ -61,6 +60,30 @@ void main() {
     await tester.pump();
 
     expect(find.text('Skyline Materials'), findsOneWidget);
+    expect(find.text('Available'), findsOneWidget);
+    expect(find.text('REQUEST PARTNERSHIP'), findsOneWidget);
+
+    await tapVisible(tester, find.text('REQUEST PARTNERSHIP'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Invite Partner'), findsOneWidget);
+    expect(find.text('SEND REQUEST'), findsOneWidget);
+  });
+
+  testWidgets('renders a partner and Remove calls removeSupplier',
+      (tester) async {
+    when(() => ceo.marketplaceSuppliers).thenReturn([sampleSupplier()]);
+    when(() => ceo.linkStatusFor('sup-1')).thenReturn('Already Partners');
+
+    await pumpCeoScreen(
+      tester,
+      child: const CeoMySuppliersView(),
+      ceo: ceo,
+    );
+    await tester.pump();
+
+    expect(find.text('Skyline Materials'), findsOneWidget);
+    expect(find.text('Partner'), findsOneWidget);
 
     await tapVisible(tester, find.text('Remove'));
     await tester.pump();

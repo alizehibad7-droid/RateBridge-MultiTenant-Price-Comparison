@@ -51,9 +51,12 @@ class _CeoSupplierMarketplaceViewState
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       final vm = context.read<CeoViewModel>();
-      final companyId = vm.company?.id;
-      if (companyId != null && companyId.isNotEmpty) {
+      final companyId = context.read<AuthViewModel>().user?.companyId ??
+          vm.company?.id ??
+          '';
+      if (companyId.isNotEmpty) {
         vm.ensurePartnershipStatusWatch(companyId);
       }
       vm.loadMarketplace();
@@ -68,8 +71,10 @@ class _CeoSupplierMarketplaceViewState
   }
 
   void _onSearchChanged(String query) {
+    setState(() {});
     if (_debounce?.isActive ?? false) _debounce!.cancel();
-    _debounce = Timer(const Duration(milliseconds: 400), () {
+    _debounce = Timer(const Duration(milliseconds: 250), () {
+      if (!mounted) return;
       context.read<CeoViewModel>().searchSuppliers(query);
     });
   }
@@ -110,7 +115,8 @@ class _CeoSupplierMarketplaceViewState
                         icon: const Icon(Icons.cancel_rounded, size: 20, color: CeoColors.textGrey),
                         onPressed: () {
                           _searchController.clear();
-                          ceoVM.loadMarketplace();
+                          setState(() {});
+                          ceoVM.searchSuppliers('');
                         },
                       )
                     : null,
@@ -446,14 +452,14 @@ class _SupplierMarketCard extends StatelessWidget {
           child: ElevatedButton.icon(
             onPressed: () => _showSendRequestSheet(context, ceoVM, supplier),
             icon: const Icon(Icons.person_add_rounded, size: 18),
-            label: const Text('REQUEST PARTNERSHIP'),
+            label: const Text('SEND PARTNERSHIP REQUEST'),
             style: CeoTheme.primaryButtonStyle(height: 48),
           ),
         );
 
       case 'Request Pending':
         return _statusIndicator(
-          'Awaiting Response',
+          'Requested',
           CeoColors.amber,
           Icons.hourglass_bottom_rounded,
         );
@@ -487,7 +493,15 @@ class _SupplierMarketCard extends StatelessWidget {
         );
 
       default:
-        return const SizedBox.shrink();
+        return SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            onPressed: () => _showSendRequestSheet(context, ceoVM, supplier),
+            icon: const Icon(Icons.person_add_rounded, size: 18),
+            label: const Text('SEND PARTNERSHIP REQUEST'),
+            style: CeoTheme.primaryButtonStyle(height: 48),
+          ),
+        );
     }
   }
 

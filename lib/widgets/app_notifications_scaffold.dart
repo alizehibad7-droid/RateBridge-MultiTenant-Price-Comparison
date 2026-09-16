@@ -204,6 +204,8 @@ class _AppNotificationsScaffoldState extends State<AppNotificationsScaffold> {
       backgroundColor: widget.backgroundColor ?? FieldColors.screenBackground,
       appBar: AppBar(
         automaticallyImplyLeading: false,
+        leadingWidth: 52,
+        titleSpacing: 4,
         leading: _isSelectionMode
             ? IconButton(
                 icon: const Icon(Icons.close_rounded),
@@ -214,21 +216,14 @@ class _AppNotificationsScaffoldState extends State<AppNotificationsScaffold> {
                   });
                 },
               )
-            : AppNavigation.leading(context),
-        title: _isSelectionMode
-            ? Text('${_selectedNotifIds.length} selected')
-            : Row(
-                children: [
-                  const Icon(Icons.notifications_active_rounded, size: 22),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      widget.title,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
+            : AppNavigation.leading(context) ??
+                const Icon(Icons.notifications_active_rounded, size: 22),
+        title: Text(
+          _isSelectionMode
+              ? '${_selectedNotifIds.length} selected'
+              : widget.title,
+          overflow: TextOverflow.ellipsis,
+        ),
         actions: _isSelectionMode
             ? [
                 IconButton(
@@ -236,7 +231,9 @@ class _AppNotificationsScaffoldState extends State<AppNotificationsScaffold> {
                   tooltip: 'Select All',
                   onPressed: () {
                     setState(() {
-                      _selectedNotifIds.addAll(vm.notifications.map((n) => n.notifId));
+                      _selectedNotifIds.addAll(
+                        vm.notifications.map((n) => n.notifId),
+                      );
                     });
                   },
                 ),
@@ -247,17 +244,17 @@ class _AppNotificationsScaffoldState extends State<AppNotificationsScaffold> {
                 ),
               ]
             : [
+                if (vm.unreadCount > 0)
+                  IconButton(
+                    icon: const Icon(Icons.done_all_rounded),
+                    tooltip: 'Mark all read',
+                    onPressed: () => _markAllRead(context),
+                  ),
                 if (vm.notifications.isNotEmpty)
                   IconButton(
                     icon: const Icon(Icons.delete_sweep_rounded),
                     tooltip: 'Clear All',
                     onPressed: () => _confirmAndClearAll(context),
-                  ),
-                if (vm.unreadCount > 0)
-                  TextButton.icon(
-                    onPressed: () => _markAllRead(context),
-                    icon: const Icon(Icons.done_all_rounded, size: 16),
-                    label: const Text('Mark all read'),
                   ),
               ],
       ),

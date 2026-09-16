@@ -73,21 +73,38 @@ class MaterialRepository {
   /// Materials from company-linked suppliers matching [name] (case-insensitive).
   Future<List<MaterialModel>> getMaterialsByNameForCompany(
     String companyId,
-    String name,
-  ) async {
-    return _firestoreService.getMaterialsByNameForCompany(companyId, name);
+    String name, {
+    String? category,
+    String? qualityGrade,
+    String? unit,
+  }) async {
+    return _firestoreService.getMaterialsByNameForCompany(
+      companyId,
+      name,
+      category: category,
+      qualityGrade: qualityGrade,
+      unit: unit,
+    );
   }
 
   /// Enriched compare rows for the field-user comparison screen.
   Future<List<MaterialListing>> getCompareListingsForMaterial(
     String companyId,
-    String materialName,
-  ) async {
+    String materialName, {
+    String? category,
+    String? qualityGrade,
+    String? unit,
+  }) async {
     final trimmedName = materialName.trim();
     if (trimmedName.isEmpty) return [];
 
-    final materials =
-        await getMaterialsByNameForCompany(companyId, trimmedName);
+    final materials = await getMaterialsByNameForCompany(
+      companyId,
+      trimmedName,
+      category: category,
+      qualityGrade: qualityGrade,
+      unit: unit,
+    );
     if (materials.isEmpty) return [];
 
     final supplierCache = <String, SupplierModel?>{};

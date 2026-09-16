@@ -138,21 +138,16 @@ class _FieldHomeViewState extends State<FieldHomeView> {
   }
 
   Future<void> _openCompare(MaterialModel material) async {
-    await context.read<RecentlyViewedService>().persistView(material.id);
-    if (!mounted) return;
-    final companyId = context.read<FieldSessionViewModel>().companyId;
-    if (companyId != null) {
-      final ids = await RecentlyViewedService.getRecentIds();
-      if (!mounted) return;
-      await context.read<FieldCatalogViewModel>().loadRecentlyViewedMaterials(
-        companyId,
-        ids,
-      );
-    }
+    context.read<RecentlyViewedService>().persistView(material.id);
     if (!mounted) return;
     context.push(
       RouteNames.fieldCompareOf(material.name),
-      extra: material.name,
+      extra: RouteNames.fieldCompareExtra(
+        name: material.name,
+        category: material.category,
+        qualityGrade: material.qualityGrade,
+        unit: material.unit,
+      ),
     );
   }
 

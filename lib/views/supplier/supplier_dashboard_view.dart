@@ -1398,6 +1398,19 @@ class _MaterialsCarousel extends StatelessWidget {
     return FieldColors.statusSuccess;
   }
 
+  /// One secondary line: grade → brand → category → short description.
+  String? _secondaryDetail(MaterialModel m) {
+    final grade = m.qualityGrade.trim();
+    if (grade.isNotEmpty) return grade;
+    final brand = m.brand?.trim();
+    if (brand != null && brand.isNotEmpty) return brand;
+    final category = m.category.trim();
+    if (category.isNotEmpty) return category;
+    final description = m.description?.trim();
+    if (description != null && description.isNotEmpty) return description;
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     return SizedBox(
@@ -1409,6 +1422,7 @@ class _MaterialsCarousel extends StatelessWidget {
         itemBuilder: (context, index) {
           final m = materials[index];
           final imageUrl = m.profileImageUrl;
+          final detail = _secondaryDetail(m);
           return Material(
             color: FieldColors.surfaceWhite,
             elevation: 0,
@@ -1429,16 +1443,19 @@ class _MaterialsCarousel extends StatelessWidget {
                   children: [
                     Theme(
                       data: ThemeData(),
-                      child: SizedBox(
-                        height: 80,
-                        width: double.infinity,
-                        child: AppNetworkImage(
-                          url: imageUrl,
-                          fit: BoxFit.cover,
-                          width: 150,
+                      child: ColoredBox(
+                        color: FieldColors.primaryNavy.withValues(alpha: 0.06),
+                        child: SizedBox(
                           height: 80,
-                          debugLabel: 'dashboard:${m.id}',
-                          fallback: _categoryFallback(m),
+                          width: double.infinity,
+                          child: AppNetworkImage(
+                            url: imageUrl,
+                            fit: BoxFit.contain,
+                            width: 150,
+                            height: 80,
+                            debugLabel: 'dashboard:${m.id}',
+                            fallback: _categoryFallback(m),
+                          ),
                         ),
                       ),
                     ),
@@ -1458,6 +1475,18 @@ class _MaterialsCarousel extends StatelessWidget {
                                 color: FieldColors.primaryNavy,
                               ),
                             ),
+                            if (detail != null) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                detail,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: AppTextStyles.caption.copyWith(
+                                  fontSize: 11,
+                                  color: FieldColors.textMuted,
+                                ),
+                              ),
+                            ],
                             const Spacer(),
                             Text(
                               CurrencyFormatter.formatPKR(m.pricePerUnit),

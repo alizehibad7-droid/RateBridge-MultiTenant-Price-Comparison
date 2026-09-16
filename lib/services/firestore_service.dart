@@ -525,19 +525,86 @@ class FirestoreService {
   String _normalizeMaterialName(String value) =>
       value.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
 
+  Set<String> _materialNameTokens(String normalizedName) => normalizedName
+      .split(' ')
+      .where((token) => token.length > 1)
+      .toSet();
+
+  /// True when [material] should appear in a compare for [queryName].
+  ///
+  /// Matches exact normalized name, or same category (+ grade/unit when set)
+  /// with product-equivalent names (e.g. brand variants of the same item).
+  bool _materialMatchesCompareQuery(
+    MaterialModel material,
+    String queryName, {
+    String? category,
+    String? qualityGrade,
+    String? unit,
+  }) {
+    final normalizedQuery = _normalizeMaterialName(queryName);
+    if (normalizedQuery.isEmpty) return false;
+
+    final normalizedName = _normalizeMaterialName(material.name);
+    if (normalizedName == normalizedQuery) return true;
+
+    final queryCategory = (category ?? '').trim().toLowerCase();
+    final materialCategory = material.category.trim().toLowerCase();
+    if (queryCategory.isEmpty || materialCategory != queryCategory) {
+      return false;
+    }
+
+    final queryGrade = (qualityGrade ?? '').trim().toLowerCase();
+    final materialGrade = material.qualityGrade.trim().toLowerCase();
+    if (queryGrade.isNotEmpty && materialGrade == queryGrade) {
+      final queryUnit = (unit ?? '').trim().toLowerCase();
+      final materialUnit = material.unit.trim().toLowerCase();
+      if (queryUnit.isEmpty || materialUnit == queryUnit) {
+        return true;
+      }
+    }
+
+    return _namesAreProductEquivalent(normalizedName, normalizedQuery);
+  }
+
+  bool _namesAreProductEquivalent(String a, String b) {
+    final tokensA = _materialNameTokens(a);
+    final tokensB = _materialNameTokens(b);
+    if (tokensA.isEmpty || tokensB.isEmpty) return false;
+
+    final overlap = tokensA.intersection(tokensB);
+    if (overlap.isEmpty) return false;
+
+    final smaller = tokensA.length <= tokensB.length ? tokensA : tokensB;
+    final required = (smaller.length * 0.6).ceil().clamp(1, smaller.length);
+    return overlap.length >= required;
+  }
+
   /// Materials matching [materialName] from suppliers linked to [companyId].
   Future<List<MaterialModel>> getCompanyMaterialsByName(
     String companyId,
-    String materialName,
-  ) async {
-    return getMaterialsByNameForCompany(companyId, materialName);
+    String materialName, {
+    String? category,
+    String? qualityGrade,
+    String? unit,
+  }) async {
+    return getMaterialsByNameForCompany(
+      companyId,
+      materialName,
+      category: category,
+      qualityGrade: qualityGrade,
+      unit: unit,
+    );
   }
 
-  /// Materials from company-linked suppliers whose name matches [name].
+  /// Materials from company-linked suppliers whose name matches [name]
+  /// (exact), or the same category/grade/product-equivalent name for compare.
   Future<List<MaterialModel>> getMaterialsByNameForCompany(
     String companyId,
-    String name,
-  ) async {
+    String name, {
+    String? category,
+    String? qualityGrade,
+    String? unit,
+  }) async {
     final nameLower = _normalizeMaterialName(name);
     if (nameLower.isEmpty) return [];
 
@@ -561,6 +628,15 @@ class FirestoreService {
     void addMatches(Iterable<MaterialModel> items) {
       for (final material in items) {
         if (!material.isListed) continue;
+        if (!_materialMatchesCompareQuery(
+          material,
+          name,
+          category: category,
+          qualityGrade: qualityGrade,
+          unit: unit,
+        )) {
+          continue;
+        }
         if (seenIds.add(material.id)) {
           matched.add(material);
         }
@@ -574,11 +650,7 @@ class FirestoreService {
               .where('supplierId', whereIn: chunk)
               .get();
       addMatches(
-        bySupplierId.docs
-            .map((doc) => _materialFromDoc(doc.id, doc.data()))
-            .where(
-              (material) => _normalizeMaterialName(material.name) == nameLower,
-            ),
+        bySupplierId.docs.map((doc) => _materialFromDoc(doc.id, doc.data())),
       );
 
       final bySupplierUid =
@@ -587,11 +659,7 @@ class FirestoreService {
               .where('supplierUid', whereIn: chunk)
               .get();
       addMatches(
-        bySupplierUid.docs
-            .map((doc) => _materialFromDoc(doc.id, doc.data()))
-            .where(
-              (material) => _normalizeMaterialName(material.name) == nameLower,
-            ),
+        bySupplierUid.docs.map((doc) => _materialFromDoc(doc.id, doc.data())),
       );
     }
     return matched;

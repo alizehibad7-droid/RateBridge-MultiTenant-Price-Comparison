@@ -43,7 +43,6 @@ import 'services/storage_service.dart';
 import 'services/cloud_function_service.dart';
 import 'services/dynamic_link_service.dart';
 import 'services/ai_context_service.dart';
-import 'services/voice_search_service.dart';
 import 'services/recently_viewed_service.dart';
 import 'services/fcm_service.dart';
 import 'services/notification_service.dart';
@@ -105,7 +104,6 @@ void main() async {
               context.read<FirestoreService>(),
             ),
           ),
-          Provider<VoiceSearchService>(create: (_) => VoiceSearchService()),
 
           ProxyProvider<FirestoreService, FirebaseAuthService>(
             update:

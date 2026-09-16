@@ -99,7 +99,13 @@ class FieldCompareViewModel extends ChangeNotifier {
     return null;
   }
 
-  Future<void> loadComparison(String companyId, String materialName) async {
+  Future<void> loadComparison(
+    String companyId,
+    String materialName, {
+    String? category,
+    String? qualityGrade,
+    String? unit,
+  }) async {
     final trimmedName = materialName.trim();
     _isLoading = true;
     _errorMessage = null;
@@ -118,6 +124,9 @@ class FieldCompareViewModel extends ChangeNotifier {
           : await _materialRepo.getCompareListingsForMaterial(
               companyId,
               trimmedName,
+              category: category,
+              qualityGrade: qualityGrade,
+              unit: unit,
             );
       _compareResults = _applyAnomalyAndBestValue(listings);
       _requestAiInsight();

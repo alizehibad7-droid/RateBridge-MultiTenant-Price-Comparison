@@ -18,8 +18,17 @@ import '../widgets/field_material_card.dart';
 
 class FieldCompareView extends StatefulWidget {
   final String materialName;
+  final String? category;
+  final String? qualityGrade;
+  final String? unit;
 
-  const FieldCompareView({super.key, required this.materialName});
+  const FieldCompareView({
+    super.key,
+    required this.materialName,
+    this.category,
+    this.qualityGrade,
+    this.unit,
+  });
 
   @override
   State<FieldCompareView> createState() => _FieldCompareViewState();
@@ -65,7 +74,13 @@ class _FieldCompareViewState extends State<FieldCompareView> {
     }
     await context
         .read<FieldCompareViewModel>()
-        .loadComparison(companyId, materialName);
+        .loadComparison(
+          companyId,
+          materialName,
+          category: widget.category,
+          qualityGrade: widget.qualityGrade,
+          unit: widget.unit,
+        );
 
     _loadScheduled = false;
 
@@ -97,7 +112,13 @@ class _FieldCompareViewState extends State<FieldCompareView> {
     if (companyId == null) return;
     await context
         .read<FieldCompareViewModel>()
-        .loadComparison(companyId, widget.materialName);
+        .loadComparison(
+          companyId,
+          widget.materialName,
+          category: widget.category,
+          qualityGrade: widget.qualityGrade,
+          unit: widget.unit,
+        );
   }
 
   void _openTrends() {
