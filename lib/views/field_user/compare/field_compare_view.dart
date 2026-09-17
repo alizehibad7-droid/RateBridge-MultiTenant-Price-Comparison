@@ -185,7 +185,9 @@ class _FieldCompareViewState extends State<FieldCompareView> {
           leading: AppNavigation.leading(context, color: Colors.white),
           iconTheme: const IconThemeData(color: Colors.white),
           title: Text(
-            widget.materialName,
+            (widget.category != null && widget.category!.trim().isNotEmpty)
+                ? widget.category!.trim()
+                : widget.materialName,
             style: FieldTypography.titleMedium.copyWith(
               color: Colors.white,
               fontWeight: FontWeight.w700,
@@ -207,7 +209,10 @@ class _FieldCompareViewState extends State<FieldCompareView> {
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               _MaterialSummaryStrip(
-                                materialName: widget.materialName,
+                                materialName: (widget.category != null &&
+                                        widget.category!.trim().isNotEmpty)
+                                    ? widget.category!.trim()
+                                    : widget.materialName,
                                 category: vm.rawResults.first.category,
                                 supplierCount: vm.rawResults.length,
                               ),

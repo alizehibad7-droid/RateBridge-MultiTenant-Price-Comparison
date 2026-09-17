@@ -1,5 +1,6 @@
 // MVVM: Repository — Firestore access only
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../constants/app_constants.dart';
 import '../models/order_model.dart';
 import '../models/rating_model.dart';
 import '../models/supplier_model.dart';
@@ -201,8 +202,12 @@ class OrderRepository {
     String companyId,
     String status, {
     String? reason,
+    String? rejectedBy,
+    String? cancellationReason,
+    String? statusBeforeCancellation,
     DateTime? deliveredAt,
     DateTime? confirmedAt,
+    DateTime? cancelledAt,
   }) async {
     try {
       final Map<String, dynamic> updates = {
@@ -210,8 +215,20 @@ class OrderRepository {
         'updatedAt': FieldValue.serverTimestamp(),
       };
       if (reason != null) updates['rejectionReason'] = reason;
+      if (rejectedBy != null && rejectedBy.trim().isNotEmpty) {
+        updates['rejectedBy'] = rejectedBy.trim().toLowerCase();
+      }
+      if (cancellationReason != null) {
+        updates['cancellationReason'] = cancellationReason;
+      }
+      if (statusBeforeCancellation != null) {
+        updates['statusBeforeCancellation'] = statusBeforeCancellation;
+      }
       if (deliveredAt != null) updates['deliveredAt'] = Timestamp.fromDate(deliveredAt);
       if (confirmedAt != null) updates['confirmedAt'] = Timestamp.fromDate(confirmedAt);
+      if (cancelledAt != null) {
+        updates['cancelledAt'] = Timestamp.fromDate(cancelledAt);
+      }
 
       await _db
           .collection('orders')
@@ -241,15 +258,124 @@ class OrderRepository {
       if (!doc.exists) throw AppException('Order not found');
       
       final data = doc.data() as Map<String, dynamic>;
-      final status = data['status'] as String;
+      final status = (data['status'] as String? ?? '').toLowerCase();
       
-      if (status != 'pending' && status != 'accepted' && status != 'pending_approval') {
+      if (status != 'pending' &&
+          status != 'accepted' &&
+          status != 'pending_approval') {
         throw AppException('Cannot cancel order in $status status');
       }
-      await updateStatus(orderId, companyId, 'cancelled');
+      await updateStatus(
+        orderId,
+        companyId,
+        'cancelled',
+        cancelledAt: DateTime.now(),
+      );
     } on FirebaseException catch (e) {
       throw AppException('Failed to cancel order: ${e.message}');
     }
+  }
+
+  /// CEO direct cancel before supplier commitment.
+  Future<void> cancelOrderDirect({
+    required String orderId,
+    required String companyId,
+  }) async {
+    final doc = await _db.collection('orders').doc(orderId).get();
+    if (!doc.exists) throw AppException('Order not found');
+    final status =
+        (doc.data()?['status'] as String? ?? '').toLowerCase();
+    if (status != AppConstants.statusPending &&
+        status != AppConstants.statusPendingApproval) {
+      throw AppException(
+        'Only pending orders can be cancelled directly. '
+        'Accepted orders require a cancellation request.',
+      );
+    }
+    await updateStatus(
+      orderId,
+      companyId,
+      AppConstants.statusCancelled,
+      cancelledAt: DateTime.now(),
+    );
+  }
+
+  /// CEO requests cancel after supplier has accepted.
+  Future<void> requestOrderCancellation({
+    required String orderId,
+    required String companyId,
+    required String reason,
+  }) async {
+    final trimmed = reason.trim();
+    if (trimmed.isEmpty) {
+      throw AppException('A cancellation reason is required.');
+    }
+    final doc = await _db.collection('orders').doc(orderId).get();
+    if (!doc.exists) throw AppException('Order not found');
+    final data = doc.data()!;
+    final status = (data['status'] as String? ?? '').toLowerCase();
+    final normalized = status.replaceAll('_', '');
+    if (status != AppConstants.statusAccepted &&
+        normalized != 'inprogress' &&
+        status != AppConstants.statusInProgress) {
+      throw AppException(
+        'Cancellation requests are only for accepted orders.',
+      );
+    }
+    await updateStatus(
+      orderId,
+      companyId,
+      AppConstants.statusCancellationRequested,
+      cancellationReason: trimmed,
+      statusBeforeCancellation: status,
+    );
+  }
+
+  /// Supplier accepts CEO cancellation request → fully cancelled.
+  Future<void> acceptCancellationRequest({
+    required String orderId,
+    required String companyId,
+  }) async {
+    final doc = await _db.collection('orders').doc(orderId).get();
+    if (!doc.exists) throw AppException('Order not found');
+    final status =
+        (doc.data()?['status'] as String? ?? '').toLowerCase();
+    if (status != AppConstants.statusCancellationRequested) {
+      throw AppException('No cancellation request pending for this order.');
+    }
+    await updateStatus(
+      orderId,
+      companyId,
+      AppConstants.statusCancelled,
+      cancelledAt: DateTime.now(),
+    );
+  }
+
+  /// Supplier declines cancellation → restore prior status.
+  Future<void> rejectCancellationRequest({
+    required String orderId,
+    required String companyId,
+    String? responseReason,
+  }) async {
+    final doc = await _db.collection('orders').doc(orderId).get();
+    if (!doc.exists) throw AppException('Order not found');
+    final data = doc.data()!;
+    final status = (data['status'] as String? ?? '').toLowerCase();
+    if (status != AppConstants.statusCancellationRequested) {
+      throw AppException('No cancellation request pending for this order.');
+    }
+    final previous = (data['statusBeforeCancellation'] as String?)?.trim();
+    final restore = (previous != null && previous.isNotEmpty)
+        ? previous
+        : AppConstants.statusAccepted;
+    await updateStatus(
+      orderId,
+      companyId,
+      restore,
+      cancellationReason: responseReason?.trim().isNotEmpty == true
+          ? responseReason!.trim()
+          : (data['cancellationReason'] as String?),
+    );
   }
 
   Future<bool> hasRatingForOrder(String orderId, String companyId) async {

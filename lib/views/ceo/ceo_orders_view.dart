@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
+import '../../constants/app_constants.dart';
 import '../../constants/route_names.dart';
 import '../../theme/ceo_theme.dart';
 import '../../utils/app_navigation.dart';
@@ -224,7 +225,12 @@ class _CeoOrdersViewState extends State<CeoOrdersView>
 
   Widget _orderCard(
       BuildContext context, CeoViewModel vm, OrderModel order, bool isSelected) {
-    final canCancel = order.status == 'pending' || order.status == 'accepted';
+    final status = order.status.toLowerCase();
+    final canDirectCancel = status == 'pending' || status == 'pending_approval';
+    final canRequestCancel = status == 'accepted' ||
+        status == 'inprogress' ||
+        status == AppConstants.statusInProgress.toLowerCase();
+    final canCancel = canDirectCancel || canRequestCancel;
     final awaitingApproval = isCeoAwaitingApproval(order.status);
 
     return GestureDetector(
@@ -360,7 +366,16 @@ class _CeoOrdersViewState extends State<CeoOrdersView>
                     const SizedBox(width: 12),
                     Expanded(
                       child: ElevatedButton.icon(
-                        onPressed: () => vm.approveOrder(order),
+                        onPressed: () async {
+                          await vm.approveOrder(order);
+                          if (!context.mounted) return;
+                          final msg = vm.errorMessage ?? vm.successMessage;
+                          if (msg != null && msg.isNotEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text(msg)),
+                            );
+                          }
+                        },
                         icon: const Icon(Icons.check_rounded, size: 18),
                         label: const Text('Approve'),
                         style: CeoTheme.primaryButtonStyle(height: 44),
@@ -376,10 +391,12 @@ class _CeoOrdersViewState extends State<CeoOrdersView>
                 Align(
                   alignment: Alignment.centerRight,
                   child: TextButton.icon(
-                    onPressed: () => _confirmCancel(context, vm, order),
+                    onPressed: () => canRequestCancel
+                        ? _confirmCancelRequest(context, vm, order)
+                        : _confirmCancel(context, vm, order),
                     icon: const Icon(Icons.cancel_outlined, size: 16, color: CeoColors.red),
                     label: Text(
-                      'Cancel Order',
+                      canRequestCancel ? 'Request Cancellation' : 'Cancel Order',
                       style: GoogleFonts.plusJakartaSans(
                         color: CeoColors.red,
                         fontWeight: FontWeight.w700,
@@ -466,20 +483,109 @@ class _CeoOrdersViewState extends State<CeoOrdersView>
         ),
         content: Text(
             'Are you sure you want to cancel order #${order.id}? '
-            'This action cannot be undone.'),
+            'The supplier has not accepted it yet.'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx),
               child: const Text('No, keep it')),
           OutlinedButton.icon(
             style: CeoTheme.destructiveButtonStyle(height: 40),
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(ctx);
-              vm.cancelOrder(order.id,
-                  context.read<AuthViewModel>().companyId ?? '');
+              final companyId = vm.company?.id ??
+                  context.read<AuthViewModel>().companyId ??
+                  order.companyId;
+              await vm.cancelOrder(
+                order.id,
+                companyId,
+                order: order,
+              );
+              if (!context.mounted) return;
+              final msg = vm.errorMessage ?? vm.successMessage;
+              if (msg != null && msg.isNotEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(msg)),
+                );
+              }
             },
             icon: const Icon(Icons.check_rounded, size: 18),
             label: const Text('Yes, cancel'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmCancelRequest(
+      BuildContext context, CeoViewModel vm, OrderModel order) {
+    final reasonController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.warning_rounded, color: CeoColors.amber),
+            const SizedBox(width: 10),
+            const Expanded(child: Text('Request cancellation?')),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'The supplier has already accepted this order. '
+              'Enter a reason — they must approve the cancellation.',
+              style: CeoTheme.mutedStyle(size: 13),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: reasonController,
+              decoration: CeoTheme.inputDecoration(
+                labelText: 'Cancellation reason (required)',
+                hintText: 'e.g. Project delayed, wrong quantity...',
+              ),
+              maxLines: 3,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Keep order'),
+          ),
+          OutlinedButton.icon(
+            style: CeoTheme.destructiveButtonStyle(height: 40),
+            onPressed: () async {
+              final reason = reasonController.text.trim();
+              if (reason.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Please enter a cancellation reason.'),
+                  ),
+                );
+                return;
+              }
+              Navigator.pop(ctx);
+              final companyId = vm.company?.id ??
+                  context.read<AuthViewModel>().companyId ??
+                  order.companyId;
+              await vm.cancelOrder(
+                order.id,
+                companyId,
+                reason: reason,
+                order: order,
+              );
+              if (!context.mounted) return;
+              final msg = vm.errorMessage ?? vm.successMessage;
+              if (msg != null && msg.isNotEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(msg)),
+                );
+              }
+            },
+            icon: const Icon(Icons.send_rounded, size: 18),
+            label: const Text('Send request'),
           ),
         ],
       ),

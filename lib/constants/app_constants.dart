@@ -67,6 +67,7 @@ class AppConstants {
   static const String statusConfirmed = 'confirmed';
   static const String statusRejected = 'rejected';
   static const String statusCancelled = 'cancelled';
+  static const String statusCancellationRequested = 'cancellation_requested';
 
   // Material categories
   static const List<String> defaultCategories = [

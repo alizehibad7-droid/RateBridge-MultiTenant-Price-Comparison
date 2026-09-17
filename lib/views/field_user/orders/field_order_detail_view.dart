@@ -323,7 +323,12 @@ class _FieldOrderDetailViewState extends State<FieldOrderDetailView> {
         FieldSpacing.xxl,
       ),
       children: [
-        OrderStatusStepperWidget(status: order.status),
+        OrderStatusStepperWidget(
+          status: order.status,
+          rejectionReason:
+              order.cancellationReason ?? order.rejectionReason,
+          rejectedBy: order.resolvedRejectedBy,
+        ),
         const SizedBox(height: FieldSpacing.lg),
         Container(
           width: double.infinity,

@@ -58,11 +58,12 @@ class _SupplierNotificationsViewState extends State<SupplierNotificationsView> {
     }
 
     final vm = context.read<NotificationViewModel>();
-    final uid = vm.uid;
-    if (uid == null) return;
+    final authUid = context.read<AuthViewModel>().user?.uid;
+    final uid = vm.uid ?? authUid;
 
-    if (!notification.isRead) {
-      await vm.markAsRead(uid, notification.notifId);
+    if (!notification.isRead && notification.notifId.isNotEmpty) {
+      // markAsRead takes notifId first (uid optional / unused).
+      await vm.markAsRead(notification.notifId, uid);
     }
 
     if (!mounted) return;

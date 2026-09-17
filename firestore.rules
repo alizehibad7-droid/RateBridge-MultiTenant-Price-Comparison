@@ -31,6 +31,36 @@ service cloud.firestore {
       return signedIn() && currentRole() == 'ceo';
     }
 
+    function normalizedRole(role) {
+      return role is string
+        ? role.lower().replace('_', '').replace(' ', '')
+        : '';
+    }
+
+    // CEO may only touch status lifecycle fields on field users in their company.
+    function ceoFieldUserStatusKeysOnly() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasOnly(['status', 'approved', 'approvedAt', 'rejectionReason']);
+    }
+
+    function ceoUpdatingOwnCompanyFieldUser() {
+      let ceo = currentUser();
+      let target = resource.data;
+      let after = request.resource.data;
+      return isCeo()
+        && 'companyId' in ceo
+        && ceo.companyId is string
+        && ceo.companyId.size() > 0
+        && 'companyId' in target
+        && target.companyId == ceo.companyId
+        && 'role' in target
+        && normalizedRole(target.role) == 'fielduser'
+        && (!('uid' in target) || after.uid == target.uid)
+        && after.role == target.role
+        && after.companyId == target.companyId
+        && ceoFieldUserStatusKeysOnly();
+    }
+
     function isValidAuditLog() {
       let d = request.resource.data;
       return d.actorId == request.auth.uid
@@ -67,7 +97,8 @@ service cloud.firestore {
           && (!('uid' in resource.data) || request.resource.data.uid == resource.data.uid)
           && (!('role' in resource.data) || request.resource.data.role == resource.data.role)
           && (!('companyId' in resource.data) || request.resource.data.companyId == resource.data.companyId)
-        );
+        )
+        || ceoUpdatingOwnCompanyFieldUser();
       allow delete: if isAdmin() || (signedIn() && request.auth.uid == userId);
     }
 
@@ -85,8 +116,10 @@ service cloud.firestore {
     }
 
     // Explicitly allow reading/writing to company subcollections if signed in.
+    // Nested orders are handled by the dedicated /orders rules + collection-group
+    // style path below — keep other company subcollections open for signed-in users.
     match /companies/{companyId}/{subcollection}/{document=**} {
-      allow read, write: if signedIn();
+      allow read, write: if signedIn() && subcollection != 'orders';
     }
 
     match /rfqs/{rfqId} {
@@ -218,14 +251,86 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
-    match /{path=**}/orders/{orderId} {
+    function orderStatusUpdateKeysOnly() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasOnly([
+          'status',
+          'updatedAt',
+          'rejectionReason',
+          'rejectedBy',
+          'cancellationReason',
+          'statusBeforeCancellation',
+          'cancelledAt',
+          'deliveredAt',
+          'confirmedAt',
+          'commissionDeducted',
+          'paymentProofUrl',
+          'paymentStatus',
+          'deletedBy',
+          'hiddenBy'
+        ]);
+    }
+
+    function orderBelongsToCeoCompany() {
+      let ceo = currentUser();
+      return isCeo()
+        && 'companyId' in ceo
+        && ceo.companyId is string
+        && ceo.companyId.size() > 0
+        && 'companyId' in resource.data
+        && resource.data.companyId == ceo.companyId
+        && request.resource.data.companyId == resource.data.companyId;
+    }
+
+    function orderAssignedToSupplier() {
+      return signedIn()
+        && currentRole() == 'supplier'
+        && (
+          ('supplierId' in resource.data && resource.data.supplierId == request.auth.uid)
+          || ('supplierUid' in resource.data && resource.data.supplierUid == request.auth.uid)
+        )
+        && request.resource.data.companyId == resource.data.companyId;
+    }
+
+    function orderOwnedByFieldUser() {
+      return signedIn()
+        && currentRole() == 'fielduser'
+        && 'fieldUserUid' in resource.data
+        && resource.data.fieldUserUid == request.auth.uid
+        && request.resource.data.companyId == resource.data.companyId;
+    }
+
+    match /orders/{orderId} {
       allow read: if signedIn();
+      allow create: if signedIn();
+      allow update: if isAdmin()
+        || (orderBelongsToCeoCompany() && orderStatusUpdateKeysOnly())
+        || (orderAssignedToSupplier() && orderStatusUpdateKeysOnly())
+        || (orderOwnedByFieldUser() && orderStatusUpdateKeysOnly());
+      allow delete: if isAdmin();
+    }
+
+    // Nested company order copies (legacy) — same company/role checks.
+    match /companies/{companyId}/orders/{orderId} {
+      allow read: if signedIn();
+      allow create: if signedIn();
+      allow update: if isAdmin()
+        || (
+          isCeo()
+          && 'companyId' in currentUser()
+          && currentUser().companyId == companyId
+          && orderStatusUpdateKeysOnly()
+        )
+        || (orderAssignedToSupplier() && orderStatusUpdateKeysOnly())
+        || (orderOwnedByFieldUser() && orderStatusUpdateKeysOnly());
+      allow delete: if isAdmin();
     }
 
     match /{collection}/{document=**} {
       allow read, write: if signedIn()
         && collection != 'users'
         && collection != 'companies'
+        && collection != 'orders'
         && collection != 'rfqs'
         && collection != 'disputes'
         && collection != 'audit_logs'

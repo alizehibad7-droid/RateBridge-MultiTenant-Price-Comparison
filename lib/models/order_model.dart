@@ -19,8 +19,14 @@ class OrderModel {
   final String deliveryAddress;
   final String? siteLocation; 
   final String? notes;
-  final String status; // pending|accepted|delivered|confirmed|rejected|cancelled
+  final String status; // pending|accepted|delivered|confirmed|rejected|cancelled|cancellation_requested
   final String? rejectionReason;
+  /// Who rejected the order: `ceo` | `supplier` (null on legacy docs).
+  final String? rejectedBy;
+  /// CEO reason when requesting cancel after supplier accepted.
+  final String? cancellationReason;
+  /// Status to restore if supplier declines a cancellation request.
+  final String? statusBeforeCancellation;
   final DateTime createdAt;
   final DateTime updatedAt;
   final DateTime? requiredDate; 
@@ -53,6 +59,9 @@ class OrderModel {
     this.notes,
     required this.status,
     this.rejectionReason,
+    this.rejectedBy,
+    this.cancellationReason,
+    this.statusBeforeCancellation,
     required this.createdAt,
     required this.updatedAt,
     this.requiredDate,
@@ -67,6 +76,21 @@ class OrderModel {
 
   String get id => orderId;
   List<String> get hiddenBy => deletedBy;
+
+  /// Resolves who rejected for UI (uses [rejectedBy], with legacy reason fallback).
+  String? get resolvedRejectedBy {
+    final explicit = rejectedBy?.trim().toLowerCase();
+    if (explicit == 'ceo' || explicit == 'supplier') return explicit;
+
+    final reason = (rejectionReason ?? '').toLowerCase();
+    if (reason.contains('ceo') ||
+        reason.contains('company approval') ||
+        reason.contains('rejected by company')) {
+      return 'ceo';
+    }
+    if (reason.contains('supplier')) return 'supplier';
+    return null;
+  }
 
   factory OrderModel.fromMap(String id, Map<String, dynamic> map) => OrderModel(
     orderId: id,
@@ -89,6 +113,9 @@ class OrderModel {
     notes: map['notes'],
     status: map['status'] ?? 'pending',
     rejectionReason: map['rejectionReason'],
+    rejectedBy: map['rejectedBy'] as String?,
+    cancellationReason: map['cancellationReason'] as String?,
+    statusBeforeCancellation: map['statusBeforeCancellation'] as String?,
     createdAt: map['createdAt'] is Timestamp 
         ? (map['createdAt'] as Timestamp).toDate() 
         : DateTime.tryParse(map['createdAt']?.toString() ?? '') ?? DateTime.now(),
@@ -125,6 +152,10 @@ class OrderModel {
     'notes': notes,
     'status': status,
     'rejectionReason': rejectionReason,
+    if (rejectedBy != null) 'rejectedBy': rejectedBy,
+    if (cancellationReason != null) 'cancellationReason': cancellationReason,
+    if (statusBeforeCancellation != null)
+      'statusBeforeCancellation': statusBeforeCancellation,
     'createdAt': Timestamp.fromDate(createdAt),
     'updatedAt': Timestamp.fromDate(updatedAt),
     'requiredDate': requiredDate != null ? Timestamp.fromDate(requiredDate!) : null,
@@ -158,6 +189,9 @@ class OrderModel {
     String? notes,
     String? status,
     String? rejectionReason,
+    String? rejectedBy,
+    String? cancellationReason,
+    String? statusBeforeCancellation,
     DateTime? createdAt,
     DateTime? updatedAt,
     DateTime? requiredDate,
@@ -190,6 +224,10 @@ class OrderModel {
       notes: notes ?? this.notes,
       status: status ?? this.status,
       rejectionReason: rejectionReason ?? this.rejectionReason,
+      rejectedBy: rejectedBy ?? this.rejectedBy,
+      cancellationReason: cancellationReason ?? this.cancellationReason,
+      statusBeforeCancellation:
+          statusBeforeCancellation ?? this.statusBeforeCancellation,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       requiredDate: requiredDate ?? this.requiredDate,

@@ -143,6 +143,32 @@ class FirestoreService {
     return SupplierModel.fromMap({...data, 'id': doc.id});
   }
 
+  /// Finds a supplier document by email (exact, then lowercase fallback).
+  Future<SupplierModel?> getSupplierByEmail(String email) async {
+    final trimmed = email.trim();
+    if (trimmed.isEmpty) return null;
+
+    Future<SupplierModel?> queryExact(String value) async {
+      final snap = await _db
+          .collection('suppliers')
+          .where('email', isEqualTo: value)
+          .limit(1)
+          .get();
+      if (snap.docs.isEmpty) return null;
+      final doc = snap.docs.first;
+      return SupplierModel.fromMap({...doc.data(), 'id': doc.id});
+    }
+
+    final exact = await queryExact(trimmed);
+    if (exact != null) return exact;
+
+    final lower = trimmed.toLowerCase();
+    if (lower != trimmed) {
+      return queryExact(lower);
+    }
+    return null;
+  }
+
   // --- Materials ---
   Stream<List<MaterialModel>> streamMaterials() {
     return _db
@@ -525,59 +551,8 @@ class FirestoreService {
   String _normalizeMaterialName(String value) =>
       value.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
 
-  Set<String> _materialNameTokens(String normalizedName) => normalizedName
-      .split(' ')
-      .where((token) => token.length > 1)
-      .toSet();
-
-  /// True when [material] should appear in a compare for [queryName].
-  ///
-  /// Matches exact normalized name, or same category (+ grade/unit when set)
-  /// with product-equivalent names (e.g. brand variants of the same item).
-  bool _materialMatchesCompareQuery(
-    MaterialModel material,
-    String queryName, {
-    String? category,
-    String? qualityGrade,
-    String? unit,
-  }) {
-    final normalizedQuery = _normalizeMaterialName(queryName);
-    if (normalizedQuery.isEmpty) return false;
-
-    final normalizedName = _normalizeMaterialName(material.name);
-    if (normalizedName == normalizedQuery) return true;
-
-    final queryCategory = (category ?? '').trim().toLowerCase();
-    final materialCategory = material.category.trim().toLowerCase();
-    if (queryCategory.isEmpty || materialCategory != queryCategory) {
-      return false;
-    }
-
-    final queryGrade = (qualityGrade ?? '').trim().toLowerCase();
-    final materialGrade = material.qualityGrade.trim().toLowerCase();
-    if (queryGrade.isNotEmpty && materialGrade == queryGrade) {
-      final queryUnit = (unit ?? '').trim().toLowerCase();
-      final materialUnit = material.unit.trim().toLowerCase();
-      if (queryUnit.isEmpty || materialUnit == queryUnit) {
-        return true;
-      }
-    }
-
-    return _namesAreProductEquivalent(normalizedName, normalizedQuery);
-  }
-
-  bool _namesAreProductEquivalent(String a, String b) {
-    final tokensA = _materialNameTokens(a);
-    final tokensB = _materialNameTokens(b);
-    if (tokensA.isEmpty || tokensB.isEmpty) return false;
-
-    final overlap = tokensA.intersection(tokensB);
-    if (overlap.isEmpty) return false;
-
-    final smaller = tokensA.length <= tokensB.length ? tokensA : tokensB;
-    final required = (smaller.length * 0.6).ceil().clamp(1, smaller.length);
-    return overlap.length >= required;
-  }
+  String _normalizeCategory(String value) =>
+      value.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
 
   /// Materials matching [materialName] from suppliers linked to [companyId].
   Future<List<MaterialModel>> getCompanyMaterialsByName(
@@ -596,8 +571,11 @@ class FirestoreService {
     );
   }
 
-  /// Materials from company-linked suppliers whose name matches [name]
-  /// (exact), or the same category/grade/product-equivalent name for compare.
+  /// Materials from company-linked suppliers for compare / lookup.
+  ///
+  /// When [category] is provided, returns **all** listed materials in that
+  /// category (grade/brand/name are not used to filter).
+  /// When [category] is omitted, falls back to exact normalized name match.
   Future<List<MaterialModel>> getMaterialsByNameForCompany(
     String companyId,
     String name, {
@@ -606,7 +584,8 @@ class FirestoreService {
     String? unit,
   }) async {
     final nameLower = _normalizeMaterialName(name);
-    if (nameLower.isEmpty) return [];
+    final categoryKey = _normalizeCategory(category ?? '');
+    if (nameLower.isEmpty && categoryKey.isEmpty) return [];
 
     final supplierIds = await filterUnrestrictedSupplierIds(
       await getCompanyLinkedSupplierIds(companyId),
@@ -625,18 +604,17 @@ class FirestoreService {
     final matched = <MaterialModel>[];
     final seenIds = <String>{};
 
+    bool matches(MaterialModel material) {
+      if (!material.isListed) return false;
+      if (categoryKey.isNotEmpty) {
+        return _normalizeCategory(material.category) == categoryKey;
+      }
+      return _normalizeMaterialName(material.name) == nameLower;
+    }
+
     void addMatches(Iterable<MaterialModel> items) {
       for (final material in items) {
-        if (!material.isListed) continue;
-        if (!_materialMatchesCompareQuery(
-          material,
-          name,
-          category: category,
-          qualityGrade: qualityGrade,
-          unit: unit,
-        )) {
-          continue;
-        }
+        if (!matches(material)) continue;
         if (seenIds.add(material.id)) {
           matched.add(material);
         }

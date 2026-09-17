@@ -186,11 +186,20 @@ void navigateForSupplierNotification(
   NotificationModel notification,
 ) {
   final data = notification.data;
-  final orderId = _dataString(data, 'orderId');
+  final relatedCollection =
+      (_dataString(data, 'relatedCollection') ?? '').toLowerCase();
+  final orderId = _dataString(data, 'orderId') ??
+      (relatedCollection == 'orders' ? _dataString(data, 'relatedId') : null);
+  final companyId = _dataString(data, 'companyId') ?? notification.companyId;
+
+  void softFail([String message = 'This notification has no linked screen.']) {
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
 
   if (_notifContains(notification, 'chat')) {
     final chatId = _dataString(data, 'chatId');
-    final companyId = _dataString(data, 'companyId') ?? '';
     final fieldUserId = _dataString(data, 'fieldUserId') ?? '';
     final fieldUserName = _dataString(data, 'fieldUserName') ?? 'Field User';
     final supplierId =
@@ -200,7 +209,7 @@ void navigateForSupplierNotification(
         RouteNames.supplierChatThread.replaceFirst(':orderId', chatId),
         extra: ChatThreadModel(
           chatId: chatId,
-          companyId: companyId,
+          companyId: companyId ?? '',
           fieldUserId: fieldUserId,
           supplierId: supplierId,
           fieldUserName: fieldUserName,
@@ -222,7 +231,16 @@ void navigateForSupplierNotification(
       context.push('${RouteNames.supplierMyCompanies}?tab=1');
       return;
     }
-    context.push(RouteNames.supplierMyCompanies);
+    // Accepted / declined / removed → partnerships hub (Active tab).
+    final query = <String, String>{'tab': '0'};
+    if (companyId != null && companyId.isNotEmpty) {
+      query['companyId'] = companyId;
+    }
+    final uri = Uri(
+      path: RouteNames.supplierMyCompanies,
+      queryParameters: query,
+    );
+    context.push(uri.toString());
     return;
   }
 
@@ -243,11 +261,15 @@ void navigateForSupplierNotification(
   }
 
   if (_notifContains(notification, 'rfq')) {
-    if (_isAwardedRfq(notification) || orderId != null) {
-      context.push(RouteNames.supplierOrders);
+    if (_isAwardedRfq(notification)) {
+      if (orderId != null) {
+        context.push('${RouteNames.supplierOrders}?orderId=$orderId');
+      } else {
+        context.push(RouteNames.supplierOrders);
+      }
       return;
     }
-    final rfqId = _dataString(data, 'rfqId');
+    final rfqId = _dataString(data, 'rfqId') ?? _dataString(data, 'relatedId');
     if (rfqId != null) {
       context.push(RouteNames.supplierSubmitBid.replaceFirst(':rfqId', rfqId));
       return;
@@ -256,14 +278,48 @@ void navigateForSupplierNotification(
     return;
   }
 
-  if (orderId != null ||
+  final isOrderNotif = orderId != null ||
       _notifContains(notification, 'order') ||
-      _notifContains(notification, 'delivery')) {
-    context.push(RouteNames.supplierOrders);
+      _notifContains(notification, 'delivery') ||
+      _notifContains(notification, 'cancel') ||
+      notification.type.toLowerCase().contains('order');
+
+  if (isOrderNotif) {
+    if (orderId == null) {
+      softFail('Order details are unavailable for this notification.');
+      context.push(RouteNames.supplierOrders);
+      return;
+    }
+    final status = (_dataString(data, 'status') ?? '').toLowerCase();
+    final tab = _supplierOrdersTabForStatus(status);
+    final uri = Uri(
+      path: RouteNames.supplierOrders,
+      queryParameters: {
+        'orderId': orderId,
+        if (tab != null) 'tab': '$tab',
+        if (companyId != null && companyId.isNotEmpty) 'companyId': companyId,
+      },
+    );
+    context.push(uri.toString());
     return;
   }
 
+  softFail();
   context.push(RouteNames.supplierDashboard);
+}
+
+int? _supplierOrdersTabForStatus(String status) {
+  final s = status.replaceAll('_', '');
+  if (s == 'pending' || s == 'pendingapproval') return 0;
+  if (s == 'accepted' ||
+      s == 'inprogress' ||
+      s == 'cancellationrequested') {
+    return 1;
+  }
+  if (s == 'delivered') return 2;
+  if (s == 'confirmed') return 3;
+  if (s == 'rejected' || s == 'cancelled') return 4;
+  return null;
 }
 
 void navigateForCeoNotification(

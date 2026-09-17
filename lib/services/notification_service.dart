@@ -4,6 +4,7 @@ import '../constants/app_constants.dart';
 import '../models/notification_model.dart';
 import '../models/user_model.dart';
 import '../repositories/notification_repository.dart';
+import '../utils/app_exception.dart';
 
 /// Central helper for creating in-app notifications in the top-level 'notifications' collection.
 /// FCM pushes are triggered server-side via Cloud Functions when these docs are created.
@@ -34,7 +35,12 @@ class NotificationService {
     String? companyId,
     Map<String, dynamic> data = const {},
   }) async {
-    final id = '${recipientUserId}_${DateTime.now().microsecondsSinceEpoch}';
+    final recipient = recipientUserId.trim();
+    if (recipient.isEmpty) {
+      throw AppException('Cannot create notification: missing recipient.');
+    }
+
+    final id = '${recipient}_${DateTime.now().microsecondsSinceEpoch}';
     
     // Ensure data contains useful info for navigation
     final extendedData = Map<String, dynamic>.from(data);
@@ -44,7 +50,7 @@ class NotificationService {
     await _repo.createNotification(
       NotificationModel(
         notifId: id,
-        recipientUserId: recipientUserId,
+        recipientUserId: recipient,
         recipientRole: recipientRole,
         type: type,
         title: title,
@@ -212,6 +218,37 @@ class NotificationService {
     );
   }
 
+  /// Fired when a CEO approves a pending_approval order for the supplier.
+  Future<void> notifyOrderApprovedByCeo({
+    required String supplierId,
+    required String orderId,
+    required String companyId,
+    required String materialName,
+    required String fieldUserName,
+    String? companyName,
+  }) async {
+    final company = (companyName != null && companyName.trim().isNotEmpty)
+        ? companyName.trim()
+        : 'A company';
+    await _create(
+      recipientUserId: supplierId,
+      recipientRole: 'Supplier',
+      type: typeNewOrder,
+      title: 'New order received',
+      message:
+          '$company approved an order for $materialName from $fieldUserName. Review and accept.',
+      companyId: companyId,
+      data: {
+        'orderId': orderId,
+        'status': 'pending',
+        'event': 'ceo_approved',
+        'relatedId': orderId,
+        'relatedCollection': 'orders',
+        'fieldUserName': fieldUserName,
+      },
+    );
+  }
+
   Future<void> notifyDeliveryConfirmed({
     required String supplierId,
     required String orderId,
@@ -252,6 +289,84 @@ class NotificationService {
       data: {
         'orderId': orderId,
         'status': 'cancelled',
+        'relatedId': orderId,
+        'relatedCollection': 'orders',
+      },
+    );
+  }
+
+  Future<void> notifyCancellationRequested({
+    required String supplierId,
+    required String orderId,
+    required String companyId,
+    required String materialName,
+    required String companyName,
+    required String reason,
+  }) async {
+    await _create(
+      recipientUserId: supplierId,
+      recipientRole: 'Supplier',
+      type: typeOrderUpdate,
+      title: 'Cancellation requested',
+      message:
+          '$companyName requested cancellation of $materialName. Reason: $reason',
+      companyId: companyId,
+      data: {
+        'orderId': orderId,
+        'status': AppConstants.statusCancellationRequested,
+        'relatedId': orderId,
+        'relatedCollection': 'orders',
+        'cancellationReason': reason,
+      },
+    );
+  }
+
+  Future<void> notifyCancellationAccepted({
+    required String ceoUid,
+    required String orderId,
+    required String companyId,
+    required String materialName,
+    required String supplierName,
+  }) async {
+    if (ceoUid.isEmpty) return;
+    await _create(
+      recipientUserId: ceoUid,
+      recipientRole: 'CEO',
+      type: typeOrderUpdate,
+      title: 'Cancellation accepted',
+      message: '$supplierName accepted cancellation of $materialName.',
+      companyId: companyId,
+      data: {
+        'orderId': orderId,
+        'status': AppConstants.statusCancelled,
+        'relatedId': orderId,
+        'relatedCollection': 'orders',
+      },
+    );
+  }
+
+  Future<void> notifyCancellationDeclined({
+    required String ceoUid,
+    required String orderId,
+    required String companyId,
+    required String materialName,
+    required String supplierName,
+    String? reason,
+  }) async {
+    if (ceoUid.isEmpty) return;
+    final reasonText =
+        (reason != null && reason.trim().isNotEmpty) ? ' Reason: ${reason.trim()}' : '';
+    await _create(
+      recipientUserId: ceoUid,
+      recipientRole: 'CEO',
+      type: typeOrderUpdate,
+      title: 'Cancellation declined',
+      message:
+          '$supplierName declined cancellation of $materialName.$reasonText',
+      companyId: companyId,
+      data: {
+        'orderId': orderId,
+        'status': 'cancellation_declined',
         'relatedId': orderId,
         'relatedCollection': 'orders',
       },
@@ -471,6 +586,9 @@ class NotificationService {
       data: {
         'event': 'accepted',
         'senderName': senderName,
+        'companyId': companyId,
+        'relatedId': companyId,
+        'relatedCollection': 'companies',
       },
     );
   }

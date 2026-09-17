@@ -20,8 +20,15 @@ import '../../widgets/supplier/supplier_async_states.dart';
 
 class SupplierOrdersView extends StatefulWidget {
   final int initialTabIndex;
+  final String? initialOrderId;
+  final String? initialCompanyId;
 
-  const SupplierOrdersView({super.key, this.initialTabIndex = 0});
+  const SupplierOrdersView({
+    super.key,
+    this.initialTabIndex = 0,
+    this.initialOrderId,
+    this.initialCompanyId,
+  });
 
   @override
   State<SupplierOrdersView> createState() => _SupplierOrdersViewState();
@@ -40,6 +47,8 @@ class _SupplierOrdersViewState extends State<SupplierOrdersView>
 
   bool _isSelectionMode = false;
   final Set<String> _selectedOrderIds = {};
+  bool _openedInitialOrder = false;
+  int _initialOrderAttempts = 0;
 
   @override
   void initState() {
@@ -53,10 +62,17 @@ class _SupplierOrdersViewState extends State<SupplierOrdersView>
     _tabController.addListener(_handleTabChange);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final vm = context.read<SupplierViewModel>();
-      final companyId = vm.selectedCompanyId;
-      if (companyId != null) {
+      final preferredCompany = widget.initialCompanyId?.trim();
+      if (preferredCompany != null && preferredCompany.isNotEmpty) {
+        vm.switchCompany(preferredCompany);
+      }
+      final companyId = preferredCompany?.isNotEmpty == true
+          ? preferredCompany
+          : vm.selectedCompanyId;
+      if (companyId != null && companyId.isNotEmpty) {
         vm.loadOrders(companyId, null);
       }
+      _tryOpenInitialOrder();
     });
   }
 
@@ -67,6 +83,58 @@ class _SupplierOrdersViewState extends State<SupplierOrdersView>
         _selectedOrderIds.clear();
       });
     }
+  }
+
+  void _tryOpenInitialOrder() {
+    final targetId = widget.initialOrderId?.trim() ?? '';
+    if (_openedInitialOrder || targetId.isEmpty || !mounted) return;
+
+    final vm = context.read<SupplierViewModel>();
+    OrderModel? match;
+    for (final order in vm.orders) {
+      if (order.orderId == targetId) {
+        match = order;
+        break;
+      }
+    }
+
+    if (match == null) {
+      _initialOrderAttempts++;
+      if (_initialOrderAttempts < 20) {
+        Future<void>.delayed(const Duration(milliseconds: 250), () {
+          if (mounted) _tryOpenInitialOrder();
+        });
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not find that order. It may have been removed.'),
+          ),
+        );
+      }
+      return;
+    }
+
+    _openedInitialOrder = true;
+    final tab = _tabIndexForOrderStatus(match.status);
+    if (tab != null && _tabController.index != tab) {
+      _tabController.index = tab;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _showOrderDetail(vm, match!);
+    });
+  }
+
+  int? _tabIndexForOrderStatus(String status) {
+    final s = status.toLowerCase().replaceAll('_', '');
+    if (s == 'pending' || s == 'pendingapproval') return 0;
+    if (s == 'accepted' || s == 'inprogress' || s == 'cancellationrequested') {
+      return 1;
+    }
+    if (s == 'delivered') return 2;
+    if (s == 'confirmed') return 3;
+    if (s == 'rejected' || s == 'cancelled') return 4;
+    return null;
   }
 
   @override
@@ -182,7 +250,9 @@ class _SupplierOrdersViewState extends State<SupplierOrdersView>
         case 'Pending':
           return status == 'pending' || status == 'pending_approval';
         case 'Accepted':
-          return status == 'accepted' || status == 'inprogress';
+          return status == 'accepted' ||
+              status == 'inprogress' ||
+              status == 'cancellation_requested';
         case 'Delivered':
           return status == 'delivered';
         case 'Confirmed':
@@ -429,19 +499,73 @@ class _SupplierOrdersViewState extends State<SupplierOrdersView>
               ],
               if (tab == 'Accepted') ...[
                 const Divider(height: 1),
-                Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: () => _confirmDelivered(viewModel, order),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: FieldColors.statusSuccess,
+                if (order.status.toLowerCase() == 'cancellation_requested')
+                  Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if ((order.cancellationReason ?? '')
+                            .trim()
+                            .isNotEmpty) ...[
+                          Text(
+                            'Cancellation reason: ${order.cancellationReason}',
+                            style: AppTextStyles.caption.copyWith(
+                              color: FieldColors.statusDanger,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                        ],
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: () =>
+                                    _showDeclineCancellationDialog(
+                                  viewModel,
+                                  order,
+                                ),
+                                style: OutlinedButton.styleFrom(
+                                  side: const BorderSide(
+                                    color: FieldColors.primaryNavy,
+                                  ),
+                                  foregroundColor: FieldColors.primaryNavy,
+                                ),
+                                child: const Text('KEEP ORDER'),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: ElevatedButton(
+                                onPressed: () => _confirmAcceptCancellation(
+                                  viewModel,
+                                  order,
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: FieldColors.statusDanger,
+                                ),
+                                child: const Text('ACCEPT CANCEL'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  )
+                else
+                  Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: () => _confirmDelivered(viewModel, order),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: FieldColors.statusSuccess,
+                        ),
+                        child: const Text('MARK AS DELIVERED'),
                       ),
-                      child: const Text('MARK AS DELIVERED'),
                     ),
                   ),
-                ),
               ],
             ],
           ],
@@ -767,6 +891,75 @@ class _SupplierOrdersViewState extends State<SupplierOrdersView>
                   backgroundColor: FieldColors.statusSuccess,
                 ),
                 child: const Text('CONFIRM'),
+              ),
+            ],
+          ),
+    );
+  }
+
+  void _confirmAcceptCancellation(
+    SupplierViewModel viewModel,
+    OrderModel order,
+  ) {
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Accept cancellation?'),
+            content: const Text(
+              'This will cancel the order permanently. The company will be notified.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('BACK'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  Navigator.pop(context);
+                  await viewModel.acceptCancellationRequest(order);
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: FieldColors.statusDanger,
+                ),
+                child: const Text('ACCEPT CANCEL'),
+              ),
+            ],
+          ),
+    );
+  }
+
+  void _showDeclineCancellationDialog(
+    SupplierViewModel viewModel,
+    OrderModel order,
+  ) {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Keep this order?'),
+            content: TextField(
+              controller: controller,
+              decoration: const InputDecoration(
+                hintText: 'Optional: why you cannot cancel',
+              ),
+              maxLines: 3,
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('BACK'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  Navigator.pop(context);
+                  await viewModel.declineCancellationRequest(
+                    order,
+                    reason: controller.text,
+                  );
+                },
+                child: const Text('KEEP ORDER'),
               ),
             ],
           ),

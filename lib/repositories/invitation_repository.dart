@@ -130,4 +130,28 @@ class InvitationRepository {
       throw AppException('Failed to create supplier invitation: ${e.message}');
     }
   }
+
+  /// True when this company already has a pending supplier invite for [email].
+  Future<bool> hasPendingSupplierInvite({
+    required String companyId,
+    required String email,
+  }) async {
+    final trimmed = email.trim();
+    if (companyId.isEmpty || trimmed.isEmpty) return false;
+    try {
+      final snap = await _db
+          .collection(FirestorePaths.invitationsCol)
+          .where('companyId', isEqualTo: companyId)
+          .where('role', isEqualTo: 'supplier')
+          .where('status', isEqualTo: 'pending')
+          .get();
+      final lower = trimmed.toLowerCase();
+      return snap.docs.any((doc) {
+        final stored = (doc.data()['email'] as String?)?.trim().toLowerCase() ?? '';
+        return stored == lower;
+      });
+    } on FirebaseException catch (e) {
+      throw AppException('Failed to check pending invites: ${e.message}');
+    }
+  }
 }

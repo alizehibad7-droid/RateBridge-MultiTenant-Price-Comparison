@@ -582,7 +582,15 @@ class _RateBridgeAppState extends State<RateBridgeApp> {
           builder: (context, state) {
             final tab =
                 int.tryParse(state.uri.queryParameters['tab'] ?? '') ?? 0;
-            return SupplierTheme.wrap(SupplierOrdersView(initialTabIndex: tab));
+            final orderId = state.uri.queryParameters['orderId'];
+            final companyId = state.uri.queryParameters['companyId'];
+            return SupplierTheme.wrap(
+              SupplierOrdersView(
+                initialTabIndex: tab,
+                initialOrderId: orderId,
+                initialCompanyId: companyId,
+              ),
+            );
           },
         ),
         GoRoute(

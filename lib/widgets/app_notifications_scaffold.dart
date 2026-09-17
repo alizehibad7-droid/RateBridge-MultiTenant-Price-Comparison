@@ -68,10 +68,9 @@ class _AppNotificationsScaffoldState extends State<AppNotificationsScaffold> {
 
     final vm = context.read<NotificationViewModel>();
     final uid = vm.uid;
-    if (uid == null) return;
 
-    if (!notification.isRead) {
-      await vm.markAsRead(uid, notification.notifId);
+    if (!notification.isRead && notification.notifId.isNotEmpty) {
+      await vm.markAsRead(notification.notifId, uid);
     }
     if (!context.mounted) return;
     widget.onNotificationTap(context, notification);

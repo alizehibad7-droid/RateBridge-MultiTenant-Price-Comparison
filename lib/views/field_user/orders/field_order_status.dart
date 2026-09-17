@@ -23,7 +23,8 @@ class FieldOrderStatus {
     return s == 'delivered' ||
         s == 'confirmed' ||
         s == 'cancelled' ||
-        s == 'rejected';
+        s == 'rejected' ||
+        s == 'cancellationrequested';
   }
 
   static bool canCancel(String status) {
@@ -45,7 +46,11 @@ class FieldOrderStatus {
   static int stepIndex(String status) {
     final s = normalize(status);
     if (s == 'pendingapproval' || s == 'pending') return 0;
-    if (s == 'accepted' || s == 'inprogress') return 1;
+    if (s == 'accepted' ||
+        s == 'inprogress' ||
+        s == 'cancellationrequested') {
+      return 1;
+    }
     if (s == 'delivered') return 2;
     if (s == 'confirmed') return 3;
     return -1;
@@ -60,6 +65,8 @@ class FieldOrderStatus {
       case 'accepted':
       case 'inprogress':
         return 'Accepted';
+      case 'cancellationrequested':
+        return 'Cancellation Requested';
       case 'delivered':
         return 'Delivered';
       case 'confirmed':

@@ -16,6 +16,7 @@ class CeoStatusBadge extends StatelessWidget {
   String get _label {
     final normalized = status.toLowerCase().replaceAll('_', '');
     if (normalized == 'pendingapproval') return 'Awaiting Review';
+    if (normalized == 'cancellationrequested') return 'Cancel Requested';
     if (status.isEmpty) return status;
     return status
         .split('_')

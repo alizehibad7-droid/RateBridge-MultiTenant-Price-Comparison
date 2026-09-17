@@ -6,8 +6,15 @@ import '../views/field_user/orders/field_order_status.dart';
 /// Horizontal progress stepper for field-user order statuses.
 class OrderStatusStepperWidget extends StatelessWidget {
   final String status;
+  final String? rejectionReason;
+  final String? rejectedBy;
 
-  const OrderStatusStepperWidget({super.key, required this.status});
+  const OrderStatusStepperWidget({
+    super.key,
+    required this.status,
+    this.rejectionReason,
+    this.rejectedBy,
+  });
 
   static const _steps = [
     'Placed',
@@ -38,9 +45,24 @@ class OrderStatusStepperWidget extends StatelessWidget {
           if (isTerminal) ...[
             const SizedBox(height: FieldSpacing.md),
             Text(
-              _terminalMessage(status),
+              _terminalMessage(
+                status: status,
+                rejectionReason: rejectionReason,
+                rejectedBy: rejectedBy,
+              ),
               style: FieldTypography.bodyMedium.copyWith(
                 color: FieldColors.statusDanger,
+              ),
+            ),
+          ] else if (FieldOrderStatus.normalize(status) ==
+              'cancellationrequested') ...[
+            const SizedBox(height: FieldSpacing.md),
+            Text(
+              rejectionReason != null && rejectionReason!.trim().isNotEmpty
+                  ? 'Cancellation requested. Reason: ${rejectionReason!.trim()}'
+                  : 'Cancellation requested — waiting for supplier response.',
+              style: FieldTypography.bodyMedium.copyWith(
+                color: FieldColors.statusWarning,
               ),
             ),
           ] else ...[
@@ -126,11 +148,53 @@ class OrderStatusStepperWidget extends StatelessWidget {
     );
   }
 
-  String _terminalMessage(String status) {
+  static String _terminalMessage({
+    required String status,
+    String? rejectionReason,
+    String? rejectedBy,
+  }) {
     if (FieldOrderStatus.normalize(status) == 'cancelled') {
       return 'This order was cancelled.';
     }
-    return 'This order was rejected by the supplier.';
+
+    final who = _resolveRejectedBy(
+      rejectedBy: rejectedBy,
+      rejectionReason: rejectionReason,
+    );
+    final base = switch (who) {
+      'ceo' => 'This order was rejected by your company (CEO).',
+      'supplier' => 'This order was rejected by the supplier.',
+      _ => 'This order was rejected.',
+    };
+
+    final reason = rejectionReason?.trim() ?? '';
+    if (reason.isEmpty) return base;
+
+    // Avoid duplicating the default CEO reason into a second sentence.
+    final normalizedReason = reason.toLowerCase();
+    if (normalizedReason == 'rejected by ceo' ||
+        normalizedReason == 'rejected by company approval' ||
+        normalizedReason == 'rejected by the supplier') {
+      return base;
+    }
+    return '$base\nReason: $reason';
+  }
+
+  static String? _resolveRejectedBy({
+    String? rejectedBy,
+    String? rejectionReason,
+  }) {
+    final explicit = rejectedBy?.trim().toLowerCase();
+    if (explicit == 'ceo' || explicit == 'supplier') return explicit;
+
+    final reason = (rejectionReason ?? '').toLowerCase();
+    if (reason.contains('ceo') ||
+        reason.contains('company approval') ||
+        reason.contains('rejected by company')) {
+      return 'ceo';
+    }
+    if (reason.contains('supplier')) return 'supplier';
+    return null;
   }
 }
 

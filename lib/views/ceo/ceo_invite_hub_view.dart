@@ -43,13 +43,23 @@ class _CeoInviteHubViewState extends State<CeoInviteHubView> {
       final ceoUid = authVM.user?.uid ?? '';
       final companyName = ceoVM.company?.name ?? 'Company';
 
+      final blockReason = await ceoVM.blockReasonForSupplierEmailInvite(email);
+      if (blockReason != null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(blockReason)),
+          );
+        }
+        return;
+      }
+
       await inviteVM.sendSupplierInvite(
         email: email,
         companyId: companyId,
         ceoUid: ceoUid,
         companyName: companyName,
       );
-      
+
       if (mounted) {
         _emailController.clear();
         ScaffoldMessenger.of(context).showSnackBar(

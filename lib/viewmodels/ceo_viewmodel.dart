@@ -430,6 +430,115 @@ class CeoViewModel extends ChangeNotifier {
     }
   }
 
+  /// Blocks duplicate email invites when the supplier is already linked or has
+  /// a pending partnership / invite. Uses [linkStatusFor] (same as Marketplace).
+  Future<String?> blockReasonForSupplierEmailInvite(String email) async {
+    final trimmed = email.trim();
+    if (trimmed.isEmpty) return 'Enter a supplier email address.';
+
+    final companyId = _company?.id ?? '';
+    if (companyId.isEmpty) {
+      return 'Company not ready. Please try again.';
+    }
+
+    ensurePartnershipStatusWatch(companyId);
+    await _waitForPartnershipStatusReady();
+
+    final supplier = await _findSupplierByEmail(trimmed);
+    if (supplier != null) {
+      await _ensureActivePartnerKnown(companyId, supplier.id);
+      switch (linkStatusFor(supplier.id)) {
+        case 'Already Partners':
+          return "You're already partnered with this supplier";
+        case 'Request Pending':
+          return 'A partnership request with this supplier is already pending';
+      }
+    }
+
+    // Also catch pending email invites (invitations collection) and any
+    // pending partnership rows that stored this email.
+    final lower = trimmed.toLowerCase();
+    final pendingByEmail = _latestPartnershipBySupplierId.values.any(
+      (req) =>
+          req.status == 'pending' &&
+          (req.supplierEmail?.trim().toLowerCase() ?? '') == lower,
+    );
+    if (pendingByEmail) {
+      return 'A partnership request with this supplier is already pending';
+    }
+
+    if (await _invitationRepo.hasPendingSupplierInvite(
+      companyId: companyId,
+      email: trimmed,
+    )) {
+      return 'An invite to this email is already pending';
+    }
+
+    return null;
+  }
+
+  Future<void> _waitForPartnershipStatusReady({
+    Duration timeout = const Duration(seconds: 5),
+  }) async {
+    if (_partnershipRequestsReady) return;
+    final end = DateTime.now().add(timeout);
+    while (!_partnershipRequestsReady && DateTime.now().isBefore(end)) {
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
+  }
+
+  /// One-shot fill for [supplierId] when the live watch has not caught up yet.
+  Future<void> _ensureActivePartnerKnown(
+    String companyId,
+    String supplierId,
+  ) async {
+    if (supplierId.isEmpty || _activePartnerSupplierIds.contains(supplierId)) {
+      return;
+    }
+    final linkSnap = await _db
+        .collection(FirestorePaths.companiesCol)
+        .doc(companyId)
+        .collection('suppliers')
+        .doc(supplierId)
+        .get();
+    if (!linkSnap.exists) return;
+    final status =
+        (linkSnap.data()?['status'] as String?)?.toLowerCase() ?? 'active';
+    if (status == 'active' || status == 'approved') {
+      _activePartnerSupplierIds.add(supplierId);
+    }
+  }
+
+  Future<SupplierModel?> _findSupplierByEmail(String email) async {
+    final trimmed = email.trim();
+    if (trimmed.isEmpty) return null;
+    final lower = trimmed.toLowerCase();
+
+    // Prefer already-loaded marketplace cache when available.
+    for (final supplier in _allMarketplaceSuppliers) {
+      if (supplier.email.trim().toLowerCase() == lower) return supplier;
+    }
+
+    Future<SupplierModel?> queryExact(String value) async {
+      final snap = await _db
+          .collection('suppliers')
+          .where('email', isEqualTo: value)
+          .limit(1)
+          .get();
+      if (snap.docs.isEmpty) return null;
+      final doc = snap.docs.first;
+      return SupplierModel.fromMap({...doc.data(), 'id': doc.id});
+    }
+
+    final exact = await queryExact(trimmed);
+    if (exact != null) return exact;
+    if (lower != trimmed) {
+      final byLower = await queryExact(lower);
+      if (byLower != null) return byLower;
+    }
+    return null;
+  }
+
   // --- Real-time Streams ---
 
   Stream<UserModel?> watchCeoStatus() {
@@ -545,6 +654,7 @@ class CeoViewModel extends ChangeNotifier {
           AppConstants.statusAccepted,
           AppConstants.statusInProgress,
           AppConstants.statusDelivered,
+          AppConstants.statusCancellationRequested,
         ];
       case 'Confirmed':
         return [AppConstants.statusConfirmed];
@@ -567,19 +677,47 @@ class CeoViewModel extends ChangeNotifier {
       if (order.status != AppConstants.statusPendingApproval) {
         throw Exception('Only orders awaiting approval can be approved.');
       }
+
+      // Refresh from Firestore so we notify the real supplier uid on the doc.
+      final fresh = await _orderRepo.getOrderById(order.orderId) ?? order;
+      final supplierId = fresh.supplierId.trim().isNotEmpty
+          ? fresh.supplierId.trim()
+          : order.supplierId.trim();
+      if (supplierId.isEmpty) {
+        throw Exception(
+          'Cannot notify supplier: this order has no supplier id.',
+        );
+      }
+
       await _orderRepo.updateStatus(
-        order.orderId,
-        order.companyId,
+        fresh.orderId,
+        fresh.companyId.isNotEmpty ? fresh.companyId : order.companyId,
         AppConstants.statusPending,
       );
-      await _notificationService.notifyNewOrder(
-        supplierId: order.supplierId,
-        orderId: order.orderId,
-        companyId: order.companyId,
-        materialName: order.materialName,
-        fieldUserName: order.fieldUserName,
-      );
-      _successMessage = 'Order approved and sent to supplier.';
+
+      try {
+        await _notificationService.notifyOrderApprovedByCeo(
+          supplierId: supplierId,
+          orderId: fresh.orderId,
+          companyId:
+              fresh.companyId.isNotEmpty ? fresh.companyId : order.companyId,
+          materialName: fresh.materialName.isNotEmpty
+              ? fresh.materialName
+              : order.materialName,
+          fieldUserName: fresh.fieldUserName.isNotEmpty
+              ? fresh.fieldUserName
+              : order.fieldUserName,
+          companyName: _company?.name,
+        );
+      } catch (notifyError) {
+        // Status already updated — surface notify failure so it isn't silent.
+        _errorMessage =
+            'Order approved, but supplier notification failed: $notifyError';
+        notifyListeners();
+        return;
+      }
+
+      _successMessage = 'Order approved and supplier notified.';
     } catch (e) {
       _errorMessage = 'Failed to approve order: $e';
     }
@@ -599,6 +737,7 @@ class CeoViewModel extends ChangeNotifier {
         order.companyId,
         AppConstants.statusRejected,
         reason: reason.trim().isEmpty ? 'Rejected by CEO' : reason.trim(),
+        rejectedBy: 'ceo',
       );
       await _notificationService.notifyOrderRejected(
         fieldUserUid: order.fieldUserUid,
@@ -1104,23 +1243,75 @@ class CeoViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Cancels a pending or accepted order.
-  Future<void> cancelOrder(String orderId, String companyId) async {
+  /// Cancels a pending order, or requests cancel when supplier already accepted.
+  Future<void> cancelOrder(
+    String orderId,
+    String companyId, {
+    String? reason,
+    OrderModel? order,
+  }) async {
+    _errorMessage = null;
+    _successMessage = null;
+    notifyListeners();
     try {
-      await _db
-          .collection('companies')
-          .doc(companyId)
-          .collection('orders')
-          .doc(orderId)
-          .update({'status': 'cancelled'});
+      final resolvedCompanyId =
+          companyId.isNotEmpty ? companyId : (_company?.id ?? '');
+      if (resolvedCompanyId.isEmpty) {
+        throw Exception('Company not ready.');
+      }
 
-      // Mirror on root orders collection if you use one
-      await _db
-          .collection('orders')
-          .doc(orderId)
-          .update({'status': 'cancelled'}).catchError((_) {});
+      OrderModel? current = order;
+      if (current == null || current.orderId != orderId) {
+        final doc = await _db.collection('orders').doc(orderId).get();
+        if (!doc.exists || doc.data() == null) {
+          throw Exception('Order not found.');
+        }
+        current = OrderModel.fromMap(orderId, doc.data()!);
+      }
 
-      _successMessage = 'Order cancelled.';
+      final status = current.status.toLowerCase();
+      final canDirect = status == AppConstants.statusPending ||
+          status == AppConstants.statusPendingApproval;
+      final needsRequest = status == AppConstants.statusAccepted ||
+          status == AppConstants.statusInProgress.toLowerCase() ||
+          status.replaceAll('_', '') == 'inprogress';
+
+      if (canDirect) {
+        await _orderRepo.cancelOrderDirect(
+          orderId: orderId,
+          companyId: resolvedCompanyId,
+        );
+        await _notificationService.notifyOrderCancelled(
+          supplierId: current.supplierId,
+          orderId: orderId,
+          companyId: resolvedCompanyId,
+          materialName: current.materialName,
+          fieldUserName: _company?.name ?? 'Company',
+        );
+        _successMessage = 'Order cancelled.';
+      } else if (needsRequest) {
+        final trimmed = reason?.trim() ?? '';
+        if (trimmed.isEmpty) {
+          throw Exception('Please enter a cancellation reason.');
+        }
+        await _orderRepo.requestOrderCancellation(
+          orderId: orderId,
+          companyId: resolvedCompanyId,
+          reason: trimmed,
+        );
+        await _notificationService.notifyCancellationRequested(
+          supplierId: current.supplierId,
+          orderId: orderId,
+          companyId: resolvedCompanyId,
+          materialName: current.materialName,
+          companyName: _company?.name ?? 'Company',
+          reason: trimmed,
+        );
+        _successMessage =
+            'Cancellation requested. Waiting for supplier response.';
+      } else {
+        throw Exception('This order cannot be cancelled in its current status.');
+      }
     } catch (e) {
       _errorMessage = 'Failed to cancel order: $e';
     }

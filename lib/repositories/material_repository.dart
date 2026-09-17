@@ -88,6 +88,9 @@ class MaterialRepository {
   }
 
   /// Enriched compare rows for the field-user comparison screen.
+  ///
+  /// Groups by **category only** so every linked supplier listing in that
+  /// category appears (grade/brand/name stay on each card for display).
   Future<List<MaterialListing>> getCompareListingsForMaterial(
     String companyId,
     String materialName, {
@@ -96,15 +99,26 @@ class MaterialRepository {
     String? unit,
   }) async {
     final trimmedName = materialName.trim();
-    if (trimmedName.isEmpty) return [];
+    if (trimmedName.isEmpty && (category == null || category.trim().isEmpty)) {
+      return [];
+    }
 
-    final materials = await getMaterialsByNameForCompany(
-      companyId,
-      trimmedName,
-      category: category,
-      qualityGrade: qualityGrade,
-      unit: unit,
-    );
+    var compareCategory = category?.trim() ?? '';
+    if (compareCategory.isEmpty && trimmedName.isNotEmpty) {
+      final named = await getMaterialsByNameForCompany(companyId, trimmedName);
+      if (named.isNotEmpty) {
+        compareCategory = named.first.category.trim();
+      }
+    }
+
+    final materials = compareCategory.isNotEmpty
+        ? await getMaterialsByNameForCompany(
+            companyId,
+            trimmedName.isEmpty ? compareCategory : trimmedName,
+            category: compareCategory,
+          )
+        : await getMaterialsByNameForCompany(companyId, trimmedName);
+
     if (materials.isEmpty) return [];
 
     final supplierCache = <String, SupplierModel?>{};

@@ -764,10 +764,66 @@ class SupplierViewModel extends ChangeNotifier {
   Future<void> rejectOrder(String orderId, String companyId, String reason) async {
     _isLoading = true; notifyListeners();
     try {
-      await _orderRepo.updateStatus(orderId, companyId, 'rejected', reason: reason);
+      await _orderRepo.updateStatus(orderId, companyId, 'rejected',
+          reason: reason, rejectedBy: 'supplier');
       final order = _orders.firstWhere((o) => o.orderId == orderId);
       await _notificationService.notifyOrderRejected(fieldUserUid: order.fieldUserUid, orderId: orderId, companyId: companyId, materialName: order.materialName, supplierName: order.supplierName, reason: reason);
     } catch (_) {} finally { _isLoading = false; notifyListeners(); }
+  }
+
+  Future<void> acceptCancellationRequest(OrderModel order) async {
+    _isLoading = true;
+    notifyListeners();
+    try {
+      await _orderRepo.acceptCancellationRequest(
+        orderId: order.orderId,
+        companyId: order.companyId,
+      );
+      final ceoUid = await _orderRepo.resolveCeoUid(order.companyId);
+      if (ceoUid != null) {
+        await _notificationService.notifyCancellationAccepted(
+          ceoUid: ceoUid,
+          orderId: order.orderId,
+          companyId: order.companyId,
+          materialName: order.materialName,
+          supplierName: _profile?.name ?? order.supplierName,
+        );
+      }
+    } catch (_) {
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> declineCancellationRequest(
+    OrderModel order, {
+    String? reason,
+  }) async {
+    _isLoading = true;
+    notifyListeners();
+    try {
+      await _orderRepo.rejectCancellationRequest(
+        orderId: order.orderId,
+        companyId: order.companyId,
+        responseReason: reason,
+      );
+      final ceoUid = await _orderRepo.resolveCeoUid(order.companyId);
+      if (ceoUid != null) {
+        await _notificationService.notifyCancellationDeclined(
+          ceoUid: ceoUid,
+          orderId: order.orderId,
+          companyId: order.companyId,
+          materialName: order.materialName,
+          supplierName: _profile?.name ?? order.supplierName,
+          reason: reason,
+        );
+      }
+    } catch (_) {
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
   Future<void> markDelivered(String orderId, String companyId) async {

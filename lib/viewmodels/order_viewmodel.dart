@@ -96,7 +96,13 @@ class OrderViewModel extends ChangeNotifier {
   }
 
   Future<void> rejectOrder(String orderId, String companyId, String reason) async {
-    await _updateOrderStatus(orderId, companyId, 'rejected', reason: reason);
+    await _updateOrderStatus(
+      orderId,
+      companyId,
+      'rejected',
+      reason: reason,
+      rejectedBy: 'supplier',
+    );
   }
 
   Future<void> markDelivered(String orderId, String companyId) async {
@@ -112,6 +118,7 @@ class OrderViewModel extends ChangeNotifier {
     String companyId,
     String status, {
     String? reason,
+    String? rejectedBy,
     DateTime? deliveredAt,
     DateTime? confirmedAt,
   }) async {
@@ -120,7 +127,10 @@ class OrderViewModel extends ChangeNotifier {
     notifyListeners();
     try {
       await _orderRepo.updateStatus(orderId, companyId, status, 
-        reason: reason, deliveredAt: deliveredAt, confirmedAt: confirmedAt);
+        reason: reason,
+        rejectedBy: rejectedBy,
+        deliveredAt: deliveredAt,
+        confirmedAt: confirmedAt);
     } catch(e) {
       _error = e.toString();
     } finally {
