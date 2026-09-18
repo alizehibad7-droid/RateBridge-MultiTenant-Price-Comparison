@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -19,6 +20,16 @@ class AdminPaymentQueueView extends StatefulWidget {
 
 class _AdminPaymentQueueViewState extends State<AdminPaymentQueueView> with SingleTickerProviderStateMixin {
   late TabController _tabController;
+
+  bool get _isDesktop {
+    if (kIsWeb) return true;
+    try {
+      final platform = defaultTargetPlatform;
+      return platform == TargetPlatform.windows || platform == TargetPlatform.macOS || platform == TargetPlatform.linux;
+    } catch (_) {
+      return false;
+    }
+  }
 
   @override
   void initState() {
@@ -67,12 +78,12 @@ class _AdminPaymentQueueViewState extends State<AdminPaymentQueueView> with Sing
           child: TabBarView(
             controller: _tabController,
             children: [
-              _buildPaymentList(
+              _buildPaymentContent(
                 adminVM.pendingPayments.where((p) => p.type == 'subscription').toList(), 
                 adminVM, 
                 isPending: true
               ),
-              _buildPaymentList(adminVM.confirmedPayments, adminVM, isPending: false),
+              _buildPaymentContent(adminVM.confirmedPayments, adminVM, isPending: false),
             ],
           ),
         ),
@@ -80,7 +91,7 @@ class _AdminPaymentQueueViewState extends State<AdminPaymentQueueView> with Sing
     );
   }
 
-  Widget _buildPaymentList(List<PaymentProofModel> payments, AdminViewModel vm, {required bool isPending}) {
+  Widget _buildPaymentContent(List<PaymentProofModel> payments, AdminViewModel vm, {required bool isPending}) {
     if (vm.isLoading && payments.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -117,6 +128,111 @@ class _AdminPaymentQueueViewState extends State<AdminPaymentQueueView> with Sing
       );
     }
 
+    return _isDesktop 
+        ? _buildPaymentTable(payments, vm, isPending)
+        : _buildPaymentList(payments, vm, isPending);
+  }
+
+  Widget _buildPaymentTable(List<PaymentProofModel> payments, AdminViewModel vm, bool isPending) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: AdminCard(
+        padding: EdgeInsets.zero,
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: DataTable(
+            dataRowMinHeight: 64,
+            dataRowMaxHeight: 64,
+            headingRowColor: WidgetStateProperty.all(AdminColors.navy.withValues(alpha: 0.03)),
+            columns: [
+              DataColumn(label: Text('Payer', style: AdminTheme.sectionHeaderStyle())),
+              DataColumn(label: Text('Type', style: AdminTheme.sectionHeaderStyle())),
+              DataColumn(label: Text('Amount', style: AdminTheme.sectionHeaderStyle())),
+              DataColumn(label: Text('Method', style: AdminTheme.sectionHeaderStyle())),
+              DataColumn(label: Text('Submitted', style: AdminTheme.sectionHeaderStyle())),
+              DataColumn(label: Text('Status', style: AdminTheme.sectionHeaderStyle())),
+              DataColumn(label: Text('Actions', style: AdminTheme.sectionHeaderStyle())),
+            ],
+            rows: payments.map((payment) {
+              return DataRow(
+                cells: [
+                  DataCell(
+                    Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(payment.payerName, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, color: AdminColors.navy)),
+                        Text(payment.payerRole, style: AdminTheme.mutedStyle(size: 10)),
+                      ],
+                    ),
+                  ),
+                  DataCell(Text(payment.type.toUpperCase(), style: AdminTheme.bodyStyle())),
+                  DataCell(Text('Rs ${payment.amount.toStringAsFixed(0)}', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700))),
+                  DataCell(Text(payment.method.toUpperCase(), style: AdminTheme.bodyStyle())),
+                  DataCell(Text(DateFormat('MMM dd, yyyy').format(payment.createdAt), style: AdminTheme.bodyStyle())),
+                  DataCell(StatusChip(status: payment.status)),
+                  DataCell(
+                    Row(
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.visibility_outlined, size: 20),
+                          onPressed: () => _showPaymentDetailDialog(payment, vm, isPending),
+                          tooltip: 'Review Details',
+                        ),
+                        if (isPending) ...[
+                          IconButton(
+                            icon: const Icon(Icons.check_circle_outline, color: AdminColors.green, size: 20),
+                            onPressed: () => _confirmApproval(context, payment, vm),
+                            tooltip: 'Confirm Payment',
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.cancel_outlined, color: AdminColors.red, size: 20),
+                            onPressed: () => _showRejectDialog(context, payment, vm),
+                            tooltip: 'Reject',
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            );
+          }).toList(),
+        ),
+      ),
+    ),
+  );
+}
+
+  void _showPaymentDetailDialog(PaymentProofModel payment, AdminViewModel vm, bool isPending) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Container(
+          width: 500,
+          padding: const EdgeInsets.all(24),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Payment Details', style: AdminTheme.titleStyle(size: 20)),
+                    IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
+                  ],
+                ),
+                const Divider(height: 32),
+                _buildPaymentCard(payment, vm, isPending),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPaymentList(List<PaymentProofModel> payments, AdminViewModel vm, bool isPending) {
     return RefreshIndicator(
       onRefresh: () => vm.loadPaymentQueue(),
       color: AdminColors.amber,
@@ -133,7 +249,6 @@ class _AdminPaymentQueueViewState extends State<AdminPaymentQueueView> with Sing
 
   Widget _buildPaymentCard(PaymentProofModel payment, AdminViewModel vm, bool isPending) {
     final isSettled = payment.status == 'settled';
-    final isConfirmed = payment.status == 'confirmed' || payment.status == 'approved';
 
     return AdminCard(
       child: Column(

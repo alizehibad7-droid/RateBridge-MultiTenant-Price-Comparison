@@ -16,6 +16,7 @@ class RouteNames {
   static const String pendingApproval = '/account/pending';
   static const String suspended = '/account/suspended';
   static const String rejected = '/account/rejected';
+  static const String platformBlocked = '/account/platform-blocked';
 
   // Admin
   static const String adminDashboard = '/admin/dashboard';

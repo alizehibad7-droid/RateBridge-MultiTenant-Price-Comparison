@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
@@ -6,6 +7,7 @@ import '../../models/audit_log_model.dart';
 import '../../theme/admin_theme.dart';
 import '../../services/firestore_service.dart';
 import '../../widgets/admin/admin_widgets.dart';
+import 'package:flutter/foundation.dart';
 
 class AdminAuditLogView extends StatefulWidget {
   const AdminAuditLogView({super.key});
@@ -32,13 +34,23 @@ class _AdminAuditLogViewState extends State<AdminAuditLogView> {
     (value: 'restrict_supplier_commission', label: 'Restrictions', icon: Icons.money_off_rounded),
   ];
 
+  bool get _isDesktop {
+    if (kIsWeb) return true;
+    try {
+      final platform = defaultTargetPlatform;
+      return platform == TargetPlatform.windows || platform == TargetPlatform.macOS || platform == TargetPlatform.linux;
+    } catch (_) {
+      return false;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final firestoreService = context.read<FirestoreService>();
 
     return Scaffold(
       backgroundColor: AdminColors.screenBg,
-      appBar: const AdminAppBar(title: 'System Activity Log'),
+      appBar: _isDesktop ? null : const AdminAppBar(title: 'System Activity Log'),
       body: Column(
         children: [
           _buildFilterBar(),
@@ -114,6 +126,10 @@ class _AdminAuditLogViewState extends State<AdminAuditLogView> {
                   );
                 }
 
+                if (_isDesktop) {
+                  return _buildAuditLogTable(logs);
+                }
+
                 return ListView.builder(
                   padding: const EdgeInsets.all(16),
                   itemCount: logs.length,
@@ -123,6 +139,64 @@ class _AdminAuditLogViewState extends State<AdminAuditLogView> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildAuditLogTable(List<AuditLogModel> logs) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: AdminCard(
+        padding: EdgeInsets.zero,
+        child: DataTable(
+          dataRowMinHeight: 60,
+          dataRowMaxHeight: 80,
+          headingRowColor: WidgetStateProperty.all(AdminColors.navy.withValues(alpha: 0.03)),
+          columns: [
+            DataColumn(label: Text('Action', style: AdminTheme.sectionHeaderStyle())),
+            DataColumn(label: Text('Description', style: AdminTheme.sectionHeaderStyle())),
+            DataColumn(label: Text('Actor', style: AdminTheme.sectionHeaderStyle())),
+            DataColumn(label: Text('Target', style: AdminTheme.sectionHeaderStyle())),
+            DataColumn(label: Text('Timestamp', style: AdminTheme.sectionHeaderStyle())),
+          ],
+          rows: logs.map((log) {
+            return DataRow(
+              cells: [
+                DataCell(
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(color: AdminColors.navy.withValues(alpha: 0.05), borderRadius: BorderRadius.circular(8)),
+                    child: Icon(_getIcon(log.actionType), size: 18, color: AdminColors.navy),
+                  ),
+                ),
+                DataCell(
+                  SizedBox(
+                    width: 350,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          log.description, 
+                          style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 13, color: AdminColors.navy),
+                          overflow: TextOverflow.visible,
+                        ),
+                        if (log.reason != null && log.reason!.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4.0),
+                            child: Text(log.reason!, style: AdminTheme.mutedStyle(size: 11), maxLines: 2, overflow: TextOverflow.ellipsis),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+                DataCell(Text(log.actorName, style: AdminTheme.bodyStyle())),
+                DataCell(Text(log.targetType.toUpperCase(), style: GoogleFonts.jetBrainsMono(fontSize: 10, fontWeight: FontWeight.w800, color: AdminColors.textGrey))),
+                DataCell(Text(DateFormat('MMM dd, yyyy HH:mm').format(log.timestamp), style: AdminTheme.bodyStyle())),
+              ],
+            );
+          }).toList(),
+        ),
       ),
     );
   }
@@ -164,6 +238,20 @@ class _AdminAuditLogViewState extends State<AdminAuditLogView> {
         ),
       ),
     );
+  }
+
+  IconData _getIcon(String type) {
+    if (type.contains('approve') || type.contains('reactivate') || type.contains('activate')) {
+      return Icons.check_circle_rounded;
+    }
+    if (type.contains('reject')) return Icons.cancel_rounded;
+    if (type.contains('ban') || type.contains('suspend')) return Icons.block_rounded;
+    if (type.contains('category')) return Icons.category_rounded;
+    if (type.contains('transaction') || type.contains('commission')) {
+      return Icons.receipt_long_rounded;
+    }
+    if (type.contains('dispute')) return Icons.gavel_rounded;
+    return Icons.info_outline_rounded;
   }
 }
 

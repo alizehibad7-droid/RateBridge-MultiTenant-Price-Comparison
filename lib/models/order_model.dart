@@ -94,9 +94,9 @@ class OrderModel {
 
   factory OrderModel.fromMap(String id, Map<String, dynamic> map) => OrderModel(
     orderId: id,
-    companyId: map['companyId'] ?? '',
-    fieldUserUid: map['fieldUserUid'] ?? '',
-    supplierId: map['supplierId'] ?? map['supplierUid'] ?? '',
+    companyId: map['companyId'] ?? map['companyID'] ?? map['company_id'] ?? '',
+    fieldUserUid: map['fieldUserUid'] ?? map['fieldUserUID'] ?? map['field_user_uid'] ?? map['field_user_id'] ?? '',
+    supplierId: map['supplierId'] ?? map['supplierUid'] ?? map['supplierID'] ?? map['supplierUID'] ?? map['supplier_id'] ?? map['supplier_uid'] ?? '',
     materialId: map['materialId'] ?? '',
     materialName: map['materialName'] ?? '',
     supplierName: map['supplierName'] ?? '',

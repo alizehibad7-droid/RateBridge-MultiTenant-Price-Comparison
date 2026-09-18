@@ -1,11 +1,15 @@
+import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform;
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
+import '../constants/route_names.dart';
 import '../models/notification_model.dart';
 import '../theme/field_theme.dart';
 import '../utils/app_navigation.dart';
 import '../utils/notification_utils.dart';
+import '../viewmodels/auth_viewmodel.dart';
 import '../viewmodels/notification_viewmodel.dart';
 
 typedef NotificationTapHandler = void Function(
@@ -18,12 +22,14 @@ class AppNotificationsScaffold extends StatefulWidget {
   final String title;
   final NotificationTapHandler onNotificationTap;
   final Color? backgroundColor;
+  final bool embedded;
 
   const AppNotificationsScaffold({
     super.key,
     required this.title,
     required this.onNotificationTap,
     this.backgroundColor,
+    this.embedded = false,
   });
 
   @override
@@ -33,6 +39,16 @@ class AppNotificationsScaffold extends StatefulWidget {
 class _AppNotificationsScaffoldState extends State<AppNotificationsScaffold> {
   bool _isSelectionMode = false;
   final Set<String> _selectedNotifIds = {};
+
+  bool get _isDesktop {
+    if (kIsWeb) return true;
+    try {
+      final platform = defaultTargetPlatform;
+      return platform == TargetPlatform.windows || platform == TargetPlatform.macOS || platform == TargetPlatform.linux;
+    } catch (_) {
+      return false;
+    }
+  }
 
   Future<void> _markAllRead(BuildContext context) async {
     final vm = context.read<NotificationViewModel>();
@@ -68,9 +84,10 @@ class _AppNotificationsScaffoldState extends State<AppNotificationsScaffold> {
 
     final vm = context.read<NotificationViewModel>();
     final uid = vm.uid;
+    if (uid == null) return;
 
-    if (!notification.isRead && notification.notifId.isNotEmpty) {
-      await vm.markAsRead(notification.notifId, uid);
+    if (!notification.isRead) {
+      await vm.markAsRead(uid, notification.notifId);
     }
     if (!context.mounted) return;
     widget.onNotificationTap(context, notification);
@@ -198,100 +215,247 @@ class _AppNotificationsScaffoldState extends State<AppNotificationsScaffold> {
   @override
   Widget build(BuildContext context) {
     final vm = context.watch<NotificationViewModel>();
+    final showAppBar = !widget.embedded || _isSelectionMode;
+
+    Widget body = vm.uid == null
+        ? const Center(child: CircularProgressIndicator())
+        : vm.errorMessage != null && vm.notifications.isEmpty
+            ? _NotificationsError(
+                message: vm.errorMessage!,
+                onRetry: () => _retryLoad(context),
+              )
+            : vm.isLoading && vm.notifications.isEmpty
+                ? const Center(child: CircularProgressIndicator())
+                : vm.notifications.isEmpty
+                    ? const _NotificationsEmpty()
+                    : RefreshIndicator(
+                        onRefresh: () async => _retryLoad(context),
+                        child: _buildList(vm),
+                      );
+
+    Widget mainContent = Column(
+      children: [
+        if (widget.embedded && !_isSelectionMode)
+          _buildEmbeddedToolbar(vm),
+        Expanded(child: body),
+      ],
+    );
+
+    if (_isDesktop) {
+      mainContent = Center(
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 800),
+          child: mainContent,
+        ),
+      );
+    }
 
     return Scaffold(
       backgroundColor: widget.backgroundColor ?? FieldColors.screenBackground,
-      appBar: AppBar(
-        automaticallyImplyLeading: false,
-        leadingWidth: 52,
-        titleSpacing: 4,
-        leading: _isSelectionMode
-            ? IconButton(
-                icon: const Icon(Icons.close_rounded),
-                onPressed: () {
-                  setState(() {
-                    _isSelectionMode = false;
-                    _selectedNotifIds.clear();
-                  });
-                },
-              )
-            : AppNavigation.leading(context) ??
-                const Icon(Icons.notifications_active_rounded, size: 22),
-        title: Text(
-          _isSelectionMode
-              ? '${_selectedNotifIds.length} selected'
-              : widget.title,
-          overflow: TextOverflow.ellipsis,
-        ),
-        actions: _isSelectionMode
-            ? [
-                IconButton(
-                  icon: const Icon(Icons.select_all_rounded),
-                  tooltip: 'Select All',
-                  onPressed: () {
-                    setState(() {
-                      _selectedNotifIds.addAll(
-                        vm.notifications.map((n) => n.notifId),
-                      );
-                    });
-                  },
-                ),
-                IconButton(
-                  icon: const Icon(Icons.delete_rounded),
-                  tooltip: 'Delete Selected',
-                  onPressed: () => _confirmAndDeleteSelected(context),
-                ),
-              ]
-            : [
-                if (vm.unreadCount > 0)
-                  IconButton(
-                    icon: const Icon(Icons.done_all_rounded),
-                    tooltip: 'Mark all read',
-                    onPressed: () => _markAllRead(context),
-                  ),
-                if (vm.notifications.isNotEmpty)
-                  IconButton(
-                    icon: const Icon(Icons.delete_sweep_rounded),
-                    tooltip: 'Clear All',
-                    onPressed: () => _confirmAndClearAll(context),
-                  ),
-              ],
-      ),
-      body: vm.uid == null
-          ? const Center(child: CircularProgressIndicator())
-          : vm.errorMessage != null && vm.notifications.isEmpty
-              ? _NotificationsError(
-                  message: vm.errorMessage!,
-                  onRetry: () => _retryLoad(context),
-                )
-              : vm.isLoading && vm.notifications.isEmpty
-                  ? const Center(child: CircularProgressIndicator())
-                  : vm.notifications.isEmpty
-                      ? const _NotificationsEmpty()
-                      : RefreshIndicator(
-                          onRefresh: () async => _retryLoad(context),
-                          child: ListView.separated(
-                            padding: const EdgeInsets.all(16),
-                            itemCount: vm.notifications.length,
-                            separatorBuilder: (_, __) =>
-                                const SizedBox(height: 12),
-                            itemBuilder: (context, index) {
-                              final notification = vm.notifications[index];
-                              final isSelected = _selectedNotifIds.contains(notification.notifId);
-                              return _NotificationTile(
-                                notification: notification,
-                                relativeTime: notificationRelativeTime(
-                                  notification.createdAt,
-                                ),
-                                isSelectionMode: _isSelectionMode,
-                                isSelected: isSelected,
-                                onTap: () => _handleTap(context, notification),
-                                onLongPress: () => _handleLongPress(notification),
-                                onDeleteSingle: () => _deleteSingleNotification(context, notification),
-                              );
-                            },
+      appBar: showAppBar
+          ? AppBar(
+              automaticallyImplyLeading: false,
+              leading: _isSelectionMode
+                  ? IconButton(
+                      icon: const Icon(Icons.close_rounded),
+                      onPressed: () {
+                        setState(() {
+                          _isSelectionMode = false;
+                          _selectedNotifIds.clear();
+                        });
+                      },
+                    )
+                  : (widget.embedded ? null : AppNavigation.leading(context)),
+              title: _isSelectionMode
+                  ? Text('${_selectedNotifIds.length} selected')
+                  : Row(
+                      children: [
+                        const Icon(Icons.notifications_active_rounded, size: 22),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            widget.title,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
+                      ],
+                    ),
+              actions: _isSelectionMode
+                  ? [
+                      IconButton(
+                        icon: const Icon(Icons.select_all_rounded),
+                        tooltip: 'Select All',
+                        onPressed: () {
+                          setState(() {
+                            _selectedNotifIds.addAll(vm.notifications.map((n) => n.notifId));
+                          });
+                        },
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.delete_rounded),
+                        tooltip: 'Delete Selected',
+                        onPressed: () => _confirmAndDeleteSelected(context),
+                      ),
+                    ]
+                  : [
+                      if (vm.notifications.isNotEmpty)
+                        IconButton(
+                          icon: const Icon(Icons.delete_sweep_rounded),
+                          tooltip: 'Clear All',
+                          onPressed: () => _confirmAndClearAll(context),
+                        ),
+                      if (vm.unreadCount > 0)
+                        TextButton.icon(
+                          onPressed: () => _markAllRead(context),
+                          icon: const Icon(Icons.done_all_rounded, size: 16),
+                          label: const Text('Mark all read'),
+                        ),
+                      const SizedBox(width: 8),
+                      Consumer<AuthViewModel>(
+                        builder: (context, authVm, _) {
+                          final user = authVm.user;
+                          final role = user?.role?.toLowerCase() ?? '';
+                          final name = user?.name ?? '';
+                          String initials = 'P';
+                          if (name.isNotEmpty) {
+                            final parts = name.trim().split(RegExp(r'\s+'));
+                            if (parts.isNotEmpty && parts.first.isNotEmpty) {
+                              initials = parts.first[0].toUpperCase();
+                            }
+                          }
+                          return GestureDetector(
+                            onTap: () {
+                              if (role == 'ceo') {
+                                context.push(RouteNames.ceoProfile);
+                              } else if (role == 'supplier') {
+                                context.push(RouteNames.supplierProfile);
+                              } else if (role == 'field_user') {
+                                context.push(RouteNames.fieldProfile);
+                              } else {
+                                context.push(RouteNames.adminDashboard);
+                              }
+                            },
+                            child: CircleAvatar(
+                              radius: 16,
+                              backgroundColor: const Color(0xFF1E326E),
+                              child: Text(
+                                initials,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                      const SizedBox(width: 16),
+                    ],
+            )
+          : null,
+      body: mainContent,
+    );
+  }
+
+  Widget _buildEmbeddedToolbar(NotificationViewModel vm) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(bottom: BorderSide(color: Colors.black12)),
+      ),
+      child: Row(
+        children: [
+          if (vm.unreadCount > 0)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(color: const Color(0xFFE25730), borderRadius: BorderRadius.circular(12)),
+              child: Text('${vm.unreadCount} UNREAD', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+            ),
+          const Spacer(),
+          if (vm.notifications.isNotEmpty)
+            TextButton.icon(
+              onPressed: () => _confirmAndClearAll(context),
+              icon: const Icon(Icons.delete_sweep_rounded, size: 18),
+              label: const Text('Clear All'),
+              style: TextButton.styleFrom(foregroundColor: Colors.grey),
+            ),
+          if (vm.unreadCount > 0) ...[
+            const SizedBox(width: 12),
+            ElevatedButton.icon(
+              onPressed: () => _markAllRead(context),
+              icon: const Icon(Icons.done_all_rounded, size: 18),
+              label: const Text('Mark All Read'),
+              style: ElevatedButton.styleFrom(elevation: 0),
+            ),
+          ],
+          const SizedBox(width: 16),
+          Consumer<AuthViewModel>(
+            builder: (context, authVm, _) {
+              final user = authVm.user;
+              final role = user?.role?.toLowerCase() ?? '';
+              final name = user?.name ?? '';
+              String initials = 'P';
+              if (name.isNotEmpty) {
+                final parts = name.trim().split(RegExp(r'\s+'));
+                if (parts.isNotEmpty && parts.first.isNotEmpty) {
+                  initials = parts.first[0].toUpperCase();
+                }
+              }
+              return GestureDetector(
+                onTap: () {
+                  if (role == 'ceo') {
+                    context.push(RouteNames.ceoProfile);
+                  } else if (role == 'supplier') {
+                    context.push(RouteNames.supplierProfile);
+                  } else if (role == 'field_user') {
+                    context.push(RouteNames.fieldProfile);
+                  } else {
+                    context.push(RouteNames.adminDashboard);
+                  }
+                },
+                child: CircleAvatar(
+                  radius: 16,
+                  backgroundColor: const Color(0xFF1E326E),
+                  child: Text(
+                    initials,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildList(NotificationViewModel vm) {
+    return ListView.separated(
+      padding: EdgeInsets.all(_isDesktop ? 32 : 16),
+      itemCount: vm.notifications.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      itemBuilder: (context, index) {
+        final notification = vm.notifications[index];
+        final isSelected = _selectedNotifIds.contains(notification.notifId);
+        return _NotificationTile(
+          notification: notification,
+          relativeTime: notificationRelativeTime(
+            notification.createdAt,
+          ),
+          isSelectionMode: _isSelectionMode,
+          isSelected: isSelected,
+          onTap: () => _handleTap(context, notification),
+          onLongPress: () => _handleLongPress(notification),
+          onDeleteSingle: () => _deleteSingleNotification(context, notification),
+          isDesktop: _isDesktop,
+        );
+      },
     );
   }
 }
@@ -304,6 +468,7 @@ class _NotificationTile extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onLongPress;
   final VoidCallback onDeleteSingle;
+  final bool isDesktop;
 
   const _NotificationTile({
     required this.notification,
@@ -313,6 +478,7 @@ class _NotificationTile extends StatelessWidget {
     required this.onTap,
     required this.onLongPress,
     required this.onDeleteSingle,
+    this.isDesktop = false,
   });
 
   @override
@@ -436,7 +602,7 @@ class _NotificationTile extends StatelessWidget {
                           color: isUnread ? const Color(0xFF1E326E).withValues(alpha: 0.8) : Colors.grey,
                           height: 1.4,
                         ),
-                        maxLines: 2,
+                        maxLines: isDesktop ? 3 : 2,
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 8),

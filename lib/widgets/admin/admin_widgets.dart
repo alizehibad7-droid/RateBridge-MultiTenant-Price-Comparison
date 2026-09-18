@@ -12,6 +12,7 @@ class AdminStatCard extends StatelessWidget {
   final String label;
   final String value;
   final Color color;
+  final VoidCallback? onTap;
 
   const AdminStatCard({
     super.key,
@@ -19,37 +20,45 @@ class AdminStatCard extends StatelessWidget {
     required this.label,
     required this.value,
     this.color = AdminColors.amber,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: AdminTheme.cardDecoration(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(icon, color: color, size: 18),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: AdminTheme.cardDecoration(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: color, size: 18),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                value,
+                style: GoogleFonts.plusJakartaSans(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w800,
+                  color: AdminColors.navy,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(label, style: AdminTheme.mutedStyle(size: 11).copyWith(fontWeight: FontWeight.w600)),
+            ],
           ),
-          const SizedBox(height: 12),
-          Text(
-            value,
-            style: GoogleFonts.plusJakartaSans(
-              fontSize: 24,
-              fontWeight: FontWeight.w800,
-              color: AdminColors.navy,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(label, style: AdminTheme.mutedStyle(size: 11).copyWith(fontWeight: FontWeight.w600)),
-        ],
+        ),
       ),
     );
   }
@@ -125,13 +134,16 @@ class StatusChip extends StatelessWidget {
         children: [
           Icon(statusIcon, size: 10, color: style.fg),
           const SizedBox(width: 4),
-          Text(
-            label.toUpperCase(),
-            style: GoogleFonts.plusJakartaSans(
-              color: style.fg,
-              fontSize: 9,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.5,
+          Flexible(
+            child: Text(
+              label.toUpperCase(),
+              style: GoogleFonts.plusJakartaSans(
+                color: style.fg,
+                fontSize: 9,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.5,
+              ),
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],
@@ -542,6 +554,7 @@ class AdminCard extends StatelessWidget {
   final EdgeInsetsGeometry padding;
   final EdgeInsetsGeometry? margin;
   final Color? color;
+  final String? title;
 
   const AdminCard({
     super.key,
@@ -549,6 +562,7 @@ class AdminCard extends StatelessWidget {
     this.padding = const EdgeInsets.all(20),
     this.margin,
     this.color,
+    this.title,
   });
 
   @override
@@ -557,7 +571,17 @@ class AdminCard extends StatelessWidget {
       margin: margin,
       padding: padding,
       decoration: AdminTheme.cardDecoration().copyWith(color: color),
-      child: child,
+      child: title == null
+          ? child
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(title!, style: AdminTheme.titleStyle(size: 16)),
+                const SizedBox(height: 16),
+                child,
+              ],
+            ),
     );
   }
 }

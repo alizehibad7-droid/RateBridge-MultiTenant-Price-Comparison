@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
@@ -9,7 +10,7 @@ import '../../models/payment_proof_model.dart';
 import '../../repositories/transaction_repository.dart';
 import '../../viewmodels/admin_viewmodel.dart';
 import '../../widgets/admin/admin_widgets.dart';
-
+import 'package:flutter/foundation.dart';
 class AdminCommissionLedgerView extends StatefulWidget {
   const AdminCommissionLedgerView({super.key});
 
@@ -21,6 +22,16 @@ class _AdminCommissionLedgerViewState extends State<AdminCommissionLedgerView> w
   late TabController _tabController;
   final _currency = NumberFormat.currency(symbol: 'Rs ', decimalDigits: 0);
   Stream<CommissionLedgerSnapshot>? _ledgerStream;
+
+  bool get _isDesktop {
+    if (kIsWeb) return true;
+    try {
+      final platform = defaultTargetPlatform;
+      return platform == TargetPlatform.windows || platform == TargetPlatform.macOS || platform == TargetPlatform.linux;
+    } catch (_) {
+      return false;
+    }
+  }
 
   @override
   void initState() {
@@ -100,15 +111,16 @@ class _AdminCommissionLedgerViewState extends State<AdminCommissionLedgerView> w
           onRefresh: () => adminVM.loadPaymentQueue(),
           color: AdminColors.amber,
           child: ListView(
-            padding: const EdgeInsets.all(16),
+            padding: EdgeInsets.all(_isDesktop ? 32 : 16),
             children: [
               _SummaryStrip(
                 outstanding: ledger.outstandingThisMonth,
                 collected: ledger.collectedThisMonth,
                 grandTotal: ledger.grandTotalCollected,
                 currency: _currency,
+                isDesktop: _isDesktop,
               ),
-              const SizedBox(height: 28),
+              const SizedBox(height: 32),
         
               if (pendingComms.isNotEmpty) ...[
                 Row(
@@ -119,8 +131,11 @@ class _AdminCommissionLedgerViewState extends State<AdminCommissionLedgerView> w
                   ],
                 ),
                 const SizedBox(height: 12),
-                ...pendingComms.map((p) => _PendingPaymentCard(payment: p, vm: adminVM)),
-                const SizedBox(height: 28),
+                if (_isDesktop)
+                  _buildPendingTable(pendingComms, adminVM)
+                else
+                  ...pendingComms.map((p) => _PendingPaymentCard(payment: p, vm: adminVM)),
+                const SizedBox(height: 32),
               ],
         
               Row(
@@ -135,17 +150,19 @@ class _AdminCommissionLedgerViewState extends State<AdminCommissionLedgerView> w
                 AdminCard(
                   child: Center(
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 24),
+                      padding: const EdgeInsets.symmetric(vertical: 48),
                       child: Column(
                         children: [
-                          Icon(Icons.check_circle_outline_rounded, color: AdminColors.green.withValues(alpha: 0.5), size: 40),
-                          const SizedBox(height: 12),
-                          const Text('No outstanding commissions.', style: TextStyle(color: AdminColors.textGrey, fontWeight: FontWeight.w500)),
+                          Icon(Icons.check_circle_outline_rounded, color: AdminColors.green.withValues(alpha: 0.5), size: 64),
+                          const SizedBox(height: 16),
+                          const Text('No outstanding commissions.', style: TextStyle(color: AdminColors.textGrey, fontWeight: FontWeight.w500, fontSize: 16)),
                         ],
                       ),
                     ),
                   ),
                 )
+              else if (_isDesktop)
+                _buildSupplierBalancesTable(ledger.suppliers)
               else
                 ...ledger.suppliers.map((s) => _SupplierBalanceTile(supplier: s, currency: _currency)),
             ],
@@ -153,6 +170,128 @@ class _AdminCommissionLedgerViewState extends State<AdminCommissionLedgerView> w
         );
       },
     );
+  }
+
+  Widget _buildPendingTable(List<PaymentProofModel> pendingComms, AdminViewModel vm) {
+    return AdminCard(
+      padding: EdgeInsets.zero,
+      child: DataTable(
+        headingRowColor: WidgetStateProperty.all(AdminColors.navy.withValues(alpha: 0.03)),
+        columns: [
+          DataColumn(label: Text('Supplier', style: AdminTheme.sectionHeaderStyle())),
+          DataColumn(label: Text('Amount', style: AdminTheme.sectionHeaderStyle())),
+          DataColumn(label: Text('Submitted', style: AdminTheme.sectionHeaderStyle())),
+          DataColumn(label: Text('Actions', style: AdminTheme.sectionHeaderStyle())),
+        ],
+        rows: pendingComms.map((payment) => DataRow(
+          cells: [
+            DataCell(Text(payment.payerName, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700))),
+            DataCell(Text('Rs ${payment.amount.toStringAsFixed(0)}', style: AdminTheme.bodyStyle())),
+            DataCell(Text(DateFormat('MMM dd, HH:mm').format(payment.createdAt), style: AdminTheme.bodyStyle())),
+            DataCell(
+              Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.visibility_outlined, size: 20),
+                    onPressed: () => _showPaymentDetailDialog(payment, vm, false),
+                    tooltip: 'View Proof',
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.check_circle_outline, color: AdminColors.green, size: 20),
+                    onPressed: () => _confirmSettlementDialog(context, payment, vm),
+                    tooltip: 'Settle',
+                  ),
+                ],
+              ),
+            ),
+          ],
+        )).toList(),
+      ),
+    );
+  }
+
+  Widget _buildSupplierBalancesTable(List<SupplierUnsettledSummary> suppliers) {
+    return AdminCard(
+      padding: EdgeInsets.zero,
+      child: DataTable(
+        headingRowColor: WidgetStateProperty.all(AdminColors.navy.withValues(alpha: 0.03)),
+        columns: [
+          DataColumn(label: Text('Supplier', style: AdminTheme.sectionHeaderStyle())),
+          DataColumn(label: Text('Pending Orders', style: AdminTheme.sectionHeaderStyle())),
+          DataColumn(label: Text('Outstanding Amount', style: AdminTheme.sectionHeaderStyle())),
+          DataColumn(label: Text('Status', style: AdminTheme.sectionHeaderStyle())),
+        ],
+        rows: suppliers.map((s) => DataRow(
+          cells: [
+            DataCell(Text(s.supplierName, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700))),
+            DataCell(Text('${s.orderCount}', style: AdminTheme.bodyStyle())),
+            DataCell(Text(_currency.format(s.unsettledAmount), style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, color: AdminColors.red))),
+            DataCell(
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(color: AdminColors.red.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(4)),
+                child: const Text('OUTSTANDING', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: AdminColors.red)),
+              ),
+            ),
+          ],
+        )).toList(),
+      ),
+    );
+  }
+
+  void _showPaymentDetailDialog(PaymentProofModel payment, AdminViewModel vm, bool isHistory) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Container(
+          width: 500,
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('Payment Proof', style: AdminTheme.titleStyle(size: 20)),
+                  IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
+                ],
+              ),
+              const Divider(height: 32),
+              _PendingPaymentCard(payment: payment, vm: vm, isHistory: isHistory),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _confirmSettlementDialog(BuildContext context, PaymentProofModel payment, AdminViewModel vm) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.verified_rounded, color: AdminColors.green),
+            const SizedBox(width: 10),
+            const Text('Confirm Settlement'),
+          ],
+        ),
+        content: Text('Mark Rs ${payment.amount.toStringAsFixed(0)} commission payment from ${payment.payerName} as settled?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('CANCEL')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true), 
+            style: ElevatedButton.styleFrom(backgroundColor: AdminColors.green),
+            child: const Text('CONFIRM'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await vm.confirmPayment(payment);
+    }
   }
 
   Widget _buildSettledTab(List<PaymentProofModel> settledComms, AdminViewModel adminVM) {
@@ -178,6 +317,40 @@ class _AdminCommissionLedgerViewState extends State<AdminCommissionLedgerView> w
             const SizedBox(height: 8),
             Text('Cleared commission records will appear here', style: AdminTheme.mutedStyle()),
           ],
+        ),
+      );
+    }
+
+    if (_isDesktop) {
+      return SingleChildScrollView(
+        padding: const EdgeInsets.all(32),
+        child: AdminCard(
+          padding: EdgeInsets.zero,
+          child: DataTable(
+            headingRowColor: WidgetStateProperty.all(AdminColors.navy.withValues(alpha: 0.03)),
+            columns: [
+              DataColumn(label: Text('Supplier', style: AdminTheme.sectionHeaderStyle())),
+              DataColumn(label: Text('Amount', style: AdminTheme.sectionHeaderStyle())),
+              DataColumn(label: Text('Settled On', style: AdminTheme.sectionHeaderStyle())),
+              DataColumn(label: Text('Status', style: AdminTheme.sectionHeaderStyle())),
+              DataColumn(label: Text('Proof', style: AdminTheme.sectionHeaderStyle())),
+            ],
+            rows: settledComms.map((p) => DataRow(
+              cells: [
+                DataCell(Text(p.payerName, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700))),
+                DataCell(Text('Rs ${p.amount.toStringAsFixed(0)}', style: AdminTheme.bodyStyle())),
+                DataCell(Text(p.confirmedAt != null ? DateFormat('MMM dd, yyyy').format(p.confirmedAt!) : '—', style: AdminTheme.bodyStyle())),
+                DataCell(StatusChip(status: p.status)),
+                DataCell(
+                  IconButton(
+                    icon: const Icon(Icons.image_search_rounded, size: 20),
+                    onPressed: () => _showPaymentDetailDialog(p, adminVM, true),
+                    tooltip: 'View Proof',
+                  ),
+                ),
+              ],
+            )).toList(),
+          ),
         ),
       );
     }
@@ -474,16 +647,30 @@ class _SummaryStrip extends StatelessWidget {
   final double collected;
   final double grandTotal;
   final NumberFormat currency;
+  final bool isDesktop;
 
   const _SummaryStrip({
     required this.outstanding,
     required this.collected,
     required this.grandTotal,
     required this.currency,
+    this.isDesktop = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    if (isDesktop) {
+      return Row(
+        children: [
+          Expanded(child: _StatCard(Icons.account_balance_wallet_rounded, 'Owed (Total)', currency.format(outstanding), AdminColors.red)),
+          const SizedBox(width: 20),
+          Expanded(child: _StatCard(Icons.assignment_turned_in_rounded, 'Collected (MTD)', currency.format(collected), AdminColors.green)),
+          const SizedBox(width: 20),
+          Expanded(child: _StatCard(Icons.bar_chart_rounded, 'Total Commission Revenue', currency.format(grandTotal), AdminColors.navy)),
+        ],
+      );
+    }
+
     return Column(
       children: [
         Row(

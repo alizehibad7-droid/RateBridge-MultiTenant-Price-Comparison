@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -15,6 +16,14 @@ class AdminCategoriesView extends StatefulWidget {
 }
 
 class _AdminCategoriesViewState extends State<AdminCategoriesView> {
+  bool get _isDesktop {
+    if (kIsWeb) return true;
+    final platform = defaultTargetPlatform;
+    return platform == TargetPlatform.windows || 
+           platform == TargetPlatform.macOS || 
+           platform == TargetPlatform.linux;
+  }
+
   @override
   Widget build(BuildContext context) {
     final adminVM = Provider.of<AdminViewModel>(context);
@@ -34,29 +43,13 @@ class _AdminCategoriesViewState extends State<AdminCategoriesView> {
             return _buildEmptyState(context, adminVM);
           }
 
+          if (_isDesktop) {
+            return _buildDesktopLayout(context, categories, adminVM);
+          }
+
           return Column(
             children: [
-              Container(
-                padding: const EdgeInsets.all(14),
-                margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                decoration: BoxDecoration(
-                  color: AdminColors.navy.withValues(alpha: 0.05),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AdminColors.navy.withValues(alpha: 0.1)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.info_outline_rounded, color: AdminColors.navy, size: 20),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        'Manage pre-loaded Pakistan construction material categories. Toggle visibility or update specifications.',
-                        style: AdminTheme.mutedStyle(size: 12).copyWith(color: AdminColors.navy, fontWeight: FontWeight.w500),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              _buildHeaderBanner(),
               Expanded(
                 child: ListView.builder(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
@@ -65,25 +58,150 @@ class _AdminCategoriesViewState extends State<AdminCategoriesView> {
                       _buildCategoryRow(context, categories[idx], adminVM),
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.all(24),
-                decoration: const BoxDecoration(
-                  color: Colors.white,
-                  boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, -2))],
-                ),
-                child: SafeArea(
-                  top: false,
-                  child: ElevatedButton.icon(
-                    onPressed: () => _showCategoryFormDialog(context, null, adminVM),
-                    icon: const Icon(Icons.add_circle_outline_rounded, size: 20),
-                    label: const Text('ADD CUSTOM CATEGORY'),
-                    style: AdminTheme.primaryButtonStyle(),
-                  ),
-                ),
-              ),
+              _buildAddButton(context, adminVM),
             ],
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildHeaderBanner() {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      decoration: BoxDecoration(
+        color: AdminColors.navy.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AdminColors.navy.withValues(alpha: 0.1)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.info_outline_rounded, color: AdminColors.navy, size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'Manage pre-loaded Pakistan construction material categories. Toggle visibility or update specifications.',
+              style: AdminTheme.mutedStyle(size: 12).copyWith(color: AdminColors.navy, fontWeight: FontWeight.w500),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAddButton(BuildContext context, AdminViewModel adminVM) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, -2))],
+      ),
+      child: SafeArea(
+        top: false,
+        child: ElevatedButton.icon(
+          onPressed: () => _showCategoryFormDialog(context, null, adminVM),
+          icon: const Icon(Icons.add_circle_outline_rounded, size: 20),
+          label: const Text('ADD CUSTOM CATEGORY'),
+          style: AdminTheme.primaryButtonStyle(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDesktopLayout(BuildContext context, List<CategoryModel> categories, AdminViewModel adminVM) {
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Material Taxonomy', style: AdminTheme.titleStyle(size: 24)),
+                  const SizedBox(height: 4),
+                  Text('Define and manage material categories and their specifications.', style: AdminTheme.mutedStyle()),
+                ],
+              ),
+              ElevatedButton.icon(
+                onPressed: () => _showCategoryFormDialog(context, null, adminVM),
+                icon: const Icon(Icons.add_rounded),
+                label: const Text('NEW CATEGORY'),
+                style: AdminTheme.primaryButtonStyle(height: 44).copyWith(
+                  minimumSize: WidgetStateProperty.all(const Size(180, 44)),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          Expanded(
+            child: AdminCard(
+              padding: EdgeInsets.zero,
+              child: SingleChildScrollView(
+                child: DataTable(
+                  headingRowColor: WidgetStateProperty.all(AdminColors.navy.withValues(alpha: 0.03)),
+                  columns: [
+                    DataColumn(label: Text('Category', style: AdminTheme.sectionHeaderStyle())),
+                    DataColumn(label: Text('Unit', style: AdminTheme.sectionHeaderStyle())),
+                    DataColumn(label: Text('Brands', style: AdminTheme.sectionHeaderStyle())),
+                    DataColumn(label: Text('Status', style: AdminTheme.sectionHeaderStyle())),
+                    DataColumn(label: Text('Actions', style: AdminTheme.sectionHeaderStyle())),
+                  ],
+                  rows: categories.map((cat) => DataRow(
+                    cells: [
+                      DataCell(
+                        Row(
+                          children: [
+                            Container(
+                              width: 32, height: 32,
+                              decoration: BoxDecoration(color: AdminColors.navy.withValues(alpha: 0.05), borderRadius: BorderRadius.circular(8)),
+                              child: Icon(cat.icon, size: 18, color: AdminColors.navy),
+                            ),
+                            const SizedBox(width: 12),
+                            Text(cat.name, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, color: AdminColors.navy)),
+                          ],
+                        ),
+                      ),
+                      DataCell(Text(cat.unit, style: AdminTheme.bodyStyle())),
+                      DataCell(Text('${cat.brands.length} Brands', style: AdminTheme.bodyStyle())),
+                      DataCell(
+                        Row(
+                          children: [
+                            Switch(
+                              value: cat.isActive,
+                              activeColor: AdminColors.amber,
+                              onChanged: (val) => adminVM.setCategoryActive(cat.id, val),
+                            ),
+                            Text(cat.isActive ? 'ACTIVE' : 'INACTIVE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: cat.isActive ? AdminColors.green : AdminColors.textGrey)),
+                          ],
+                        ),
+                      ),
+                      DataCell(
+                        Row(
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.edit_note_rounded, color: AdminColors.navy),
+                              onPressed: () => _showCategoryFormDialog(context, cat, adminVM),
+                              tooltip: 'Edit Specifications',
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline_rounded, color: AdminColors.red),
+                              onPressed: () => _confirmDeleteCategory(context, cat, adminVM),
+                              tooltip: 'Delete Category',
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  )).toList(),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
