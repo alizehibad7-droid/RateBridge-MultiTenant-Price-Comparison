@@ -92,6 +92,76 @@ class _AdminAnalyticsViewState extends State<AdminAnalyticsView> {
 
   Widget _buildTopHeader(AdminViewModel adminVM) {
     final mode = adminVM.analyticsMode;
+    final double screenWidth = MediaQuery.of(context).size.width;
+
+    if (screenWidth < 640) {
+      // Mobile header
+      return Container(
+        padding: const EdgeInsets.all(12),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                if (mode != AnalyticsViewMode.overall) ...[
+                  IconButton(
+                    icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 14),
+                    onPressed: () => adminVM.setAnalyticsMode(AnalyticsViewMode.overall),
+                    style: IconButton.styleFrom(
+                      backgroundColor: const Color(0xFFF1F5F9),
+                      padding: const EdgeInsets.all(8),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    mode == AnalyticsViewMode.ceoDetail ? 'CEO Intelligence' : 'Supplier Metrics',
+                    style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.w800, color: AdminColors.navy),
+                  ),
+                ] else ...[
+                  Text(
+                    'Intelligence',
+                    style: GoogleFonts.plusJakartaSans(fontSize: 18, fontWeight: FontWeight.w900, color: AdminColors.navy),
+                  ),
+                ],
+                const Spacer(),
+                _buildHeaderFilter(
+                  value: adminVM.timeRange,
+                  icon: Icons.calendar_today_rounded,
+                  items: const ['7 Days', '30 Days', '3 Months', 'All Time'],
+                  onChanged: (val) { if (val != null) adminVM.setTimeRange(val); },
+                ),
+              ],
+            ),
+            if (mode == AnalyticsViewMode.overall) ...[
+              const SizedBox(height: 8),
+              Container(
+                height: 38,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: TextField(
+                  onChanged: (val) => setState(() => _searchQuery = val),
+                  style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w600, color: AdminColors.navy),
+                  decoration: InputDecoration(
+                    hintText: 'Search partners...',
+                    hintStyle: AdminTheme.mutedStyle(size: 12),
+                    prefixIcon: const Icon(Icons.search_rounded, size: 16, color: AdminColors.textGrey),
+                    border: InputBorder.none,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      );
+    }
 
     return Container(
       height: 72,
@@ -251,11 +321,13 @@ class _OverallAnalyticsSection extends StatelessWidget {
       e.businessName.toLowerCase().contains(searchQuery.toLowerCase())
     ).toList();
 
+    final double screenWidth = MediaQuery.of(context).size.width;
+
     return RefreshIndicator(
       onRefresh: () => adminVM.loadAnalytics(),
       color: AdminColors.navy,
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
+        padding: EdgeInsets.all(screenWidth < 600 ? 12 : 24),
         physics: const AlwaysScrollableScrollPhysics(),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -437,6 +509,7 @@ class _OverallAnalyticsSection extends StatelessWidget {
     required Widget chart,
     required Widget footer,
   }) {
+    final double screenWidth = MediaQuery.of(context).size.width;
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -470,7 +543,14 @@ class _OverallAnalyticsSection extends StatelessWidget {
           ),
           const Divider(height: 1),
           const SizedBox(height: 24),
-          SizedBox(height: 280, child: chart),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: SizedBox(
+              width: screenWidth < 500 ? 500 : screenWidth - 48,
+              height: 280, 
+              child: chart
+            ),
+          ),
           const SizedBox(height: 24),
           const Divider(height: 1),
           footer,
@@ -783,8 +863,9 @@ class _CEODetailSectionState extends State<_CEODetailSection> with SingleTickerP
   }
 
   Widget _buildOverview(CompanyModel company, CEOPerformanceData stats, String range) {
+    final double screenWidth = MediaQuery.of(context).size.width;
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(screenWidth < 600 ? 12 : 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -854,8 +935,9 @@ class _CEODetailSectionState extends State<_CEODetailSection> with SingleTickerP
 
   Widget _buildFieldUsers(AdminViewModel vm, CompanyModel company) {
     final users = vm.allUsers.where((u) => u.companyId == company.id && u.role == 'field_user').toList();
+    final double screenWidth = MediaQuery.of(context).size.width;
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(screenWidth < 600 ? 12 : 24),
       child: AdminCard(
         title: 'Workforce Tracking',
         padding: EdgeInsets.zero,
@@ -884,13 +966,14 @@ class _CEODetailSectionState extends State<_CEODetailSection> with SingleTickerP
   }
 
   Widget _buildOrders(AdminViewModel vm, CompanyModel company) {
+    final double screenWidth = MediaQuery.of(context).size.width;
     return FutureBuilder<List<OrderModel>>(
       future: vm.getCompanyOrders(company.id),
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
         final orders = snapshot.data!;
         return SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
+          padding: EdgeInsets.all(screenWidth < 600 ? 12 : 24),
           child: AdminCard(
             title: 'Transaction Audit Trail (${vm.timeRange})',
             padding: EdgeInsets.zero,
@@ -923,6 +1006,7 @@ class _CEODetailSectionState extends State<_CEODetailSection> with SingleTickerP
   }
 
   Widget _buildPerformanceGraph(AdminViewModel vm, CompanyModel company) {
+    final double screenWidth = MediaQuery.of(context).size.width;
     return FutureBuilder<List<OrderModel>>(
       future: vm.getCompanyOrders(company.id),
       builder: (context, snapshot) {
@@ -944,44 +1028,48 @@ class _CEODetailSectionState extends State<_CEODetailSection> with SingleTickerP
         double interval = range > (86400000 * 14) ? 86400000 * 7 : 86400000;
 
         return SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
+          padding: EdgeInsets.all(screenWidth < 600 ? 12 : 24),
           child: AdminCard(
             title: 'Growth Analysis (${vm.timeRange})',
-            child: SizedBox(
-              height: 400,
-              child: spots.isEmpty
-                ? const Center(child: Text('Insufficient historical data for trend analysis'))
-                : LineChart(LineChartData(
-                    minX: minX, maxX: maxX, minY: 0,
-                    gridData: FlGridData(show: true, drawVerticalLine: false, getDrawingHorizontalLine: (v) => FlLine(color: const Color(0xFFF1F5F9), strokeWidth: 1.5)),
-                    borderData: FlBorderData(show: false),
-                    lineTouchData: LineTouchData(
-                      touchTooltipData: LineTouchTooltipData(
-                        getTooltipColor: (_) => AdminColors.navy,
-                        getTooltipItems: (touchedSpots) => touchedSpots.map((s) => LineTooltipItem('${DateFormat('MMM d').format(DateTime.fromMillisecondsSinceEpoch(s.x.toInt()))}\n${s.y.toInt()} Orders', const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))).toList(),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: SizedBox(
+                width: screenWidth < 500 ? 500 : screenWidth - 48,
+                height: 400,
+                child: spots.isEmpty
+                  ? const Center(child: Text('Insufficient historical data for trend analysis'))
+                  : LineChart(LineChartData(
+                      minX: minX, maxX: maxX, minY: 0,
+                      gridData: FlGridData(show: true, drawVerticalLine: false, getDrawingHorizontalLine: (v) => FlLine(color: const Color(0xFFF1F5F9), strokeWidth: 1.5)),
+                      borderData: FlBorderData(show: false),
+                      lineTouchData: LineTouchData(
+                        touchTooltipData: LineTouchTooltipData(
+                          getTooltipColor: (_) => AdminColors.navy,
+                          getTooltipItems: (touchedSpots) => touchedSpots.map((s) => LineTooltipItem('${DateFormat('MMM d').format(DateTime.fromMillisecondsSinceEpoch(s.x.toInt()))}\n${s.y.toInt()} Orders', const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))).toList(),
+                        ),
                       ),
-                    ),
-                    titlesData: FlTitlesData(
-                      leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 45)),
-                      bottomTitles: AxisTitles(
-                        sideTitles: SideTitles(
-                          showTitles: true, 
-                          interval: interval, 
-                          getTitlesWidget: (val, meta) => Padding(padding: const EdgeInsets.only(top: 12), child: Text(DateFormat('MMM d').format(DateTime.fromMillisecondsSinceEpoch(val.toInt())), style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: Color(0xFF94A3B8))))
-                        )
+                      titlesData: FlTitlesData(
+                        leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 45)),
+                        bottomTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true, 
+                            interval: interval, 
+                            getTitlesWidget: (val, meta) => Padding(padding: const EdgeInsets.only(top: 12), child: Text(DateFormat('MMM d').format(DateTime.fromMillisecondsSinceEpoch(val.toInt())), style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: Color(0xFF94A3B8))))
+                          )
+                        ),
+                        topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                        rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                       ),
-                      topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                      rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    ),
-                    lineBarsData: [LineChartBarData(
-                      spots: spots, 
-                      isCurved: true, 
-                      color: AdminColors.green, 
-                      barWidth: 4, 
-                      dotData: const FlDotData(show: true), 
-                      belowBarData: BarAreaData(show: true, gradient: LinearGradient(colors: [AdminColors.green.withValues(alpha: 0.2), AdminColors.green.withValues(alpha: 0)], begin: Alignment.topCenter, end: Alignment.bottomCenter))
-                    )]
-                  )),
+                      lineBarsData: [LineChartBarData(
+                        spots: spots, 
+                        isCurved: true, 
+                        color: AdminColors.green, 
+                        barWidth: 4, 
+                        dotData: const FlDotData(show: true), 
+                        belowBarData: BarAreaData(show: true, gradient: LinearGradient(colors: [AdminColors.green.withValues(alpha: 0.2), AdminColors.green.withValues(alpha: 0)], begin: Alignment.topCenter, end: Alignment.bottomCenter))
+                      )]
+                    )),
+              ),
             ),
           ),
         );
@@ -1061,8 +1149,9 @@ class _SupplierDetailSectionState extends State<_SupplierDetailSection> with Sin
   }
 
   Widget _buildOverview(UserModel user, SupplierPerformanceData stats, String range) {
+    final double screenWidth = MediaQuery.of(context).size.width;
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(screenWidth < 600 ? 12 : 24),
       child: Column(
         children: [
           AdminCard(
@@ -1132,13 +1221,14 @@ class _SupplierDetailSectionState extends State<_SupplierDetailSection> with Sin
   }
 
   Widget _buildOrders(AdminViewModel vm, UserModel user) {
+    final double screenWidth = MediaQuery.of(context).size.width;
     return FutureBuilder<List<OrderModel>>(
       future: vm.getSupplierOrders(user.uid),
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
         final orders = snapshot.data!;
         return SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
+          padding: EdgeInsets.all(screenWidth < 600 ? 12 : 24),
           child: AdminCard(
             title: 'Supply logs (${vm.timeRange})',
             padding: EdgeInsets.zero,
@@ -1171,13 +1261,14 @@ class _SupplierDetailSectionState extends State<_SupplierDetailSection> with Sin
   }
 
   Widget _buildReviews(AdminViewModel vm, UserModel user) {
+    final double screenWidth = MediaQuery.of(context).size.width;
     return FutureBuilder<List<RatingModel>>(
       future: vm.getSupplierRatings(user.uid),
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
         final reviews = snapshot.data!;
         return SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
+          padding: EdgeInsets.all(screenWidth < 600 ? 12 : 24),
           child: AdminCard(
             title: 'Sentiment Logs (${vm.timeRange})',
             padding: EdgeInsets.zero,
@@ -1211,6 +1302,7 @@ class _SupplierDetailSectionState extends State<_SupplierDetailSection> with Sin
   }
 
   Widget _buildPerformanceGraph(AdminViewModel vm, UserModel user) {
+    final double screenWidth = MediaQuery.of(context).size.width;
     return FutureBuilder<List<dynamic>>(
       future: Future.wait([vm.getSupplierOrders(user.uid), vm.getSupplierRatings(user.uid)]),
       builder: (context, snapshot) {
@@ -1238,7 +1330,7 @@ class _SupplierDetailSectionState extends State<_SupplierDetailSection> with Sin
         double interval = range > (86400000 * 14) ? 86400000 * 7 : 86400000;
 
         return SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
+          padding: EdgeInsets.all(screenWidth < 600 ? 12 : 24),
           child: AdminCard(
             title: 'KPI Trend Mapping (${vm.timeRange})',
             child: Column(
@@ -1246,50 +1338,54 @@ class _SupplierDetailSectionState extends State<_SupplierDetailSection> with Sin
               children: [
                 _MetricSelector(value: _performanceMetric, options: const ['Orders', 'Rating'], onChanged: (v) => setState(() => _performanceMetric = v)),
                 const SizedBox(height: 24),
-                SizedBox(
-                  height: 400,
-                  child: spots.isEmpty
-                    ? const Center(child: Text('Insufficient historical throughput for mapping in this period'))
-                    : LineChart(LineChartData(
-                        minX: minX, maxX: maxX, minY: 0, 
-                        maxY: _performanceMetric == 'Rating' ? 5.5 : null,
-                        gridData: FlGridData(show: true, drawVerticalLine: false, getDrawingHorizontalLine: (v) => FlLine(color: const Color(0xFFF1F5F9), strokeWidth: 1.5)),
-                        borderData: FlBorderData(show: false),
-                        lineTouchData: LineTouchData(
-                          touchTooltipData: LineTouchTooltipData(
-                            getTooltipColor: (_) => AdminColors.navy,
-                            getTooltipItems: (touchedSpots) => touchedSpots.map((s) => LineTooltipItem(
-                              '${DateFormat('MMM d').format(DateTime.fromMillisecondsSinceEpoch(s.x.toInt()))}\n${_performanceMetric == 'Rating' ? s.y.toStringAsFixed(1) : s.y.toInt()} ${_performanceMetric}',
-                              const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)
-                            )).toList(),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: SizedBox(
+                    width: screenWidth < 500 ? 500 : screenWidth - 48,
+                    height: 400,
+                    child: spots.isEmpty
+                      ? const Center(child: Text('Insufficient historical throughput for mapping in this period'))
+                      : LineChart(LineChartData(
+                          minX: minX, maxX: maxX, minY: 0, 
+                          maxY: _performanceMetric == 'Rating' ? 5.5 : null,
+                          gridData: FlGridData(show: true, drawVerticalLine: false, getDrawingHorizontalLine: (v) => FlLine(color: const Color(0xFFF1F5F9), strokeWidth: 1.5)),
+                          borderData: FlBorderData(show: false),
+                          lineTouchData: LineTouchData(
+                            touchTooltipData: LineTouchTooltipData(
+                              getTooltipColor: (_) => AdminColors.navy,
+                              getTooltipItems: (touchedSpots) => touchedSpots.map((s) => LineTooltipItem(
+                                '${DateFormat('MMM d').format(DateTime.fromMillisecondsSinceEpoch(s.x.toInt()))}\n${_performanceMetric == 'Rating' ? s.y.toStringAsFixed(1) : s.y.toInt()} ${_performanceMetric}',
+                                const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)
+                              )).toList(),
+                            ),
                           ),
-                        ),
-                        titlesData: FlTitlesData(
-                          leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 45)),
-                          bottomTitles: AxisTitles(
-                            sideTitles: SideTitles(
-                              showTitles: true, 
-                              interval: interval, 
-                              getTitlesWidget: (val, meta) {
-                                return Padding(
-                                  padding: const EdgeInsets.only(top: 12),
-                                  child: Text(DateFormat('MMM d').format(DateTime.fromMillisecondsSinceEpoch(val.toInt())), style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: Color(0xFF94A3B8)))
-                                );
-                              }
-                            )
+                          titlesData: FlTitlesData(
+                            leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 45)),
+                            bottomTitles: AxisTitles(
+                              sideTitles: SideTitles(
+                                showTitles: true, 
+                                interval: interval, 
+                                getTitlesWidget: (val, meta) {
+                                  return Padding(
+                                    padding: const EdgeInsets.only(top: 12),
+                                    child: Text(DateFormat('MMM d').format(DateTime.fromMillisecondsSinceEpoch(val.toInt())), style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: Color(0xFF94A3B8)))
+                                  );
+                                }
+                              )
+                            ),
+                            topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                            rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                           ),
-                          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                        ),
-                        lineBarsData: [LineChartBarData(
-                          spots: spots, 
-                          isCurved: true, 
-                          color: AdminColors.amber, 
-                          barWidth: 5, 
-                          dotData: const FlDotData(show: true), 
-                          belowBarData: BarAreaData(show: true, gradient: LinearGradient(colors: [AdminColors.amber.withValues(alpha: 0.2), AdminColors.amber.withValues(alpha: 0)], begin: Alignment.topCenter, end: Alignment.bottomCenter))
-                        )]
-                      )),
+                          lineBarsData: [LineChartBarData(
+                            spots: spots, 
+                            isCurved: true, 
+                            color: AdminColors.amber, 
+                            barWidth: 5, 
+                            dotData: const FlDotData(show: true), 
+                            belowBarData: BarAreaData(show: true, gradient: LinearGradient(colors: [AdminColors.amber.withValues(alpha: 0.2), AdminColors.amber.withValues(alpha: 0)], begin: Alignment.topCenter, end: Alignment.bottomCenter))
+                          )]
+                        )),
+                  ),
                 ),
               ],
             ),

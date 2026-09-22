@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
@@ -7,7 +7,6 @@ import '../../models/audit_log_model.dart';
 import '../../theme/admin_theme.dart';
 import '../../services/firestore_service.dart';
 import '../../widgets/admin/admin_widgets.dart';
-import 'package:flutter/foundation.dart';
 
 class AdminAuditLogView extends StatefulWidget {
   const AdminAuditLogView({super.key});
@@ -36,17 +35,14 @@ class _AdminAuditLogViewState extends State<AdminAuditLogView> {
 
   bool get _isDesktop {
     if (kIsWeb) return true;
-    try {
-      final platform = defaultTargetPlatform;
-      return platform == TargetPlatform.windows || platform == TargetPlatform.macOS || platform == TargetPlatform.linux;
-    } catch (_) {
-      return false;
-    }
+    final platform = defaultTargetPlatform;
+    return platform == TargetPlatform.windows || platform == TargetPlatform.macOS || platform == TargetPlatform.linux;
   }
 
   @override
   Widget build(BuildContext context) {
     final firestoreService = context.read<FirestoreService>();
+    final double screenWidth = MediaQuery.of(context).size.width;
 
     return Scaffold(
       backgroundColor: AdminColors.screenBg,
@@ -126,13 +122,14 @@ class _AdminAuditLogViewState extends State<AdminAuditLogView> {
                   );
                 }
 
-                if (_isDesktop) {
+                if (screenWidth >= 900) {
                   return _buildAuditLogTable(logs);
                 }
 
-                return ListView.builder(
+                return ListView.separated(
                   padding: const EdgeInsets.all(16),
                   itemCount: logs.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 12),
                   itemBuilder: (context, index) => _AuditLogTile(log: logs[index]),
                 );
               },
@@ -279,7 +276,7 @@ class _FilterChip extends StatelessWidget {
         side: BorderSide(color: selected ? AdminColors.amber : AdminColors.border),
         labelStyle: GoogleFonts.plusJakartaSans(
           fontSize: 11,
-          fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+          fontWeight: FontWeight.w700,
           color: selected ? AdminColors.darkAmber : AdminColors.navy,
         ),
       ),
@@ -299,7 +296,7 @@ class _AuditLogTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         side: const BorderSide(color: AdminColors.border),
       ),
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: EdgeInsets.zero,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -325,11 +322,12 @@ class _AuditLogTile extends StatelessWidget {
                         log.description,
                         style: GoogleFonts.plusJakartaSans(
                           fontWeight: FontWeight.w700,
-                          fontSize: 15,
+                          fontSize: 14,
                           color: AdminColors.navy,
                         ),
+                        softWrap: true,
                       ),
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 8),
                       Row(
                         children: [
                           const Icon(Icons.person_rounded, size: 12, color: AdminColors.textGrey),
@@ -337,7 +335,7 @@ class _AuditLogTile extends StatelessWidget {
                           Expanded(
                             child: Text(
                               'By ${log.actorName}',
-                              style: AdminTheme.mutedStyle(size: 12).copyWith(fontWeight: FontWeight.w600),
+                              style: AdminTheme.mutedStyle(size: 11).copyWith(fontWeight: FontWeight.w600),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -351,7 +349,7 @@ class _AuditLogTile extends StatelessWidget {
                           const SizedBox(width: 4),
                           Text(
                             DateFormat('MMM dd, yyyy · hh:mm a').format(log.timestamp),
-                            style: AdminTheme.mutedStyle(size: 11),
+                            style: AdminTheme.mutedStyle(size: 10),
                           ),
                         ],
                       ),
@@ -377,18 +375,18 @@ class _AuditLogTile extends StatelessWidget {
                       children: [
                         const Icon(Icons.notes_rounded, size: 12, color: AdminColors.textGrey),
                         const SizedBox(width: 6),
-                        Text('NOTES / REASON', style: AdminTheme.sectionHeaderStyle().copyWith(fontSize: 10)),
+                        Text('NOTES / REASON', style: AdminTheme.sectionHeaderStyle().copyWith(fontSize: 9)),
                       ],
                     ),
                     const SizedBox(height: 6),
-                    Text(log.reason!, style: GoogleFonts.plusJakartaSans(fontSize: 13, color: AdminColors.navy, height: 1.4)),
+                    Text(log.reason!, style: GoogleFonts.plusJakartaSans(fontSize: 12, color: AdminColors.navy, height: 1.4)),
                   ],
                 ),
               ),
             ],
             const SizedBox(height: 12),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
                 color: AdminColors.navy.withValues(alpha: 0.03),
                 borderRadius: BorderRadius.circular(6),
@@ -396,11 +394,11 @@ class _AuditLogTile extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.track_changes_rounded, size: 12, color: AdminColors.textGrey),
+                  const Icon(Icons.track_changes_rounded, size: 11, color: AdminColors.textGrey),
                   const SizedBox(width: 6),
                   Text(
                     'Target: ${log.targetType.toUpperCase()}',
-                    style: GoogleFonts.jetBrainsMono(fontSize: 10, fontWeight: FontWeight.w700, color: AdminColors.textGrey),
+                    style: GoogleFonts.jetBrainsMono(fontSize: 9, fontWeight: FontWeight.w700, color: AdminColors.textGrey),
                   ),
                 ],
               ),

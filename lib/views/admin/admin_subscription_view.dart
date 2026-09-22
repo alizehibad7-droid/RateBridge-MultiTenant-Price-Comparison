@@ -97,7 +97,10 @@ class _AdminSubscriptionViewState extends State<AdminSubscriptionView> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final double screenWidth = MediaQuery.of(context).size.width;
+    final double paddingValue = screenWidth < 600 ? 12.0 : 24.0;
+
+    return Material(
       color: AdminColors.screenBg,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -107,7 +110,7 @@ class _AdminSubscriptionViewState extends State<AdminSubscriptionView> {
             child: _loadingCompanies
                 ? const Center(child: CircularProgressIndicator())
                 : SingleChildScrollView(
-                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                    padding: EdgeInsets.fromLTRB(paddingValue, 0, paddingValue, 24),
                     child: Column(
                       children: [
                         _buildMetricsRow(),
@@ -118,7 +121,10 @@ class _AdminSubscriptionViewState extends State<AdminSubscriptionView> {
                           padding: EdgeInsets.zero,
                           child: _filtered.isEmpty
                               ? const Padding(padding: EdgeInsets.all(80), child: AdminEmptyState(icon: Icons.business_rounded, message: 'No companies matching your search criteria.'))
-                              : _buildSubscriptionTable(),
+                              : SingleChildScrollView(
+                                  scrollDirection: Axis.horizontal,
+                                  child: _buildSubscriptionTable(),
+                                ),
                         ),
                       ],
                     ),
@@ -130,26 +136,50 @@ class _AdminSubscriptionViewState extends State<AdminSubscriptionView> {
   }
 
   Widget _buildHeader() {
+    final double screenWidth = MediaQuery.of(context).size.width;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
-      child: Row(
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Corporate Subscriptions', style: AdminTheme.titleStyle(size: 24)),
-              const SizedBox(height: 4),
-              Text('Monitor service tiers, lifecycle status, and administrative grants.', style: AdminTheme.mutedStyle()),
-            ],
-          ),
-          const Spacer(),
-          ElevatedButton.icon(
-            onPressed: _loadCompanies,
-            icon: const Icon(Icons.refresh_rounded, size: 16),
-            label: const Text('Sync Workspace'),
-            style: AdminTheme.primaryButtonStyle(),
-          ),
-        ],
+      padding: EdgeInsets.fromLTRB(screenWidth < 600 ? 12 : 24, 24, screenWidth < 600 ? 12 : 24, 20),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (constraints.maxWidth > 600) {
+            return Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Corporate Subscriptions', style: AdminTheme.titleStyle(size: 24)),
+                      const SizedBox(height: 4),
+                      Text('Monitor service tiers, lifecycle status, and administrative grants.', style: AdminTheme.mutedStyle()),
+                    ],
+                  ),
+                ),
+                ElevatedButton.icon(
+                  onPressed: _loadCompanies,
+                  icon: const Icon(Icons.refresh_rounded, size: 16),
+                  label: const Text('Sync Workspace'),
+                  style: AdminTheme.primaryButtonStyle(),
+                ),
+              ],
+            );
+          } else {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text('Corporate Subscriptions', style: AdminTheme.titleStyle(size: 20)),
+                const SizedBox(height: 4),
+                Text('Monitor service tiers and status.', style: AdminTheme.mutedStyle(size: 12)),
+                const SizedBox(height: 12),
+                ElevatedButton.icon(
+                  onPressed: _loadCompanies,
+                  icon: const Icon(Icons.refresh_rounded, size: 16),
+                  label: const Text('Sync Workspace'),
+                  style: AdminTheme.primaryButtonStyle(),
+                ),
+              ],
+            );
+          }
+        },
       ),
     );
   }
@@ -159,16 +189,27 @@ class _AdminSubscriptionViewState extends State<AdminSubscriptionView> {
     final premiumCount = _subscriptions.values.where((s) => s?.plan == 'premium' && s!.isActive).length;
     final freeCount = _companies.length - basicCount - premiumCount;
 
-    return Row(
-      children: [
-        _MetricTile(label: 'FREE TIERS', value: '$freeCount', icon: Icons.eco_outlined, color: AdminColors.textGrey),
-        const SizedBox(width: 16),
-        _MetricTile(label: 'BASIC PLANS', value: '$basicCount', icon: Icons.star_border_rounded, color: AdminColors.primary),
-        const SizedBox(width: 16),
-        _MetricTile(label: 'PREMIUM SEATS', value: '$premiumCount', icon: Icons.workspace_premium_outlined, color: AdminColors.amber),
-        const SizedBox(width: 16),
-        _MetricTile(label: 'TOTAL ENTITIES', value: '${_companies.length}', icon: Icons.business_rounded, color: AdminColors.navy),
-      ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final int crossAxisCount = constraints.maxWidth > 900 ? 4 : (constraints.maxWidth > 550 ? 2 : 1);
+        final double itemWidth = (constraints.maxWidth - (crossAxisCount - 1) * 16) / crossAxisCount;
+        final double childAspectRatio = itemWidth / 100;
+
+        return GridView.count(
+          crossAxisCount: crossAxisCount,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisSpacing: 16,
+          mainAxisSpacing: 16,
+          childAspectRatio: childAspectRatio,
+          children: [
+            _MetricTile(label: 'FREE TIERS', value: '$freeCount', icon: Icons.eco_outlined, color: AdminColors.textGrey),
+            _MetricTile(label: 'BASIC PLANS', value: '$basicCount', icon: Icons.star_border_rounded, color: AdminColors.primary),
+            _MetricTile(label: 'PREMIUM SEATS', value: '$premiumCount', icon: Icons.workspace_premium_outlined, color: AdminColors.amber),
+            _MetricTile(label: 'TOTAL ENTITIES', value: '${_companies.length}', icon: Icons.business_rounded, color: AdminColors.navy),
+          ],
+        );
+      },
     );
   }
 
@@ -356,24 +397,23 @@ class _MetricTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: AdminColors.border)),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(label, style: AdminTheme.sectionHeaderStyle(size: 9)),
-                Icon(icon, color: color.withValues(alpha: 0.6), size: 16),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(value, style: GoogleFonts.plusJakartaSans(fontSize: 24, fontWeight: FontWeight.w800, color: AdminColors.navy)),
-          ],
-        ),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: AdminColors.border)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(label, style: AdminTheme.sectionHeaderStyle(size: 9)),
+              Icon(icon, color: color.withValues(alpha: 0.6), size: 16),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(value, style: GoogleFonts.plusJakartaSans(fontSize: 22, fontWeight: FontWeight.w800, color: AdminColors.navy)),
+        ],
       ),
     );
   }

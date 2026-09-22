@@ -21,14 +21,8 @@ class AdminPaymentQueueView extends StatefulWidget {
 class _AdminPaymentQueueViewState extends State<AdminPaymentQueueView> with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
-  bool get _isDesktop {
-    if (kIsWeb) return true;
-    try {
-      final platform = defaultTargetPlatform;
-      return platform == TargetPlatform.windows || platform == TargetPlatform.macOS || platform == TargetPlatform.linux;
-    } catch (_) {
-      return false;
-    }
+  bool _checkIsDesktop(BuildContext context) {
+    return MediaQuery.of(context).size.width >= 1024;
   }
 
   @override
@@ -50,7 +44,7 @@ class _AdminPaymentQueueViewState extends State<AdminPaymentQueueView> with Sing
   Widget build(BuildContext context) {
     final adminVM = context.watch<AdminViewModel>();
 
-    return Column(
+    Widget content = Column(
       children: [
         Container(
           color: Colors.white,
@@ -88,6 +82,16 @@ class _AdminPaymentQueueViewState extends State<AdminPaymentQueueView> with Sing
           ),
         ),
       ],
+    );
+
+    if (widget.embedded) {
+      return content;
+    }
+
+    return Scaffold(
+      appBar: const AdminAppBar(title: 'Payment Queue'),
+      backgroundColor: AdminColors.screenBg,
+      body: content,
     );
   }
 
@@ -128,7 +132,7 @@ class _AdminPaymentQueueViewState extends State<AdminPaymentQueueView> with Sing
       );
     }
 
-    return _isDesktop 
+    return _checkIsDesktop(context) 
         ? _buildPaymentTable(payments, vm, isPending)
         : _buildPaymentList(payments, vm, isPending);
   }
@@ -189,27 +193,28 @@ class _AdminPaymentQueueViewState extends State<AdminPaymentQueueView> with Sing
                             icon: const Icon(Icons.cancel_outlined, color: AdminColors.red, size: 20),
                             onPressed: () => _showRejectDialog(context, payment, vm),
                             tooltip: 'Reject',
-                        ),
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
-                ),
-              ],
-            );
-          }).toList(),
+                ],
+              );
+            }).toList(),
+          ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 
   void _showPaymentDetailDialog(PaymentProofModel payment, AdminViewModel vm, bool isPending) {
+    final double screenWidth = MediaQuery.of(context).size.width;
     showDialog(
       context: context,
       builder: (context) => Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: Container(
-          width: 500,
+          width: screenWidth > 550 ? 500 : screenWidth - 32,
           padding: const EdgeInsets.all(24),
           child: SingleChildScrollView(
             child: Column(

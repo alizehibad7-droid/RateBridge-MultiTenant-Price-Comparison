@@ -48,6 +48,7 @@ class AdminDashboardView extends StatefulWidget {
 class _AdminDashboardViewState extends State<AdminDashboardView> {
   final TabHistory _tabHistory = TabHistory();
   bool _isSidebarCollapsed = false;
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   void _onTabTapped(int index) {
     if (_tabHistory.select(index)) setState(() {});
@@ -77,86 +78,54 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
     ];
   }
 
-  bool get _useDesktopLayout {
-    if (kIsWeb) return true;
-    return defaultTargetPlatform == TargetPlatform.windows || 
-           defaultTargetPlatform == TargetPlatform.macOS || 
-           defaultTargetPlatform == TargetPlatform.linux;
-  }
-
   @override
   Widget build(BuildContext context) {
-    return _useDesktopLayout ? _buildDesktopLayout(context) : _buildMobileLayout(context);
+    final double width = MediaQuery.of(context).size.width;
+    if (width >= 1024) {
+      return _buildDesktopLayout(context);
+    } else {
+      return _buildResponsiveMobileLayout(context);
+    }
   }
 
-  Widget _buildMobileLayout(BuildContext context) {
-    final isLoading = context.watch<AdminViewModel>().isLoading;
-    final isProfileTab = _tabHistory.index == 14;
-    final isDashboardTab = _tabHistory.index == 0;
+  Widget _buildResponsiveMobileLayout(BuildContext context) {
+    final adminVM = context.watch<AdminViewModel>();
+    final auth = context.watch<AuthViewModel>();
+    final notifVM = context.watch<NotificationViewModel>();
 
     return TabHistoryPopScope(
       history: _tabHistory,
       onChanged: () => setState(() {}),
       child: Scaffold(
+        key: _scaffoldKey,
         backgroundColor: AdminColors.screenBg,
-        appBar: (isProfileTab || isDashboardTab)
-            ? null
-            : AdminAppBar(
-                title: _getScreenTitle(_tabHistory.index),
-                showNotificationIcon: true,
-                automaticallyImplyLeading: false,
-                bottom: isLoading
-                    ? const PreferredSize(
-                        preferredSize: Size.fromHeight(2),
-                        child: LinearProgressIndicator(
-                          minHeight: 2,
-                          backgroundColor: Colors.transparent,
-                          color: AdminColors.amber,
-                        ),
-                      )
-                    : null,
-              ),
-        body: SafeArea(
-          top: false,
-          child: IndexedStack(
-            index: _tabHistory.index,
-            children: _screens,
+        drawer: Drawer(
+          child: _AdminSidebar(
+            selectedIndex: _tabHistory.index,
+            isCollapsed: false,
+            onItemSelected: (index) {
+              _onTabTapped(index);
+              _scaffoldKey.currentState?.closeDrawer();
+            },
           ),
         ),
-        bottomNavigationBar: Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.04),
-                blurRadius: 16,
-                offset: const Offset(0, -4),
+        body: Column(
+          children: [
+            _AdminTopBar(
+              title: _getScreenTitle(_tabHistory.index),
+              adminName: auth.user?.name ?? 'Admin',
+              unreadNotifications: notifVM.unreadCount,
+              isLoading: adminVM.isLoading,
+              onProfileTap: () => _onTabTapped(14),
+              onMenuTap: () => _scaffoldKey.currentState?.openDrawer(),
+            ),
+            Expanded(
+              child: IndexedStack(
+                index: _tabHistory.index,
+                children: _screens,
               ),
-            ],
-          ),
-          child: BottomNavigationBar(
-            currentIndex: _tabHistory.index > 4 ? 0 : _tabHistory.index,
-            onTap: (index) {
-              if (index == 0) _onTabTapped(0);
-              else if (index == 1) _onTabTapped(1);
-              else if (index == 2) _onTabTapped(7); 
-              else if (index == 3) _onTabTapped(2);
-              else if (index == 4) _onTabTapped(14); 
-            },
-            type: BottomNavigationBarType.fixed,
-            selectedItemColor: AdminColors.navy,
-            unselectedItemColor: AdminColors.textGrey,
-            elevation: 0,
-            selectedLabelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 11),
-            unselectedLabelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w500, fontSize: 11),
-            items: const [
-              BottomNavigationBarItem(icon: Icon(Icons.dashboard_outlined), activeIcon: Icon(Icons.dashboard_rounded), label: 'Dashboard'),
-              BottomNavigationBarItem(icon: Icon(Icons.people_outline), activeIcon: Icon(Icons.people_rounded), label: 'Users'),
-              BottomNavigationBarItem(icon: Icon(Icons.account_balance_wallet_outlined), activeIcon: Icon(Icons.account_balance_wallet_rounded), label: 'Finance'),
-              BottomNavigationBarItem(icon: Icon(Icons.business_center_outlined), activeIcon: Icon(Icons.business_center_rounded), label: 'CEOs'),
-              BottomNavigationBarItem(icon: Icon(Icons.account_circle_outlined), activeIcon: Icon(Icons.account_circle_rounded), label: 'Profile'),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -282,7 +251,7 @@ class _AdminSidebar extends StatelessWidget {
       children: [
         ClipRRect(
           borderRadius: BorderRadius.circular(8),
-          child: Image.asset('assets/images/app_icon.png', width: 32, height: 32),
+          child: Image.asset('assets/images/app_icon.png', width: 32, height: 32, errorBuilder: (_, __, ___) => const Icon(Icons.shield, color: AdminColors.amber, size: 32)),
         ),
         if (!isCollapsed) ...[
           const SizedBox(width: 12),
@@ -375,6 +344,7 @@ class _AdminTopBar extends StatelessWidget {
   final int unreadNotifications;
   final bool isLoading;
   final VoidCallback onProfileTap;
+  final VoidCallback? onMenuTap;
 
   const _AdminTopBar({
     required this.title,
@@ -382,15 +352,17 @@ class _AdminTopBar extends StatelessWidget {
     required this.unreadNotifications,
     required this.isLoading,
     required this.onProfileTap,
+    this.onMenuTap,
   });
 
   @override
   Widget build(BuildContext context) {
     final auth = context.read<AuthViewModel>();
+    final double screenWidth = MediaQuery.of(context).size.width;
     
     return Container(
       height: 70,
-      padding: const EdgeInsets.symmetric(horizontal: 24),
+      padding: EdgeInsets.symmetric(horizontal: screenWidth < 600 ? 12 : 24),
       decoration: const BoxDecoration(
         color: Colors.white,
         border: Border(bottom: BorderSide(color: Color(0xFFF1F5F9))),
@@ -400,16 +372,33 @@ class _AdminTopBar extends StatelessWidget {
           Expanded(
             child: Row(
               children: [
-                Text(title, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 20, color: AdminColors.navy)),
-                const Spacer(),
+                if (onMenuTap != null) ...[
+                  IconButton(
+                    icon: const Icon(Icons.menu, color: AdminColors.navy),
+                    onPressed: onMenuTap,
+                  ),
+                  const SizedBox(width: 4),
+                ],
+                Expanded(
+                  child: Text(
+                    title, 
+                    style: GoogleFonts.plusJakartaSans(
+                      fontWeight: FontWeight.w700, 
+                      fontSize: screenWidth < 400 ? 16 : 20, 
+                      color: AdminColors.navy
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
                 _TopBarAction(
                   icon: Icons.notifications_none_rounded,
                   badge: unreadNotifications > 0 ? '$unreadNotifications' : null,
                   onTap: () => context.push(RouteNames.adminNotifications),
                 ),
-                const SizedBox(width: 16),
+                SizedBox(width: screenWidth < 600 ? 8 : 16),
                 const VerticalDivider(width: 1, indent: 24, endIndent: 24, color: Color(0xFFE2E8F0)),
-                const SizedBox(width: 16),
+                SizedBox(width: screenWidth < 600 ? 8 : 16),
                 PopupMenuButton<String>(
                   offset: const Offset(0, 50),
                   onSelected: (value) async {
@@ -443,18 +432,20 @@ class _AdminTopBar extends StatelessWidget {
                   ],
                   child: Row(
                     children: [
-                      Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text(
-                            adminName,
-                            style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 13, color: AdminColors.navy),
-                          ),
-                          Text('Administrator', style: AdminTheme.mutedStyle(size: 11)),
-                        ],
-                      ),
-                      const SizedBox(width: 12),
+                      if (screenWidth > 600) ...[
+                        Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              adminName,
+                              style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 13, color: AdminColors.navy),
+                            ),
+                            Text('Administrator', style: AdminTheme.mutedStyle(size: 11)),
+                          ],
+                        ),
+                        const SizedBox(width: 12),
+                      ],
                       CircleAvatar(
                         radius: 18,
                         backgroundColor: AdminColors.amber.withValues(alpha: 0.1),
@@ -555,7 +546,9 @@ class _AdminHomeOverviewState extends State<_AdminHomeOverview> {
     final adminVM = context.watch<AdminViewModel>();
     final stats = adminVM.stats;
 
-    final bool isDesktop = MediaQuery.of(context).size.width > 900;
+    final double screenWidth = MediaQuery.of(context).size.width;
+    final bool isDesktop = screenWidth > 900;
+    final bool isMobile = screenWidth < 600;
 
     return RefreshIndicator(
       color: AdminColors.navy,
@@ -563,38 +556,69 @@ class _AdminHomeOverviewState extends State<_AdminHomeOverview> {
       child: CustomScrollView(
         slivers: [
           SliverPadding(
-            padding: EdgeInsets.all(isDesktop ? 32 : 16),
+            padding: EdgeInsets.all(isDesktop ? 32 : (isMobile ? 12 : 16)),
             sliver: SliverToBoxAdapter(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Overview', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 26, color: AdminColors.navy)),
-                          const SizedBox(height: 4),
-                          Text('Real-time ecosystem metrics and system operations.', style: AdminTheme.mutedStyle(size: 14)),
-                        ],
-                      ),
-                      ElevatedButton.icon(
-                        onPressed: _refresh,
-                        icon: const Icon(Icons.refresh_rounded, size: 16),
-                        label: const Text('Refresh'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          foregroundColor: AdminColors.navy,
-                          elevation: 0,
-                          side: const BorderSide(color: Color(0xFFE2E8F0)),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        ),
-                      )
-                    ],
-                  ),
-                  const SizedBox(height: 28),
+                  LayoutBuilder(builder: (context, constraints) {
+                    final bool useRow = constraints.maxWidth > 600;
+                    return useRow 
+                      ? Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('Overview', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 26, color: AdminColors.navy)),
+                                  const SizedBox(height: 4),
+                                  Text('Real-time ecosystem metrics and system operations.', style: AdminTheme.mutedStyle(size: 14)),
+                                ],
+                              ),
+                            ),
+                            ElevatedButton.icon(
+                              onPressed: _refresh,
+                              icon: const Icon(Icons.refresh_rounded, size: 16),
+                              label: const Text('Refresh'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.white,
+                                foregroundColor: AdminColors.navy,
+                                elevation: 0,
+                                side: const BorderSide(color: Color(0xFFE2E8F0)),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              ),
+                            )
+                          ],
+                        )
+                      : Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Overview', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 20, color: AdminColors.navy)),
+                            const SizedBox(height: 2),
+                            Text('Real-time ecosystem metrics.', style: AdminTheme.mutedStyle(size: 11)),
+                            const SizedBox(height: 8),
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                onPressed: _refresh,
+                                icon: const Icon(Icons.refresh_rounded, size: 14),
+                                label: const Text('Refresh'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.white,
+                                  foregroundColor: AdminColors.navy,
+                                  elevation: 0,
+                                  side: const BorderSide(color: Color(0xFFE2E8F0)),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                ),
+                              ),
+                            ),
+                          ],
+                        );
+                  }),
+                  const SizedBox(height: 20),
                   
                   // Summary Cards - Elegant & Small
                   LayoutBuilder(
@@ -605,8 +629,8 @@ class _AdminHomeOverviewState extends State<_AdminHomeOverview> {
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
                         crossAxisSpacing: 16,
-                        mainAxisSpacing: 16,
-                        childAspectRatio: 2.5,
+                        mainAxisSpacing: 10,
+                        childAspectRatio: constraints.maxWidth > 400 ? 2.5 : 4.0,
                         children: [
                           _CompactStatWidget(label: 'Total Active Users', value: '${stats.totalUsers}', icon: Icons.people_outline, color: const Color(0xFF3B82F6), onTap: () => widget.onAction(1)),
                           _CompactStatWidget(label: 'Onboarded Firms', value: '${stats.totalCompanies}', icon: Icons.business_outlined, color: const Color(0xFF8B5CF6), onTap: () => widget.onAction(2)),
@@ -617,98 +641,126 @@ class _AdminHomeOverviewState extends State<_AdminHomeOverview> {
                     },
                   ),
 
-                  const SizedBox(height: 28),
+                  const SizedBox(height: 24),
 
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        flex: 2,
-                        child: Column(
-                          children: [
-                            _RecentActivitySection(orders: adminVM.recentOrders, onAction: widget.onAction),
-                          ],
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final useRowLayout = constraints.maxWidth > 950;
+                      final widgets = [
+                        _RecentActivitySection(orders: adminVM.recentOrders, onAction: widget.onAction),
+                        const SizedBox(height: 16),
+                        Container(
+                          padding: EdgeInsets.all(isMobile ? 16 : 20),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFFF1F5F9)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Platform Engines', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: isMobile ? 14 : 15, color: AdminColors.navy)),
+                              const SizedBox(height: 16),
+                              _HealthRow(label: 'Cloud Firestore', status: 'Healthy', color: const Color(0xFF10B981)),
+                              const Divider(height: 20, color: Color(0xFFF1F5F9)),
+                              _HealthRow(label: 'IAM Authentication', status: 'Healthy', color: const Color(0xFF10B981)),
+                              const Divider(height: 20, color: Color(0xFFF1F5F9)),
+                              _HealthRow(label: 'Trigger Functions', status: 'Active', color: const Color(0xFF10B981)),
+                              const Divider(height: 20, color: Color(0xFFF1F5F9)),
+                              _HealthRow(label: 'Cloud Storage', status: 'Healthy', color: const Color(0xFF10B981)),
+                            ],
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 20),
-                      Expanded(
-                        child: Column(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(20),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: const Color(0xFFF1F5F9)),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text('Platform Engines', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 15, color: AdminColors.navy)),
-                                  const SizedBox(height: 16),
-                                  _HealthRow(label: 'Cloud Firestore', status: 'Healthy', color: const Color(0xFF10B981)),
-                                  const Divider(height: 20, color: Color(0xFFF1F5F9)),
-                                  _HealthRow(label: 'IAM Authentication', status: 'Healthy', color: const Color(0xFF10B981)),
-                                  const Divider(height: 20, color: Color(0xFFF1F5F9)),
-                                  _HealthRow(label: 'Trigger Functions', status: 'Active', color: const Color(0xFF10B981)),
-                                  const Divider(height: 20, color: Color(0xFFF1F5F9)),
-                                  _HealthRow(label: 'Cloud Storage', status: 'Healthy', color: const Color(0xFF10B981)),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            Container(
-                              padding: const EdgeInsets.all(20),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: const Color(0xFFF1F5F9)),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text('Deep Data Analytics', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 15, color: AdminColors.navy)),
-                                  const SizedBox(height: 6),
-                                  Text('Review user onboarding pipelines, regional procurement flow, and marketplace pricing metrics.', style: AdminTheme.mutedStyle(size: 13)),
-                                  const SizedBox(height: 16),
-                                  SizedBox(
-                                    width: double.infinity,
-                                    child: OutlinedButton(
-                                      onPressed: () => widget.onAction(5),
-                                      style: OutlinedButton.styleFrom(
-                                        side: const BorderSide(color: Color(0xFFCBD5E1)),
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                        padding: const EdgeInsets.symmetric(vertical: 12),
-                                      ),
-                                      child: Text('Launch Analytics Engine', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600, fontSize: 13, color: AdminColors.navy)),
-                                    ),
+                        const SizedBox(height: 16),
+                        Container(
+                          padding: EdgeInsets.all(isMobile ? 16 : 20),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFFF1F5F9)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Deep Data Analytics', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: isMobile ? 14 : 15, color: AdminColors.navy)),
+                              const SizedBox(height: 6),
+                              Text('Review user onboarding pipelines, regional procurement flow, and marketplace pricing metrics.', style: AdminTheme.mutedStyle(size: isMobile ? 12 : 13)),
+                              const SizedBox(height: 16),
+                              SizedBox(
+                                width: double.infinity,
+                                child: OutlinedButton(
+                                  onPressed: () => widget.onAction(5),
+                                  style: OutlinedButton.styleFrom(
+                                    side: const BorderSide(color: Color(0xFFCBD5E1)),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    padding: EdgeInsets.symmetric(vertical: isMobile ? 10 : 12),
                                   ),
-                                ],
+                                  child: Text('Launch Analytics Engine', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600, fontSize: 13, color: AdminColors.navy)),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Container(
+                          padding: EdgeInsets.all(isMobile ? 16 : 20),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFFF1F5F9)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Quick Operations', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: isMobile ? 14 : 15, color: AdminColors.navy)),
+                              const SizedBox(height: 8),
+                              _ShortcutItem(label: 'Financial Ledger & Ledger Sync', icon: Icons.account_balance_wallet_outlined, onTap: () => widget.onAction(7)),
+                              _ShortcutItem(label: 'Corporate SaaS Subscription Plans', icon: Icons.card_membership_outlined, onTap: () => widget.onAction(9)),
+                              _ShortcutItem(label: 'Security Audit & Event Log', icon: Icons.shield_outlined, onTap: () => widget.onAction(13)),
+                            ],
+                          ),
+                        ),
+                      ];
+
+                      if (useRowLayout) {
+                        return Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              flex: 2,
+                              child: Column(
+                                children: [widgets[0]],
                               ),
                             ),
-                            const SizedBox(height: 16),
-                            Container(
-                              padding: const EdgeInsets.all(20),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: const Color(0xFFF1F5F9)),
-                              ),
+                            const SizedBox(width: 20),
+                            Expanded(
                               child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text('Quick Operations', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 15, color: AdminColors.navy)),
-                                  const SizedBox(height: 8),
-                                  _ShortcutItem(label: 'Financial Ledger & Ledger Sync', icon: Icons.account_balance_wallet_outlined, onTap: () => widget.onAction(7)),
-                                  _ShortcutItem(label: 'Corporate SaaS Subscription Plans', icon: Icons.card_membership_outlined, onTap: () => widget.onAction(9)),
-                                  _ShortcutItem(label: 'Security Audit & Event Log', icon: Icons.shield_outlined, onTap: () => widget.onAction(13)),
+                                  widgets[2],
+                                  const SizedBox(height: 16),
+                                  widgets[3],
+                                  const SizedBox(height: 16),
+                                  widgets[4],
                                 ],
                               ),
                             ),
                           ],
-                        ),
-                      ),
-                    ],
+                        );
+                      } else {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            widgets[0],
+                            const SizedBox(height: 16),
+                            widgets[2],
+                            const SizedBox(height: 16),
+                            widgets[3],
+                            const SizedBox(height: 16),
+                            widgets[4],
+                          ],
+                        );
+                      }
+                    },
                   ),
                 ],
               ),
@@ -737,11 +789,14 @@ class _CompactStatWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final double screenWidth = MediaQuery.of(context).size.width;
+    final bool isMobile = screenWidth < 600;
+
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 16, vertical: isMobile ? 8 : 16),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(12),
@@ -750,14 +805,14 @@ class _CompactStatWidget extends StatelessWidget {
         child: Row(
           children: [
             Container(
-              padding: const EdgeInsets.all(10),
+              padding: EdgeInsets.all(isMobile ? 6 : 10),
               decoration: BoxDecoration(
                 color: color.withValues(alpha: 0.06),
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(isMobile ? 6 : 10),
               ),
-              child: Icon(icon, color: color, size: 20),
+              child: Icon(icon, color: color, size: isMobile ? 16 : 20),
             ),
-            const SizedBox(width: 14),
+            SizedBox(width: isMobile ? 10 : 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -766,16 +821,16 @@ class _CompactStatWidget extends StatelessWidget {
                   Text(
                     value,
                     style: GoogleFonts.plusJakartaSans(
-                      fontSize: 20,
+                      fontSize: isMobile ? 16 : 20,
                       fontWeight: FontWeight.w800,
                       color: AdminColors.navy,
                     ),
                   ),
-                  const SizedBox(height: 2),
+                  const SizedBox(height: 1),
                   Text(
                     label,
                     style: GoogleFonts.plusJakartaSans(
-                      fontSize: 11,
+                      fontSize: isMobile ? 8 : 11,
                       fontWeight: FontWeight.w500,
                       color: const Color(0xFF64748B),
                     ),
@@ -799,6 +854,9 @@ class _RecentActivitySection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final double screenWidth = MediaQuery.of(context).size.width;
+    final bool isMobile = screenWidth < 600;
+
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -809,37 +867,37 @@ class _RecentActivitySection extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.all(20),
-            child: Text('Live Procurement Logs', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 15, color: AdminColors.navy)),
+            padding: EdgeInsets.all(isMobile ? 16 : 20),
+            child: Text('Live Procurement Logs', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: isMobile ? 14 : 15, color: AdminColors.navy)),
           ),
           const Divider(height: 1, color: Color(0xFFF1F5F9)),
           orders.isEmpty
             ? const Padding(padding: EdgeInsets.all(40), child: Center(child: Text('No real-time procurement pipelines recorded.')))
             : Column(
                 children: [
-                  ...orders.take(6).map((o) => Container(
+                  ...orders.take(isMobile ? 4 : 6).map((o) => Container(
                     decoration: const BoxDecoration(
                       border: Border(bottom: BorderSide(color: Color(0xFFF8FAFC))),
                     ),
                     child: ListTile(
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                      contentPadding: EdgeInsets.symmetric(horizontal: isMobile ? 16 : 20, vertical: isMobile ? 0 : 4),
                       leading: CircleAvatar(
                         radius: 16,
                         backgroundColor: const Color(0xFFF1F5F9), 
                         child: const Icon(Icons.shopping_bag_outlined, color: Color(0xFF475569), size: 16)
                       ),
-                      title: Text('${o.materialName} — ${o.supplierName}', style: GoogleFonts.plusJakartaSans(color: AdminColors.navy, fontSize: 13, fontWeight: FontWeight.w600)),
-                      subtitle: Text('ID: #${o.orderId.substring(0, 8).toUpperCase()} • ${DateFormat('MMM d, hh:mm a').format(o.createdAt)}', style: GoogleFonts.plusJakartaSans(fontSize: 11, color: const Color(0xFF94A3B8))),
-                      trailing: StatusChip(status: o.status),
+                      title: Text('${o.materialName} — ${o.supplierName}', style: GoogleFonts.plusJakartaSans(color: AdminColors.navy, fontSize: isMobile ? 12 : 13, fontWeight: FontWeight.w600)),
+                      subtitle: Text('ID: #${o.orderId.substring(0, 8).toUpperCase()} • ${DateFormat('MMM d, hh:mm a').format(o.createdAt)}', style: GoogleFonts.plusJakartaSans(fontSize: 10, color: const Color(0xFF94A3B8))),
+                      trailing: Transform.scale(scale: isMobile ? 0.8 : 1.0, child: StatusChip(status: o.status)),
                       onTap: () => onAction(4),
                     ),
                   )),
                   Padding(
-                    padding: const EdgeInsets.all(12),
+                    padding: EdgeInsets.all(isMobile ? 8 : 12),
                     child: Center(
                       child: TextButton(
                         onPressed: () => onAction(4), 
-                        child: Text('View Full Procurement Center →', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600, fontSize: 13, color: AdminColors.amber))
+                        child: Text('View Full Procurement Center →', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600, fontSize: isMobile ? 12 : 13, color: AdminColors.amber))
                       ),
                     ),
                   ),
@@ -859,14 +917,17 @@ class _HealthRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final double screenWidth = MediaQuery.of(context).size.width;
+    final bool isMobile = screenWidth < 600;
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label, style: GoogleFonts.plusJakartaSans(fontSize: 13, color: const Color(0xFF334155), fontWeight: FontWeight.w500)),
+        Expanded(child: Text(label, style: GoogleFonts.plusJakartaSans(fontSize: isMobile ? 12 : 13, color: const Color(0xFF334155), fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis)),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
           decoration: BoxDecoration(color: color.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(6)),
-          child: Text(status, style: GoogleFonts.plusJakartaSans(color: color, fontWeight: FontWeight.w700, fontSize: 10, letterSpacing: 0.3)),
+          child: Text(status, style: GoogleFonts.plusJakartaSans(color: color, fontWeight: FontWeight.w700, fontSize: 9, letterSpacing: 0.3)),
         ),
       ],
     );
@@ -881,6 +942,9 @@ class _ShortcutItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final double screenWidth = MediaQuery.of(context).size.width;
+    final bool isMobile = screenWidth < 600;
+
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
@@ -890,7 +954,7 @@ class _ShortcutItem extends StatelessWidget {
           children: [
             Icon(icon, size: 18, color: const Color(0xFF64748B)),
             const SizedBox(width: 12),
-            Expanded(child: Text(label, style: GoogleFonts.plusJakartaSans(fontSize: 13, color: const Color(0xFF334155), fontWeight: FontWeight.w500))),
+            Expanded(child: Text(label, style: GoogleFonts.plusJakartaSans(fontSize: isMobile ? 12 : 13, color: const Color(0xFF334155), fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis)),
             const Icon(Icons.chevron_right, size: 14, color: Color(0xFF94A3B8)),
           ],
         ),

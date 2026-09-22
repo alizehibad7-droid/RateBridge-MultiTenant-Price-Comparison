@@ -16,21 +16,18 @@ class AdminCategoriesView extends StatefulWidget {
 }
 
 class _AdminCategoriesViewState extends State<AdminCategoriesView> {
-  bool get _isDesktop {
-    if (kIsWeb) return true;
-    final platform = defaultTargetPlatform;
-    return platform == TargetPlatform.windows || 
-           platform == TargetPlatform.macOS || 
-           platform == TargetPlatform.linux;
+  bool _checkIsDesktop(BuildContext context) {
+    return MediaQuery.of(context).size.width >= 1024;
   }
 
   @override
   Widget build(BuildContext context) {
     final adminVM = Provider.of<AdminViewModel>(context);
+    final bool isDesktop = _checkIsDesktop(context);
 
     return Scaffold(
       backgroundColor: AdminColors.screenBg,
-      appBar: const AdminAppBar(title: 'Taxonomy Management'),
+      appBar: isDesktop ? null : const AdminAppBar(title: 'Taxonomy Management'),
       body: StreamBuilder<List<CategoryModel>>(
         stream: adminVM.watchCategories(),
         builder: (context, snapshot) {
@@ -43,7 +40,7 @@ class _AdminCategoriesViewState extends State<AdminCategoriesView> {
             return _buildEmptyState(context, adminVM);
           }
 
-          if (_isDesktop) {
+          if (isDesktop) {
             return _buildDesktopLayout(context, categories, adminVM);
           }
 
@@ -81,7 +78,7 @@ class _AdminCategoriesViewState extends State<AdminCategoriesView> {
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              'Manage pre-loaded Pakistan construction material categories. Toggle visibility or update specifications.',
+              'Manage material categories. Toggle visibility or update specifications.',
               style: AdminTheme.mutedStyle(size: 12).copyWith(color: AdminColors.navy, fontWeight: FontWeight.w500),
             ),
           ),
@@ -504,6 +501,7 @@ class _CategoryFormDialogState extends State<_CategoryFormDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final double screenWidth = MediaQuery.of(context).size.width;
     return AlertDialog(
       insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
       title: Row(
@@ -522,7 +520,7 @@ class _CategoryFormDialogState extends State<_CategoryFormDialog> {
         ],
       ),
       content: SizedBox(
-        width: 420,
+        width: screenWidth > 460 ? 420 : screenWidth - 40,
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,

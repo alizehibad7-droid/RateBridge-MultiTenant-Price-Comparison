@@ -124,17 +124,20 @@ class _AdminCeoManagementViewState extends State<AdminCeoManagementView>
   }
 
   Widget _buildHeader() {
+    final double screenWidth = MediaQuery.of(context).size.width;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+      padding: EdgeInsets.fromLTRB(screenWidth < 600 ? 12 : 24, 24, screenWidth < 600 ? 12 : 24, 0),
       child: Row(
         children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Corporate Management', style: AdminTheme.titleStyle(size: 24)),
-              const SizedBox(height: 4),
-              Text('Review and manage CEO applications and company identities.', style: AdminTheme.mutedStyle()),
-            ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Corporate Management', style: AdminTheme.titleStyle(size: screenWidth < 600 ? 20 : 24)),
+                const SizedBox(height: 4),
+                Text('Review and manage CEO applications and company identities.', style: AdminTheme.mutedStyle(size: screenWidth < 600 ? 12 : 14)),
+              ],
+            ),
           ),
         ],
       ),
@@ -142,8 +145,9 @@ class _AdminCeoManagementViewState extends State<AdminCeoManagementView>
   }
 
   Widget _buildTabs() {
+    final double screenWidth = MediaQuery.of(context).size.width;
     return Container(
-      margin: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+      margin: EdgeInsets.fromLTRB(screenWidth < 600 ? 12 : 24, 20, screenWidth < 600 ? 12 : 24, 0),
       decoration: const BoxDecoration(
         border: Border(bottom: BorderSide(color: AdminColors.border)),
       ),
@@ -181,6 +185,7 @@ class _AdminCeoManagementViewState extends State<AdminCeoManagementView>
   }
 
   Widget _buildCeoContent(String status, AdminViewModel adminVM) {
+    final double screenWidth = MediaQuery.of(context).size.width;
     return StreamBuilder<QuerySnapshot>(
       stream: _db
           .collection('users')
@@ -201,7 +206,7 @@ class _AdminCeoManagementViewState extends State<AdminCeoManagementView>
         }
 
         return SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
+          padding: EdgeInsets.all(screenWidth < 600 ? 12 : 24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -210,7 +215,7 @@ class _AdminCeoManagementViewState extends State<AdminCeoManagementView>
                   padding: const EdgeInsets.only(bottom: 16),
                   child: Row(
                     children: [
-                      Text('${_selectedCeoUids.length} applications selected', style: AdminTheme.bodyStyle(weight: FontWeight.w700)),
+                      Text('${_selectedCeoUids.length} selected', style: AdminTheme.bodyStyle(weight: FontWeight.w700)),
                       const Spacer(),
                       ElevatedButton.icon(
                         onPressed: _isBulkProcessing ? null : () => _bulkApprove(adminVM),
@@ -223,10 +228,15 @@ class _AdminCeoManagementViewState extends State<AdminCeoManagementView>
                     ],
                   ),
                 ),
-              AdminCard(
-                padding: EdgeInsets.zero,
-                child: _buildCeoTable(docs, adminVM, status),
-              ),
+              screenWidth >= 900
+                  ? AdminCard(
+                      padding: EdgeInsets.zero,
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: _buildCeoTable(docs, adminVM, status),
+                      ),
+                    )
+                  : _buildCeoMobileList(docs, adminVM, status),
             ],
           ),
         );
@@ -337,6 +347,117 @@ class _AdminCeoManagementViewState extends State<AdminCeoManagementView>
     );
   }
 
+  Widget _buildCeoMobileList(List<QueryDocumentSnapshot> docs, AdminViewModel adminVM, String status) {
+    return ListView.separated(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: docs.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      itemBuilder: (context, index) {
+        final data = docs[index].data() as Map<String, dynamic>;
+        final ceo = UserModel.fromMap(data);
+        _ceoToCompanyMap[ceo.uid] = ceo.companyId;
+
+        return Card(
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: const BorderSide(color: AdminColors.border),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    if (status == 'pending')
+                      Checkbox(
+                        value: _selectedCeoUids.contains(ceo.uid),
+                        onChanged: (val) {
+                          setState(() {
+                            if (val == true) _selectedCeoUids.add(ceo.uid);
+                            else _selectedCeoUids.remove(ceo.uid);
+                          });
+                        },
+                      ),
+                    CircleAvatar(
+                      radius: 16,
+                      backgroundColor: AdminColors.navy.withValues(alpha: 0.1),
+                      child: Text(ceo.name[0].toUpperCase(), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AdminColors.navy)),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(ceo.name, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, color: AdminColors.navy, fontSize: 14)),
+                          Text(ceo.email, style: AdminTheme.mutedStyle(size: 12)),
+                        ],
+                      ),
+                    ),
+                    StatusChip(status: ceo.status ?? 'pending'),
+                  ],
+                ),
+                const Divider(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Organization:', style: AdminTheme.mutedStyle(size: 12)),
+                    FutureBuilder<DocumentSnapshot>(
+                      future: _db.collection('companies').doc(ceo.companyId).get(),
+                      builder: (context, snap) {
+                        final cName = (snap.data?.data() as Map<String, dynamic>?)?['name'] ?? 'Loading...';
+                        return Text(cName, style: AdminTheme.bodyStyle(weight: FontWeight.w600, size: 13));
+                      },
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Submitted:', style: AdminTheme.mutedStyle(size: 12)),
+                    Text(DateFormat('MMM d, yyyy').format(ceo.createdAt), style: AdminTheme.bodyStyle(size: 13)),
+                  ],
+                ),
+                const Divider(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.visibility_outlined, size: 20, color: AdminColors.navy),
+                      onPressed: () => _showCeoDetails(ceo),
+                      tooltip: 'View Documents',
+                    ),
+                    if (status == 'pending') ...[
+                      IconButton(
+                        icon: const Icon(Icons.check_circle_outline, color: AdminColors.green, size: 20),
+                        onPressed: () => adminVM.acceptCEO(ceo.companyId, ceo.uid),
+                        tooltip: 'Approve',
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.cancel_outlined, color: AdminColors.red, size: 20),
+                        onPressed: () => _showRejectDialog(ceo.companyId, ceo.uid, adminVM),
+                        tooltip: 'Reject',
+                      ),
+                    ],
+                    if (status == 'active')
+                      IconButton(
+                        icon: const Icon(Icons.block_rounded, color: AdminColors.red, size: 20),
+                        onPressed: () => adminVM.suspendCEO(ceo.companyId, ceo.uid),
+                        tooltip: 'Suspend',
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   void _showCeoDetails(UserModel ceo) {
     showDialog(
       context: context,
@@ -349,12 +470,15 @@ class _AdminCeoManagementViewState extends State<AdminCeoManagementView>
               companySnap.data!.data() as Map<String, dynamic>,
             );
           }
+          final double screenWidth = MediaQuery.of(context).size.width;
+
           return Dialog(
             backgroundColor: Colors.white,
+            insetPadding: const EdgeInsets.all(16),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             child: Container(
-              width: 800,
-              padding: const EdgeInsets.all(32),
+              width: screenWidth > 850 ? 800 : screenWidth - 32,
+              padding: EdgeInsets.all(screenWidth < 600 ? 16 : 32),
               child: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -362,51 +486,85 @@ class _AdminCeoManagementViewState extends State<AdminCeoManagementView>
                   children: [
                     Row(
                       children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Corporate Identity Review', style: AdminTheme.titleStyle(size: 22)),
-                            const SizedBox(height: 4),
-                            Text('Verifying entity ownership and legal credentials.', style: AdminTheme.mutedStyle()),
-                          ],
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Corporate Identity Review', style: AdminTheme.titleStyle(size: screenWidth < 600 ? 18 : 22)),
+                              const SizedBox(height: 4),
+                              Text('Verifying entity ownership and legal credentials.', style: AdminTheme.mutedStyle(size: screenWidth < 600 ? 11 : 13)),
+                            ],
+                          ),
                         ),
-                        const Spacer(),
                         IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close_rounded)),
                       ],
                     ),
                     const SizedBox(height: 32),
                     if (company != null) ...[
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            flex: 1,
-                            child: AdminApprovalSection(
-                              title: 'Business Credentials',
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          if (constraints.maxWidth > 650) {
+                            return Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                AdminDetailRow(label: 'Legal Name', value: company.name),
-                                AdminDetailRow(label: 'Industry Sector', value: company.companyType ?? 'Construction'),
-                                AdminDetailRow(label: 'NTN / Reg Number', value: company.registrationNumber),
-                                AdminDetailRow(label: 'Market Tenure', value: '${company.yearsInOperation ?? 0} Years'),
-                                AdminDetailRow(label: 'Corporate City', value: company.city),
+                                Expanded(
+                                  flex: 1,
+                                  child: AdminApprovalSection(
+                                    title: 'Business Credentials',
+                                    children: [
+                                      AdminDetailRow(label: 'Legal Name', value: company!.name),
+                                      AdminDetailRow(label: 'Industry Sector', value: company.companyType ?? 'Construction'),
+                                      AdminDetailRow(label: 'NTN / Reg Number', value: company.registrationNumber),
+                                      AdminDetailRow(label: 'Market Tenure', value: '${company.yearsInOperation ?? 0} Years'),
+                                      AdminDetailRow(label: 'Corporate City', value: company.city),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 24),
+                                Expanded(
+                                  flex: 1,
+                                  child: AdminApprovalSection(
+                                    title: 'Executive Representative',
+                                    children: [
+                                      AdminDetailRow(label: 'Full Name', value: company.ceoFullName ?? ceo.name),
+                                      AdminDetailRow(label: 'Designation', value: company.designation ?? 'CEO'),
+                                      AdminDetailRow(label: 'Identity Number', value: PakistanValidators.formatCnic(company.cnicNumber ?? ceo.cnic ?? '')),
+                                      AdminDetailRow(label: 'Contact Primary', value: ceo.phone),
+                                      AdminDetailRow(label: 'Email Identity', value: ceo.email),
+                                    ],
+                                  ),
+                                ),
                               ],
-                            ),
-                          ),
-                          const SizedBox(width: 24),
-                          Expanded(
-                            flex: 1,
-                            child: AdminApprovalSection(
-                              title: 'Executive Representative',
+                            );
+                          } else {
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                AdminDetailRow(label: 'Full Name', value: company.ceoFullName ?? ceo.name),
-                                AdminDetailRow(label: 'Designation', value: company.designation ?? 'CEO'),
-                                AdminDetailRow(label: 'Identity Number', value: PakistanValidators.formatCnic(company.cnicNumber ?? ceo.cnic ?? '')),
-                                AdminDetailRow(label: 'Contact Primary', value: ceo.phone),
-                                AdminDetailRow(label: 'Email Identity', value: ceo.email),
+                                AdminApprovalSection(
+                                  title: 'Business Credentials',
+                                  children: [
+                                    AdminDetailRow(label: 'Legal Name', value: company!.name),
+                                    AdminDetailRow(label: 'Industry Sector', value: company.companyType ?? 'Construction'),
+                                    AdminDetailRow(label: 'NTN / Reg Number', value: company.registrationNumber),
+                                    AdminDetailRow(label: 'Market Tenure', value: '${company.yearsInOperation ?? 0} Years'),
+                                    AdminDetailRow(label: 'Corporate City', value: company.city),
+                                  ],
+                                ),
+                                const SizedBox(height: 24),
+                                AdminApprovalSection(
+                                  title: 'Executive Representative',
+                                  children: [
+                                    AdminDetailRow(label: 'Full Name', value: company.ceoFullName ?? ceo.name),
+                                    AdminDetailRow(label: 'Designation', value: company.designation ?? 'CEO'),
+                                    AdminDetailRow(label: 'Identity Number', value: PakistanValidators.formatCnic(company.cnicNumber ?? ceo.cnic ?? '')),
+                                    AdminDetailRow(label: 'Contact Primary', value: ceo.phone),
+                                    AdminDetailRow(label: 'Email Identity', value: ceo.email),
+                                  ],
+                                ),
                               ],
-                            ),
-                          ),
-                        ],
+                            );
+                          }
+                        },
                       ),
                       const SizedBox(height: 24),
                       AdminApprovalSection(
@@ -433,15 +591,17 @@ class _AdminCeoManagementViewState extends State<AdminCeoManagementView>
                           child: const Text('CLOSE'),
                         ),
                         const SizedBox(width: 12),
-                        ApprovalActions(
-                          onApprove: () {
-                            Provider.of<AdminViewModel>(context, listen: false).acceptCEO(company?.id, ceo.uid);
-                            Navigator.pop(context);
-                          },
-                          onReject: (reason) {
-                            Provider.of<AdminViewModel>(context, listen: false).rejectCEO(company?.id, ceo.uid, reason);
-                            Navigator.pop(context);
-                          },
+                        Expanded(
+                          child: ApprovalActions(
+                            onApprove: () {
+                              Provider.of<AdminViewModel>(context, listen: false).acceptCEO(company?.id, ceo.uid);
+                              Navigator.pop(context);
+                            },
+                            onReject: (reason) {
+                              Provider.of<AdminViewModel>(context, listen: false).rejectCEO(company?.id, ceo.uid, reason);
+                              Navigator.pop(context);
+                            },
+                          ),
                         ),
                       ],
                     ),

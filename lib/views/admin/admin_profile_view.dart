@@ -27,11 +27,8 @@ class AdminProfileView extends StatefulWidget {
 class _AdminProfileViewState extends State<AdminProfileView> {
   bool _isUploadingImage = false;
 
-  bool get _isDesktop {
-    if (kIsWeb) return true;
-    return defaultTargetPlatform == TargetPlatform.windows || 
-           defaultTargetPlatform == TargetPlatform.macOS || 
-           defaultTargetPlatform == TargetPlatform.linux;
+  bool _checkIsDesktop(BuildContext context) {
+    return MediaQuery.of(context).size.width >= 1024;
   }
 
   String _initials(String? name) {
@@ -148,7 +145,7 @@ class _AdminProfileViewState extends State<AdminProfileView> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isDesktop) return _buildDesktopLayout(context);
+    if (_checkIsDesktop(context)) return _buildDesktopLayout(context);
     
     final user = context.watch<AuthViewModel>().user;
     final topPadding = MediaQuery.paddingOf(context).top;
@@ -164,7 +161,6 @@ class _AdminProfileViewState extends State<AdminProfileView> {
           elevation: 0,
           scrolledUnderElevation: 0,
           automaticallyImplyLeading: false,
-          leading: AppNavigation.leading(context, color: Colors.white),
           systemOverlayStyle: SystemUiOverlayStyle.light,
           title: Text(
             'My Profile',
@@ -269,7 +265,7 @@ class _AdminProfileViewState extends State<AdminProfileView> {
                               shape: BoxShape.circle,
                               color: AdminColors.amber.withValues(alpha: 0.1),
                               border: Border.all(color: Colors.white, width: 4),
-                              boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10)],
+                              boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10)],
                             ),
                             child: ClipOval(
                               child: user?.profileImageUrl != null

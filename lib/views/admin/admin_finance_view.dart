@@ -5,35 +5,31 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../theme/admin_theme.dart';
 import 'admin_commission_ledger_view.dart';
 import 'admin_payment_queue_view.dart';
-import 'package:flutter/foundation.dart';
+
 /// Finance hub: commission reconciliation + subscription payments.
 class AdminFinanceView extends StatelessWidget {
   const AdminFinanceView({super.key});
 
-  bool get _isDesktop {
-    if (kIsWeb) return true;
-    try {
-      final platform = defaultTargetPlatform;
-      return platform == TargetPlatform.windows || platform == TargetPlatform.macOS || platform == TargetPlatform.linux;
-    } catch (_) {
-      return false;
-    }
+  bool _checkIsDesktop(BuildContext context) {
+    return MediaQuery.of(context).size.width >= 1024;
   }
 
   @override
   Widget build(BuildContext context) {
+    final bool isDesktop = _checkIsDesktop(context);
+    
     return DefaultTabController(
       length: 2,
       child: Column(
         children: [
           Material(
-            color: _isDesktop ? Colors.white : AdminColors.navy,
+            color: isDesktop ? Colors.white : AdminColors.navy,
             child: TabBar(
               isScrollable: false,
               indicatorColor: AdminColors.amber,
               indicatorWeight: 3,
               labelColor: AdminColors.amber,
-              unselectedLabelColor: _isDesktop ? AdminColors.textGrey : Colors.white70,
+              unselectedLabelColor: isDesktop ? AdminColors.textGrey : Colors.white70,
               labelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 13),
               unselectedLabelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w500, fontSize: 13),
               tabs: const [
@@ -48,7 +44,7 @@ class AdminFinanceView extends StatelessWidget {
               ],
             ),
           ),
-          if (_isDesktop)
+          if (isDesktop)
             const Divider(height: 1, color: AdminColors.border),
           Expanded(
             child: TabBarView(

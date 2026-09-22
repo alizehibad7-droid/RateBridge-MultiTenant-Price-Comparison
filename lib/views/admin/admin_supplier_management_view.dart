@@ -94,20 +94,52 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
   Widget build(BuildContext context) {
     final adminVM = Provider.of<AdminViewModel>(context);
 
+    Widget content = Column(
+      children: [
+        if (!widget.embedded) _buildHeader(),
+        _buildTabs(),
+        Expanded(
+          child: TabBarView(
+            controller: _tabController,
+            children: [
+              _buildSupplierContent('pending', adminVM),
+              _buildSupplierContent('active', adminVM),
+              _buildSupplierContent('suspended', adminVM),
+              _buildSupplierContent('rejected', adminVM),
+            ],
+          ),
+        ),
+      ],
+    );
+
+    if (!widget.embedded) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Suppliers'),
+        ),
+        body: content,
+      );
+    }
+
     return Container(
       color: AdminColors.screenBg,
-      child: Column(
+      child: content,
+    );
+  }
+
+  Widget _buildHeader() {
+    final double screenWidth = MediaQuery.of(context).size.width;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(screenWidth < 600 ? 12 : 24, 24, screenWidth < 600 ? 12 : 24, 0),
+      child: Row(
         children: [
-          if (!widget.embedded) _buildHeader(),
-          _buildTabs(),
           Expanded(
-            child: TabBarView(
-              controller: _tabController,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildSupplierContent('pending', adminVM),
-                _buildSupplierContent('active', adminVM),
-                _buildSupplierContent('suspended', adminVM),
-                _buildSupplierContent('rejected', adminVM),
+                Text('Supply Chain Partners', style: AdminTheme.titleStyle(size: screenWidth < 600 ? 20 : 24)),
+                const SizedBox(height: 4),
+                Text('Oversee material suppliers, product inventories, and service levels.', style: AdminTheme.mutedStyle(size: screenWidth < 600 ? 12 : 14)),
               ],
             ),
           ),
@@ -116,27 +148,10 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
     );
   }
 
-  Widget _buildHeader() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
-      child: Row(
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Supply Chain Partners', style: AdminTheme.titleStyle(size: 24)),
-              const SizedBox(height: 4),
-              Text('Oversee material suppliers, product inventories, and service levels.', style: AdminTheme.mutedStyle()),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildTabs() {
+    final double screenWidth = MediaQuery.of(context).size.width;
     return Container(
-      margin: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+      margin: EdgeInsets.fromLTRB(screenWidth < 600 ? 12 : 24, 20, screenWidth < 600 ? 12 : 24, 0),
       decoration: const BoxDecoration(
         border: Border(bottom: BorderSide(color: AdminColors.border)),
       ),
@@ -174,6 +189,7 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
   }
 
   Widget _buildSupplierContent(String status, AdminViewModel adminVM) {
+    final double screenWidth = MediaQuery.of(context).size.width;
     return StreamBuilder<List<UserModel>>(
       stream: _db
           .collection('users')
@@ -195,7 +211,7 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
         }
 
         return SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
+          padding: EdgeInsets.all(screenWidth < 600 ? 12 : 24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -204,7 +220,7 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
                   padding: const EdgeInsets.only(bottom: 16),
                   child: Row(
                     children: [
-                      Text('${_selectedSupplierUids.length} applications selected', style: AdminTheme.bodyStyle(weight: FontWeight.w700)),
+                      Text('${_selectedSupplierUids.length} selected', style: AdminTheme.bodyStyle(weight: FontWeight.w700)),
                       const Spacer(),
                       ElevatedButton.icon(
                         onPressed: _isBulkProcessing ? null : () => _bulkApprove(adminVM),
@@ -217,10 +233,15 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
                     ],
                   ),
                 ),
-              AdminCard(
-                padding: EdgeInsets.zero,
-                child: _buildSupplierTable(suppliers, adminVM, status),
-              ),
+              screenWidth >= 900
+                  ? AdminCard(
+                      padding: EdgeInsets.zero,
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: _buildSupplierTable(suppliers, adminVM, status),
+                      ),
+                    )
+                  : _buildSupplierMobileList(suppliers, adminVM, status),
             ],
           ),
         );
@@ -327,6 +348,115 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
     );
   }
 
+  Widget _buildSupplierMobileList(List<UserModel> suppliers, AdminViewModel adminVM, String status) {
+    return ListView.separated(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: suppliers.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      itemBuilder: (context, index) {
+        final supplier = suppliers[index];
+
+        return Card(
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: const BorderSide(color: AdminColors.border),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    if (status == 'pending')
+                      Checkbox(
+                        value: _selectedSupplierUids.contains(supplier.uid),
+                        onChanged: (val) {
+                          setState(() {
+                            if (val == true) _selectedSupplierUids.add(supplier.uid);
+                            else _selectedSupplierUids.remove(supplier.uid);
+                          });
+                        },
+                      ),
+                    CircleAvatar(
+                      radius: 16,
+                      backgroundColor: AdminColors.amber.withValues(alpha: 0.1),
+                      child: Text(supplier.name[0].toUpperCase(), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AdminColors.darkAmber)),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(supplier.name, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, color: AdminColors.navy, fontSize: 14)),
+                          Text(supplier.email, style: AdminTheme.mutedStyle(size: 12)),
+                        ],
+                      ),
+                    ),
+                    StatusChip(status: supplier.status ?? 'pending'),
+                  ],
+                ),
+                const Divider(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Location:', style: AdminTheme.mutedStyle(size: 12)),
+                    Text(supplier.city, style: AdminTheme.bodyStyle(weight: FontWeight.w600, size: 13)),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Trust Score:', style: AdminTheme.mutedStyle(size: 12)),
+                    Row(
+                      children: [
+                        const Icon(Icons.star_rounded, color: AdminColors.amber, size: 14),
+                        const SizedBox(width: 4),
+                        Text((supplier.rating ?? 0.0).toStringAsFixed(1), style: AdminTheme.bodyStyle(weight: FontWeight.w700, size: 13)),
+                      ],
+                    ),
+                  ],
+                ),
+                const Divider(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.visibility_outlined, size: 20, color: AdminColors.primary),
+                      onPressed: () => _showSupplierDetails(supplier),
+                      tooltip: 'View Profile',
+                    ),
+                    if (status == 'pending') ...[
+                      IconButton(
+                        icon: const Icon(Icons.check_circle_outline, color: AdminColors.green, size: 20),
+                        onPressed: () => adminVM.approveSupplier(supplier.uid),
+                        tooltip: 'Approve',
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.cancel_outlined, color: AdminColors.red, size: 20),
+                        onPressed: () => _showRejectDialog(supplier.uid, adminVM),
+                        tooltip: 'Reject',
+                      ),
+                    ],
+                    if (status == 'active')
+                      IconButton(
+                        icon: const Icon(Icons.block_rounded, color: AdminColors.red, size: 20),
+                        onPressed: () => adminVM.suspendSupplier(supplier.uid),
+                        tooltip: 'Suspend',
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   void _showSupplierDetails(UserModel supplier) {
     showDialog(
       context: context,
@@ -337,12 +467,15 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
           if (profileSnap.hasData && profileSnap.data!.exists) {
             profile = SupplierModel.fromMap(profileSnap.data!.data() as Map<String, dynamic>);
           }
+          final double screenWidth = MediaQuery.of(context).size.width;
+
           return Dialog(
             backgroundColor: Colors.white,
+            insetPadding: const EdgeInsets.all(16),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             child: Container(
-              width: 800,
-              padding: const EdgeInsets.all(32),
+              width: screenWidth > 850 ? 800 : screenWidth - 32,
+              padding: EdgeInsets.all(screenWidth < 600 ? 16 : 32),
               child: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -350,25 +483,85 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
                   children: [
                     Row(
                       children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Supplier Entity Verification', style: AdminTheme.titleStyle(size: 22)),
-                            const SizedBox(height: 4),
-                            Text('Evaluating marketplace compatibility and business status.', style: AdminTheme.mutedStyle()),
-                          ],
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Supplier Entity Verification', style: AdminTheme.titleStyle(size: screenWidth < 600 ? 18 : 22)),
+                              const SizedBox(height: 4),
+                              Text('Evaluating marketplace compatibility and business status.', style: AdminTheme.mutedStyle(size: screenWidth < 600 ? 11 : 13)),
+                            ],
+                          ),
                         ),
-                        const Spacer(),
                         IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close_rounded)),
                       ],
                     ),
                     const SizedBox(height: 32),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          flex: 1,
-                          child: Column(
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        if (constraints.maxWidth > 650) {
+                          return Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                flex: 1,
+                                child: Column(
+                                  children: [
+                                    AdminApprovalSection(
+                                      title: 'Trade Information',
+                                      children: [
+                                        AdminDetailRow(label: 'Trading Name', value: profile?.name ?? supplier.name),
+                                        AdminDetailRow(label: 'Legal Entity', value: profile?.businessType ?? 'Individual'),
+                                        AdminDetailRow(label: 'Industry Experience', value: '${profile?.yearsInBusiness ?? 0} Years'),
+                                        AdminDetailRow(label: 'Tax / NTN', value: profile?.businessRegistrationNumber ?? 'N/A'),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 20),
+                                    AdminApprovalSection(
+                                      title: 'Product Catalog',
+                                      children: [
+                                        AdminChipList(items: profile?.declaredCategories ?? const []),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 24),
+                              Expanded(
+                                flex: 1,
+                                child: Column(
+                                  children: [
+                                    AdminApprovalSection(
+                                      title: 'Performance Metrics',
+                                      children: [
+                                        SupplierPerformanceScorecard(
+                                          supplierId: supplier.uid,
+                                          averageRating: supplier.rating ?? 0.0,
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 20),
+                                    AdminApprovalSection(
+                                      title: 'Identity Documents',
+                                      children: [
+                                        const SizedBox(height: 8),
+                                        AdminDocumentThumbnailRow(
+                                          documents: [
+                                            (label: 'IDENTITY FRONT', url: profile?.cnicFrontUrl),
+                                            (label: 'IDENTITY BACK', url: profile?.cnicBackUrl),
+                                            if (profile?.shopPhotoUrl != null) (label: 'SHOP PHOTO', url: profile?.shopPhotoUrl),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          );
+                        } else {
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               AdminApprovalSection(
                                 title: 'Trade Information',
@@ -386,14 +579,7 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
                                   AdminChipList(items: profile?.declaredCategories ?? const []),
                                 ],
                               ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 24),
-                        Expanded(
-                          flex: 1,
-                          child: Column(
-                            children: [
+                              const SizedBox(height: 20),
                               AdminApprovalSection(
                                 title: 'Performance Metrics',
                                 children: [
@@ -418,9 +604,9 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
                                 ],
                               ),
                             ],
-                          ),
-                        ),
-                      ],
+                          );
+                        }
+                      },
                     ),
                     const SizedBox(height: 32),
                     Row(
@@ -431,15 +617,17 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
                           child: const Text('CLOSE'),
                         ),
                         const SizedBox(width: 12),
-                        ApprovalActions(
-                          onApprove: () {
-                            Provider.of<AdminViewModel>(context, listen: false).approveSupplier(supplier.uid);
-                            Navigator.pop(context);
-                          },
-                          onReject: (reason) {
-                            Provider.of<AdminViewModel>(context, listen: false).rejectSupplier(supplier.uid, reason);
-                            Navigator.pop(context);
-                          },
+                        Expanded(
+                          child: ApprovalActions(
+                            onApprove: () {
+                              Provider.of<AdminViewModel>(context, listen: false).approveSupplier(supplier.uid);
+                              Navigator.pop(context);
+                            },
+                            onReject: (reason) {
+                              Provider.of<AdminViewModel>(context, listen: false).rejectSupplier(supplier.uid, reason);
+                              Navigator.pop(context);
+                            },
+                          ),
                         ),
                       ],
                     ),

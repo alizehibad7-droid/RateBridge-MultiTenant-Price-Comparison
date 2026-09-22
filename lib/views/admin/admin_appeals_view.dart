@@ -7,7 +7,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../viewmodels/admin_viewmodel.dart';
 import '../../theme/admin_theme.dart';
 import '../../widgets/admin/admin_widgets.dart';
-import 'package:flutter/foundation.dart';
+
 class AdminAppealsView extends StatefulWidget {
   const AdminAppealsView({super.key});
 
@@ -18,14 +18,8 @@ class AdminAppealsView extends StatefulWidget {
 class _AdminAppealsViewState extends State<AdminAppealsView> with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
-  bool get _isDesktop {
-    if (kIsWeb) return true;
-    try {
-      final platform = defaultTargetPlatform;
-      return platform == TargetPlatform.windows || platform == TargetPlatform.macOS || platform == TargetPlatform.linux;
-    } catch (_) {
-      return false;
-    }
+  bool _checkIsDesktop(BuildContext context) {
+    return MediaQuery.of(context).size.width >= 900;
   }
 
   @override
@@ -42,15 +36,20 @@ class _AdminAppealsViewState extends State<AdminAppealsView> with SingleTickerPr
 
   @override
   Widget build(BuildContext context) {
+    final bool isDesktop = _checkIsDesktop(context);
     return Scaffold(
       backgroundColor: AdminColors.screenBg,
-      appBar: _isDesktop 
+      appBar: isDesktop 
           ? null 
-          : AdminAppBar(
-              title: 'Account Appeals',
+          : AppBar(
+              title: Text('Account Appeals', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 18, color: AdminColors.navy)),
+              backgroundColor: Colors.white,
+              elevation: 0,
               bottom: TabBar(
                 controller: _tabController,
                 indicatorColor: AdminColors.amber,
+                labelColor: AdminColors.navy,
+                unselectedLabelColor: AdminColors.textGrey,
                 tabs: const [
                   Tab(text: 'Pending'),
                   Tab(text: 'Accepted'),
@@ -60,7 +59,7 @@ class _AdminAppealsViewState extends State<AdminAppealsView> with SingleTickerPr
             ),
       body: Column(
         children: [
-          if (_isDesktop)
+          if (isDesktop)
             Material(
               color: Colors.white,
               child: TabBar(
@@ -94,6 +93,7 @@ class _AdminAppealsViewState extends State<AdminAppealsView> with SingleTickerPr
   }
 
   Widget _buildAppealContent(String status) {
+    final bool isDesktop = _checkIsDesktop(context);
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance.collection('appeals')
           .where('status', isEqualTo: status)
@@ -136,7 +136,7 @@ class _AdminAppealsViewState extends State<AdminAppealsView> with SingleTickerPr
           );
         }
 
-        if (_isDesktop) {
+        if (isDesktop) {
           return _buildAppealTable(sortedDocs, status);
         }
 
@@ -158,31 +158,33 @@ class _AdminAppealsViewState extends State<AdminAppealsView> with SingleTickerPr
       padding: const EdgeInsets.all(24),
       child: AdminCard(
         padding: EdgeInsets.zero,
-        child: DataTable(
-          headingRowColor: WidgetStateProperty.all(AdminColors.navy.withValues(alpha: 0.03)),
-          columns: [
-            DataColumn(label: Text('User / Role', style: AdminTheme.sectionHeaderStyle())),
-            DataColumn(label: Text('Submitted', style: AdminTheme.sectionHeaderStyle())),
-            DataColumn(label: Text('Message Preview', style: AdminTheme.sectionHeaderStyle())),
-            DataColumn(label: Text('Status', style: AdminTheme.sectionHeaderStyle())),
-            DataColumn(label: Text('Actions', style: AdminTheme.sectionHeaderStyle())),
-          ],
-          rows: docs.map((doc) {
-            final data = doc.data() as Map<String, dynamic>;
-            final name = data['name'] ?? 'Unknown';
-            final role = data['role'] ?? 'User';
-            final createdAt = (data['createdAt'] as Timestamp?)?.toDate();
-            final message = data['message'] ?? '';
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: DataTable(
+            headingRowColor: WidgetStateProperty.all(AdminColors.navy.withValues(alpha: 0.03)),
+            columns: [
+              DataColumn(label: Text('User / Role', style: AdminTheme.sectionHeaderStyle())),
+              DataColumn(label: Text('Submitted', style: AdminTheme.sectionHeaderStyle())),
+              DataColumn(label: Text('Message Preview', style: AdminTheme.sectionHeaderStyle())),
+              DataColumn(label: Text('Status', style: AdminTheme.sectionHeaderStyle())),
+              DataColumn(label: Text('Actions', style: AdminTheme.sectionHeaderStyle())),
+            ],
+            rows: docs.map((doc) {
+              final data = doc.data() as Map<String, dynamic>;
+              final name = data['name'] ?? 'Unknown';
+              final role = data['role'] ?? 'User';
+              final createdAt = (data['createdAt'] as Timestamp?)?.toDate();
+              final message = data['message'] ?? '';
 
-            return DataRow(
-              cells: [
-                DataCell(
-                  Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(name, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, color: AdminColors.navy)),
-                      Text(role.toString().toUpperCase(), style: AdminTheme.mutedStyle(size: 10).copyWith(fontWeight: FontWeight.bold)),
+              return DataRow(
+                cells: [
+                  DataCell(
+                    Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(name, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, color: AdminColors.navy)),
+                        Text(role.toString().toUpperCase(), style: AdminTheme.mutedStyle(size: 10).copyWith(fontWeight: FontWeight.bold)),
                     ],
                   ),
                 ),
@@ -227,16 +229,18 @@ class _AdminAppealsViewState extends State<AdminAppealsView> with SingleTickerPr
           }).toList(),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   void _showAppealDetailsDialog(Map<String, dynamic> appeal, String appealId) {
+    final double screenWidth = MediaQuery.of(context).size.width;
     showDialog(
       context: context,
       builder: (context) => Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: Container(
-          width: 600,
+          width: screenWidth > 650 ? 600 : screenWidth - 32,
           padding: const EdgeInsets.all(24),
           child: SingleChildScrollView(
             child: Column(

@@ -87,8 +87,78 @@ class _AppNotificationsScaffoldState extends State<AppNotificationsScaffold> {
     if (uid == null) return;
 
     if (!notification.isRead) {
-      await vm.markAsRead(uid, notification.notifId);
+      await vm.markAsRead(notification.notifId, uid);
     }
+    if (!context.mounted) return;
+
+    // 1. Present Notification Detail safely in a beautiful, scrollable modal view to ensure zero overflow or layout crash.
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(
+          notification.title,
+          style: GoogleFonts.plusJakartaSans(
+            fontWeight: FontWeight.bold,
+            color: const Color(0xFF1E326E),
+            fontSize: 16,
+          ),
+        ),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 450),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  notification.message,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 14,
+                    color: Colors.black87,
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1E326E).withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        notification.type.toUpperCase(),
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: const Color(0xFF1E326E),
+                        ),
+                      ),
+                    ),
+                    Text(
+                      notificationRelativeTime(notification.createdAt),
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 11,
+                        color: Colors.grey,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+
     if (!context.mounted) return;
     widget.onNotificationTap(context, notification);
   }

@@ -10,7 +10,7 @@ import '../../utils/chat_image_utils.dart';
 import '../../viewmodels/auth_viewmodel.dart';
 import '../../viewmodels/dispute_viewmodel.dart';
 import '../../widgets/admin/admin_widgets.dart';
-import 'package:flutter/foundation.dart';
+
 class AdminDisputeListView extends StatefulWidget {
   const AdminDisputeListView({super.key});
 
@@ -21,23 +21,17 @@ class AdminDisputeListView extends StatefulWidget {
 class _AdminDisputeListViewState extends State<AdminDisputeListView> {
   String _selectedStatus = 'all';
 
-  bool get _isDesktop {
-    if (kIsWeb) return true;
-    try {
-      final platform = defaultTargetPlatform;
-      return platform == TargetPlatform.windows || platform == TargetPlatform.macOS || platform == TargetPlatform.linux;
-    } catch (_) {
-      return false;
-    }
+  bool _checkIsDesktop(BuildContext context) {
+    return MediaQuery.of(context).size.width >= 900;
   }
 
   @override
   Widget build(BuildContext context) {
     final disputeVM = context.read<DisputeViewModel>();
+    final bool isDesktop = _checkIsDesktop(context);
 
     return Scaffold(
       backgroundColor: AdminColors.screenBg,
-      appBar: const AdminAppBar(title: 'Dispute Resolution Center'),
       body: Column(
         children: [
           _buildFilterBar(),
@@ -101,7 +95,7 @@ class _AdminDisputeListViewState extends State<AdminDisputeListView> {
                   );
                 }
 
-                if (_isDesktop) {
+                if (isDesktop) {
                   return _buildDisputeTable(disputes);
                 }
 
@@ -125,38 +119,41 @@ class _AdminDisputeListViewState extends State<AdminDisputeListView> {
       padding: const EdgeInsets.all(24),
       child: AdminCard(
         padding: EdgeInsets.zero,
-        child: DataTable(
-          headingRowColor: WidgetStateProperty.all(AdminColors.navy.withValues(alpha: 0.03)),
-          columns: [
-            DataColumn(label: Text('Type', style: AdminTheme.sectionHeaderStyle())),
-            DataColumn(label: Text('Order', style: AdminTheme.sectionHeaderStyle())),
-            DataColumn(label: Text('Raised By', style: AdminTheme.sectionHeaderStyle())),
-            DataColumn(label: Text('Date', style: AdminTheme.sectionHeaderStyle())),
-            DataColumn(label: Text('Status', style: AdminTheme.sectionHeaderStyle())),
-            DataColumn(label: Text('Actions', style: AdminTheme.sectionHeaderStyle())),
-          ],
-          rows: disputes.map((dispute) {
-            final raisedBy = dispute.raisedByName?.trim().isNotEmpty == true
-                ? dispute.raisedByName!
-                : dispute.raisedByRole;
-                
-            return DataRow(
-              cells: [
-                DataCell(Text(dispute.type.label, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700))),
-                DataCell(Text('#${dispute.orderId.substring(dispute.orderId.length - 8)}', style: GoogleFonts.jetBrainsMono(fontSize: 12))),
-                DataCell(Text('$raisedBy (${dispute.raisedByRole})', style: AdminTheme.bodyStyle())),
-                DataCell(Text(DateFormat('MMM dd, yyyy').format(dispute.createdAt), style: AdminTheme.bodyStyle())),
-                DataCell(StatusChip(status: dispute.status)),
-                DataCell(
-                  IconButton(
-                    icon: const Icon(Icons.gavel_rounded, size: 20),
-                    onPressed: () => _showDisputeReviewDialog(dispute),
-                    tooltip: 'Review Dispute',
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: DataTable(
+            headingRowColor: WidgetStateProperty.all(AdminColors.navy.withValues(alpha: 0.03)),
+            columns: [
+              DataColumn(label: Text('Type', style: AdminTheme.sectionHeaderStyle())),
+              DataColumn(label: Text('Order', style: AdminTheme.sectionHeaderStyle())),
+              DataColumn(label: Text('Raised By', style: AdminTheme.sectionHeaderStyle())),
+              DataColumn(label: Text('Date', style: AdminTheme.sectionHeaderStyle())),
+              DataColumn(label: Text('Status', style: AdminTheme.sectionHeaderStyle())),
+              DataColumn(label: Text('Actions', style: AdminTheme.sectionHeaderStyle())),
+            ],
+            rows: disputes.map((dispute) {
+              final raisedBy = dispute.raisedByName?.trim().isNotEmpty == true
+                  ? dispute.raisedByName!
+                  : dispute.raisedByRole;
+                  
+              return DataRow(
+                cells: [
+                  DataCell(Text(dispute.type.label, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700))),
+                  DataCell(Text('#${dispute.orderId.substring(dispute.orderId.length - 8)}', style: GoogleFonts.jetBrainsMono(fontSize: 12))),
+                  DataCell(Text('$raisedBy (${dispute.raisedByRole})', style: AdminTheme.bodyStyle())),
+                  DataCell(Text(DateFormat('MMM dd, yyyy').format(dispute.createdAt), style: AdminTheme.bodyStyle())),
+                  DataCell(StatusChip(status: dispute.status)),
+                  DataCell(
+                    IconButton(
+                      icon: const Icon(Icons.gavel_rounded, size: 20),
+                      onPressed: () => _showDisputeReviewDialog(dispute),
+                      tooltip: 'Review Dispute',
+                    ),
                   ),
-                ),
-              ],
-            );
-          }).toList(),
+                ],
+              );
+            }).toList(),
+          ),
         ),
       ),
     );
@@ -596,6 +593,7 @@ class _DisputeDetailsDialogState extends State<_DisputeDetailsDialog> {
     final raisedBy = dispute.raisedByName?.trim().isNotEmpty == true
         ? dispute.raisedByName!
         : dispute.raisedByRole;
+    final double screenWidth = MediaQuery.of(context).size.width;
 
     return AlertDialog(
       insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
@@ -609,7 +607,7 @@ class _DisputeDetailsDialogState extends State<_DisputeDetailsDialog> {
         ],
       ),
       content: SizedBox(
-        width: 420,
+        width: screenWidth > 460 ? 420 : screenWidth - 40,
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
