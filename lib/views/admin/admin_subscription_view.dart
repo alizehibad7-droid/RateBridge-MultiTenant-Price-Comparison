@@ -1,9 +1,10 @@
 import 'dart:async';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
 
 import '../../theme/admin_theme.dart';
 import '../../utils/formatters.dart';
@@ -19,9 +20,6 @@ class AdminSubscriptionView extends StatefulWidget {
   });
 
   final FirebaseFirestore? debugFirestore;
-
-  /// When set, [_loadCompanies] waits on this future after flipping the
-  /// loading flag so widget tests can observe the spinner.
   final Future<void>? debugLoadGate;
 
   @override
@@ -55,37 +53,22 @@ class _AdminSubscriptionViewState extends State<AdminSubscriptionView> {
   Future<void> _loadCompanies() async {
     setState(() => _loadingCompanies = true);
     try {
-      if (widget.debugLoadGate != null) {
-        await widget.debugLoadGate;
-      }
-      final snap = await _firestore
-          .collection('companies')
-          .where('status', isEqualTo: 'active')
-          .get();
+      if (widget.debugLoadGate != null) await widget.debugLoadGate;
+      final snap = await _firestore.collection('companies').where('status', isEqualTo: 'active').get();
 
-      final companies = snap.docs
-          .map((d) => {
-                'id': d.id,
-                ...d.data(),
-                'companyName': d.data()['name'] ?? d.data()['companyName'] ?? 'Unknown'
-              })
-          .toList();
+      final companies = snap.docs.map((d) => {
+        'id': d.id,
+        ...d.data(),
+        'companyName': d.data()['name'] ?? d.data()['companyName'] ?? 'Unknown Entity'
+      }).toList();
 
-      companies.sort((a, b) =>
-          (a['companyName'] as String).compareTo(b['companyName'] as String));
+      companies.sort((a, b) => (a['companyName'] as String).compareTo(b['companyName'] as String));
 
       final subFutures = companies.map((c) async {
-        final subDoc = await _firestore
-            .collection('subscriptions')
-            .doc(c['id'] as String)
-            .get();
+        final subDoc = await _firestore.collection('subscriptions').doc(c['id'] as String).get();
         return MapEntry<String, SubscriptionModel?>(
           c['id'] as String,
-          subDoc.exists
-              ? SubscriptionModel.fromMap(
-                  c['id'] as String,
-                  subDoc.data() as Map<String, dynamic>)
-              : null,
+          subDoc.exists ? SubscriptionModel.fromMap(c['id'] as String, subDoc.data() as Map<String, dynamic>) : null,
         );
       });
 
@@ -107,504 +90,330 @@ class _AdminSubscriptionViewState extends State<AdminSubscriptionView> {
       setState(() {
         _filtered = query.isEmpty
             ? _companies
-            : _companies
-                .where((c) => (c['companyName'] as String? ?? '')
-                    .toLowerCase()
-                    .contains(query.toLowerCase()))
-                .toList();
+            : _companies.where((c) => (c['companyName'] as String).toLowerCase().contains(query.toLowerCase())).toList();
       });
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AdminColors.screenBg,
-      appBar: AdminAppBar(
-        title: 'Subscription Management',
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh_rounded),
-            tooltip: 'Refresh',
-            onPressed: _loadCompanies,
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.03),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: TextField(
-              controller: _searchController,
-              onChanged: _onSearch,
-              style: GoogleFonts.plusJakartaSans(fontSize: 14),
-              decoration: AdminTheme.inputDecoration(
-                hintText: 'Search by company name...',
-                prefixIcon: const Icon(Icons.search_rounded, color: AdminColors.navy, size: 22),
-                suffixIcon: _searchController.text.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.cancel_rounded, size: 20, color: AdminColors.textGrey),
-                        onPressed: () {
-                          _searchController.clear();
-                          _onSearch('');
-                          setState(() {});
-                        },
-                      )
-                    : null,
-              ),
-            ),
-          ),
-          Consumer<SubscriptionViewModel>(builder: (_, __, ___) {
-            final basicCount = _subscriptions.values
-                .where((s) => s?.plan == 'basic' && s!.isActive)
-                .length;
-            final premiumCount = _subscriptions.values
-                .where((s) => s?.plan == 'premium' && s!.isActive)
-                .length;
-            final freeCount = _companies.length - basicCount - premiumCount;
+    final double screenWidth = MediaQuery.of(context).size.width;
+    final double paddingValue = screenWidth < 600 ? 12.0 : 24.0;
 
-            return Container(
-              margin: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              decoration: AdminTheme.cardDecoration(),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  _summaryItem(Icons.eco_rounded, 'Free', freeCount, AdminColors.textGrey),
-                  _summaryItem(Icons.star_outline_rounded, 'Basic', basicCount, AdminColors.navy),
-                  _summaryItem(Icons.workspace_premium_rounded, 'Premium', premiumCount, AdminColors.amber),
-                  _summaryItem(Icons.groups_rounded, 'Total', _companies.length, AdminColors.green),
-                ],
-              ),
-            );
-          }),
-          Expanded(
-            child: _loadingCompanies
-                ? const Center(child: CircularProgressIndicator())
-                : _filtered.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(Icons.business_rounded, size: 64, color: AdminColors.textGrey),
-                            const SizedBox(height: 16),
-                            Text(
-                              'No companies found',
-                              style: AdminTheme.titleStyle(size: 18).copyWith(color: AdminColors.textGrey),
-                            ),
-                          ],
-                        ),
-                      )
-                    : RefreshIndicator(
-                        onRefresh: _loadCompanies,
-                        color: AdminColors.amber,
-                        child: ListView.separated(
-                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                          itemCount: _filtered.length,
-                          separatorBuilder: (_, __) =>
-                              const SizedBox(height: 12),
-                          itemBuilder: (context, i) {
-                            final company = _filtered[i];
-                            final companyId = company['id'] as String;
-                            final sub = _subscriptions[companyId];
-                            return _companySubscriptionCard(
-                              context,
-                              company,
-                              sub,
-                              companyId,
-                            );
-                          },
-                        ),
-                      ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _summaryItem(IconData icon, String label, int count, Color color) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.1),
-            shape: BoxShape.circle,
-          ),
-          child: Icon(icon, color: color, size: 18),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          '$count',
-          style: GoogleFonts.plusJakartaSans(
-            fontSize: 18,
-            fontWeight: FontWeight.w800,
-            color: AdminColors.navy,
-          ),
-        ),
-        Text(label, style: AdminTheme.mutedStyle(size: 10).copyWith(fontWeight: FontWeight.w600)),
-      ],
-    );
-  }
-
-  Widget _companySubscriptionCard(
-    BuildContext context,
-    Map<String, dynamic> company,
-    SubscriptionModel? sub,
-    String companyId,
-  ) {
-    final name = company['companyName'] as String? ?? 'Company';
-    final city = company['city'] as String? ?? '';
-    final currentPlan = sub?.plan ?? 'free';
-    final adminGranted = sub?.adminGranted ?? false;
-    final expiresAt = sub?.expiresAt;
-
-    return AdminCard(
-      padding: const EdgeInsets.all(16),
+    return Material(
+      color: AdminColors.screenBg,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: AdminColors.navy.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Center(
-                  child: Text(
-                    name.isNotEmpty ? name[0].toUpperCase() : 'C',
-                    style: GoogleFonts.plusJakartaSans(
-                      color: AdminColors.navy,
-                      fontWeight: FontWeight.w800,
-                      fontSize: 20,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      name,
-                      style: GoogleFonts.plusJakartaSans(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 15,
-                        color: AdminColors.navy,
-                      ),
-                    ),
-                    Row(
+          _buildHeader(),
+          Expanded(
+            child: _loadingCompanies
+                ? const Center(child: CircularProgressIndicator())
+                : SingleChildScrollView(
+                    padding: EdgeInsets.fromLTRB(paddingValue, 0, paddingValue, 24),
+                    child: Column(
                       children: [
-                        const Icon(Icons.location_on_outlined, size: 12, color: AdminColors.textGrey),
-                        const SizedBox(width: 4),
-                        Text(city, style: AdminTheme.mutedStyle(size: 12)),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  _planBadge(currentPlan),
-                  if (adminGranted) ...[
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        const Icon(Icons.admin_panel_settings_rounded, size: 12, color: AdminColors.navy),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Admin Grant',
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 10,
-                            color: AdminColors.navy,
-                            fontWeight: FontWeight.w800,
-                          ),
+                        _buildMetricsRow(),
+                        const SizedBox(height: 24),
+                        _buildFilterBar(),
+                        const SizedBox(height: 20),
+                        AdminCard(
+                          padding: EdgeInsets.zero,
+                          child: _filtered.isEmpty
+                              ? const Padding(padding: EdgeInsets.all(80), child: AdminEmptyState(icon: Icons.business_rounded, message: 'No companies matching your search criteria.'))
+                              : SingleChildScrollView(
+                                  scrollDirection: Axis.horizontal,
+                                  child: _buildSubscriptionTable(),
+                                ),
                         ),
                       ],
                     ),
-                  ],
-                ],
-              ),
-            ],
-          ),
-          if (expiresAt != null) ...[
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: AdminColors.screenBg,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.event_available_rounded,
-                      size: 14, color: AdminColors.textGrey),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Expires ${AppFormatters.date(expiresAt)}',
-                    style: AdminTheme.mutedStyle(size: 12).copyWith(fontWeight: FontWeight.w600),
                   ),
-                  const Spacer(),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: AdminColors.amber.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      '${sub?.daysRemaining ?? 0} days left',
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: 10,
-                        color: AdminColors.darkAmber,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-          const SizedBox(height: 16),
-          const Divider(height: 1),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              const Icon(Icons.bolt_rounded, size: 16, color: AdminColors.amber),
-              const SizedBox(width: 6),
-              Text(
-                'Grant Plan:',
-                style: GoogleFonts.plusJakartaSans(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 13,
-                  color: AdminColors.navy,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: kPlans
-                        .where((p) => p.id != PlanId.free)
-                        .map((plan) => Padding(
-                              padding: const EdgeInsets.only(right: 8),
-                              child: OutlinedButton(
-                                onPressed: currentPlan == plan.planKey
-                                    ? null
-                                    : () => _showGrantDialog(
-                                          context,
-                                          company,
-                                          companyId,
-                                          plan,
-                                        ),
-                                style: AdminTheme.secondaryButtonStyle(height: 36).copyWith(
-                                  padding: const WidgetStatePropertyAll(
-                                    EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-                                  ),
-                                  minimumSize: const WidgetStatePropertyAll(Size(0, 32)),
-                                  shape: WidgetStatePropertyAll(RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
-                                ),
-                                child: Text(plan.name,
-                                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                              ),
-                            ))
-                        .toList(),
-                  ),
-                ),
-              ),
-              if (currentPlan != 'free')
-                IconButton(
-                  onPressed: () =>
-                      _revokeSubscription(context, companyId, name),
-                  icon: const Icon(Icons.remove_circle_outline_rounded, color: AdminColors.red, size: 20),
-                  tooltip: 'Revoke Subscription',
-                ),
-            ],
           ),
         ],
       ),
     );
   }
 
-  void _showGrantDialog(
-    BuildContext context,
-    Map<String, dynamic> company,
-    String companyId,
-    PlanDefinition plan,
-  ) {
-    final noteController = TextEditingController();
-    final companyName = company['companyName'] as String? ?? 'Company';
+  Widget _buildHeader() {
+    final double screenWidth = MediaQuery.of(context).size.width;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(screenWidth < 600 ? 12 : 24, 24, screenWidth < 600 ? 12 : 24, 20),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (constraints.maxWidth > 600) {
+            return Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Corporate Subscriptions', style: AdminTheme.titleStyle(size: 24)),
+                      const SizedBox(height: 4),
+                      Text('Monitor service tiers, lifecycle status, and administrative grants.', style: AdminTheme.mutedStyle()),
+                    ],
+                  ),
+                ),
+                ElevatedButton.icon(
+                  onPressed: _loadCompanies,
+                  icon: const Icon(Icons.refresh_rounded, size: 16),
+                  label: const Text('Sync Workspace'),
+                  style: AdminTheme.primaryButtonStyle(),
+                ),
+              ],
+            );
+          } else {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text('Corporate Subscriptions', style: AdminTheme.titleStyle(size: 20)),
+                const SizedBox(height: 4),
+                Text('Monitor service tiers and status.', style: AdminTheme.mutedStyle(size: 12)),
+                const SizedBox(height: 12),
+                ElevatedButton.icon(
+                  onPressed: _loadCompanies,
+                  icon: const Icon(Icons.refresh_rounded, size: 16),
+                  label: const Text('Sync Workspace'),
+                  style: AdminTheme.primaryButtonStyle(),
+                ),
+              ],
+            );
+          }
+        },
+      ),
+    );
+  }
 
+  Widget _buildMetricsRow() {
+    final basicCount = _subscriptions.values.where((s) => s?.plan == 'basic' && s!.isActive).length;
+    final premiumCount = _subscriptions.values.where((s) => s?.plan == 'premium' && s!.isActive).length;
+    final freeCount = _companies.length - basicCount - premiumCount;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final int crossAxisCount = constraints.maxWidth > 900 ? 4 : (constraints.maxWidth > 550 ? 2 : 1);
+        final double itemWidth = (constraints.maxWidth - (crossAxisCount - 1) * 16) / crossAxisCount;
+        final double childAspectRatio = itemWidth / 100;
+
+        return GridView.count(
+          crossAxisCount: crossAxisCount,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisSpacing: 16,
+          mainAxisSpacing: 16,
+          childAspectRatio: childAspectRatio,
+          children: [
+            _MetricTile(label: 'FREE TIERS', value: '$freeCount', icon: Icons.eco_outlined, color: AdminColors.textGrey),
+            _MetricTile(label: 'BASIC PLANS', value: '$basicCount', icon: Icons.star_border_rounded, color: AdminColors.primary),
+            _MetricTile(label: 'PREMIUM SEATS', value: '$premiumCount', icon: Icons.workspace_premium_outlined, color: AdminColors.amber),
+            _MetricTile(label: 'TOTAL ENTITIES', value: '${_companies.length}', icon: Icons.business_rounded, color: AdminColors.navy),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildFilterBar() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10), border: Border.all(color: AdminColors.border)),
+      child: TextField(
+        controller: _searchController,
+        onChanged: _onSearch,
+        decoration: AdminTheme.inputDecoration(
+          hintText: 'Search by legal company name...',
+          prefixIcon: const Icon(Icons.search_rounded, size: 20, color: AdminColors.textGrey),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSubscriptionTable() {
+    return Theme(
+      data: Theme.of(context).copyWith(dividerColor: const Color(0xFFF1F5F9)),
+      child: DataTable(
+        headingRowHeight: 48,
+        dataRowMaxHeight: 64,
+        headingRowColor: WidgetStateProperty.all(const Color(0xFFF8FAFC)),
+        horizontalMargin: 20,
+        columnSpacing: 24,
+        columns: [
+          DataColumn(label: Text('CORPORATE ENTITY', style: AdminTheme.sectionHeaderStyle())),
+          DataColumn(label: Text('SERVICE TIER', style: AdminTheme.sectionHeaderStyle())),
+          DataColumn(label: Text('EXPIRATION', style: AdminTheme.sectionHeaderStyle())),
+          DataColumn(label: Text('SYSTEM STATUS', style: AdminTheme.sectionHeaderStyle())),
+          DataColumn(label: Text('MANAGEMENT', style: AdminTheme.sectionHeaderStyle())),
+        ],
+        rows: _filtered.map((company) {
+          final id = company['id'] as String;
+          final sub = _subscriptions[id];
+          final name = company['companyName'] as String;
+          final plan = sub?.plan ?? 'free';
+          final expires = sub?.expiresAt;
+
+          return DataRow(cells: [
+            DataCell(
+              Row(
+                children: [
+                  CircleAvatar(
+                    radius: 14,
+                    backgroundColor: AdminColors.primary.withValues(alpha: 0.08),
+                    child: Text(name[0].toUpperCase(), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AdminColors.primary)),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(name, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, color: AdminColors.navy, fontSize: 13)),
+                ],
+              ),
+            ),
+            DataCell(_planChip(plan)),
+            DataCell(Text(expires != null ? DateFormat('MMM d, yyyy').format(expires) : 'Perpetual', style: AdminTheme.bodyStyle(size: 13))),
+            DataCell(StatusChip(status: sub?.isActive == true ? 'active' : 'suspended')),
+            DataCell(
+              Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.bolt_rounded, color: AdminColors.amber, size: 20),
+                    onPressed: () => _showGrantMenu(company, id, plan),
+                    tooltip: 'Administrative Override',
+                  ),
+                  if (plan != 'free')
+                    IconButton(
+                      icon: const Icon(Icons.no_accounts_rounded, color: AdminColors.red, size: 20),
+                      onPressed: () => _revokeSubscription(id, name),
+                      tooltip: 'Revoke License',
+                    ),
+                ],
+              ),
+            ),
+          ]);
+        }).toList(),
+      ),
+    );
+  }
+
+  void _showGrantMenu(Map<String, dynamic> company, String id, String current) {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: Container(
+          width: 400,
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('License Provisioning', style: AdminTheme.titleStyle()),
+              const SizedBox(height: 8),
+              Text('Entity: ${company['companyName']}', style: AdminTheme.mutedStyle()),
+              const SizedBox(height: 24),
+              ...kPlans.where((p) => p.id != PlanId.free).map((p) => ListTile(
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                title: Text(p.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: Text('${p.durationDays} Days Duration'),
+                trailing: current == p.planKey ? const Icon(Icons.check_circle, color: AdminColors.green) : const Icon(Icons.add_circle_outline),
+                enabled: current != p.planKey,
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _showGrantDialog(company, id, p);
+                },
+              )),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showGrantDialog(Map<String, dynamic> company, String id, PlanDefinition plan) {
+    final note = TextEditingController();
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Row(
-          children: [
-            const Icon(Icons.verified_user_rounded, color: AdminColors.navy),
-            const SizedBox(width: 10),
-            Expanded(child: Text('Grant ${plan.name}')),
-          ],
-        ),
+        title: Text('Grant ${plan.name} License'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Company: $companyName',
-              style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, color: AdminColors.navy),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'This will manually activate the ${plan.name} plan for ${plan.durationDays} days as an administrative override.',
-              style: AdminTheme.mutedStyle(size: 13),
-            ),
+            Text('This will manually override the entity\'s subscription status for ${plan.durationDays} days.', style: AdminTheme.bodyStyle()),
             const SizedBox(height: 20),
-            TextField(
-              controller: noteController,
-              maxLines: 3,
-              style: GoogleFonts.plusJakartaSans(fontSize: 14),
-              decoration: AdminTheme.inputDecoration(
-                labelText: 'Reason for manual grant',
-                hintText: 'e.g. Promotional offer, support resolution...',
-              ),
-            ),
+            TextField(controller: note, decoration: AdminTheme.inputDecoration(labelText: 'Administrative Justification', hintText: 'Reason for manual grant...'), maxLines: 2),
           ],
         ),
         actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('CANCEL')),
-          ElevatedButton.icon(
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('CANCEL')),
+          ElevatedButton(
             onPressed: () async {
-              Navigator.pop(ctx);
-              final vm = context.read<SubscriptionViewModel>();
-              await vm.adminGrantPlan(
-                companyId: companyId,
-                plan: plan,
-                note: noteController.text,
-              );
-              if (ctx.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                  behavior: SnackBarBehavior.floating,
-                  content: Text(vm.successMessage ?? '${plan.name} plan successfully granted.'),
-                  backgroundColor: AdminColors.green,
-                ));
-                vm.clearMessages();
-              }
-              await _loadCompanies();
+              await context.read<SubscriptionViewModel>().adminGrantPlan(companyId: id, plan: plan, note: note.text);
+              if (mounted) Navigator.pop(ctx);
+              _loadCompanies();
             },
-            icon: const Icon(Icons.check_rounded, size: 18),
-            label: Text('GRANT ${plan.name.toUpperCase()}'),
-            style: AdminTheme.primaryButtonStyle(height: 44).copyWith(
-              minimumSize: WidgetStateProperty.all(const Size(160, 44)),
-            ),
+            child: const Text('CONFIRM GRANT'),
           ),
         ],
       ),
     );
   }
 
-  void _revokeSubscription(
-      BuildContext context, String companyId, String companyName) {
+  void _revokeSubscription(String id, String name) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Row(
-          children: [
-            const Icon(Icons.warning_amber_rounded, color: AdminColors.red),
-            const SizedBox(width: 10),
-            const Text('Revoke Subscription?'),
-          ],
-        ),
-        content: Text(
-            'Are you sure you want to revoke paid access for $companyName? '
-            'This will immediately revert the workspace to the Free plan limitations.'),
+        title: const Text('Revoke Enterprise Access'),
+        content: Text('Revert $name to the Free Tier immediately? All premium features will be locked.'),
         actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('CANCEL')),
-          OutlinedButton.icon(
-            style: AdminTheme.destructiveButtonStyle(height: 44).copyWith(
-              minimumSize: WidgetStateProperty.all(const Size(140, 44)),
-            ),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('CANCEL')),
+          ElevatedButton(
             onPressed: () async {
-              Navigator.pop(ctx);
-              await _firestore.collection('subscriptions').doc(companyId).set({
-                'plan': 'free',
-                'status': 'active',
-                'startedAt': FieldValue.serverTimestamp(),
-                'expiresAt': null,
-                'adminGranted': false,
-                'history': FieldValue.arrayUnion([
-                  {
-                    'plan': 'free',
-                    'action': 'admin_revoked',
-                    'date': Timestamp.now(),
-                    'amountPaid': 0,
-                    'note': 'Revoked by administrator',
-                  }
-                ]),
-              }, SetOptions(merge: true));
-
-              await _firestore.collection('companies').doc(companyId).update({
-                'plan': 'free',
-                'planExpiry': null,
-                'aiEnabled': false,
-              });
-
-              await _loadCompanies();
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    behavior: SnackBarBehavior.floating,
-                    content: Text('Subscription has been revoked.'),
-                    backgroundColor: AdminColors.amber,
-                  ),
-                );
-              }
+              await _firestore.collection('subscriptions').doc(id).update({'plan': 'free', 'status': 'active', 'expiresAt': null});
+              await _firestore.collection('companies').doc(id).update({'plan': 'free', 'planExpiry': null, 'aiEnabled': false});
+              if (mounted) Navigator.pop(ctx);
+              _loadCompanies();
             },
-            icon: const Icon(Icons.remove_circle_outline_rounded, size: 18),
-            label: const Text('CONFIRM REVOKE'),
+            style: ElevatedButton.styleFrom(backgroundColor: AdminColors.red),
+            child: const Text('CONFIRM REVOCATION'),
           ),
         ],
       ),
     );
   }
 
-  Widget _planBadge(String plan) {
-    final colors = plan == 'premium'
-            ? AdminTheme.statusColors('pending')
-            : plan == 'basic'
-                ? AdminTheme.statusColors('approved')
-                : AdminTheme.statusColors('suspended');
+  Widget _planChip(String plan) {
+    final color = plan == 'premium' ? AdminColors.amber : (plan == 'basic' ? AdminColors.primary : AdminColors.textGrey);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: colors.bg,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        plan.toUpperCase(),
-        style: GoogleFonts.plusJakartaSans(
-          color: colors.fg,
-          fontSize: 10,
-          fontWeight: FontWeight.w800,
-          letterSpacing: 0.5,
-        ),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+      decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(4)),
+      child: Text(plan.toUpperCase(), style: GoogleFonts.plusJakartaSans(color: color, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
+    );
+  }
+}
+
+class _MetricTile extends StatelessWidget {
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color color;
+  const _MetricTile({required this.label, required this.value, required this.icon, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: AdminColors.border)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(label, style: AdminTheme.sectionHeaderStyle(size: 9)),
+              Icon(icon, color: color.withValues(alpha: 0.6), size: 16),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(value, style: GoogleFonts.plusJakartaSans(fontSize: 22, fontWeight: FontWeight.w800, color: AdminColors.navy)),
+        ],
       ),
     );
   }

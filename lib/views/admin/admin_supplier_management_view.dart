@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -7,7 +8,6 @@ import '../../models/user_model.dart';
 import '../../models/supplier_model.dart';
 import '../../viewmodels/admin_viewmodel.dart';
 import '../../theme/admin_theme.dart';
-import '../../utils/pakistan_validators.dart';
 import '../../widgets/admin/admin_widgets.dart';
 import '../../widgets/supplier_performance_scorecard.dart';
 
@@ -59,21 +59,14 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Row(
-          children: [
-            const Icon(Icons.verified_user_rounded, color: AdminColors.navy),
-            const SizedBox(width: 10),
-            const Text('Bulk Approval'),
-          ],
-        ),
-        content: Text('Approve all ${_selectedSupplierUids.length} selected suppliers and grant dashboard access?'),
+        title: const Text('Mass Approval'),
+        content: Text('Activate all ${_selectedSupplierUids.length} selected supplier accounts and grant marketplace visibility?'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('CANCEL')),
-          ElevatedButton.icon(
+          ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
-            icon: const Icon(Icons.done_all_rounded, size: 18),
-            label: const Text('APPROVE ALL'),
-            style: AdminTheme.primaryButtonStyle(height: 40),
+            style: AdminTheme.primaryButtonStyle(),
+            child: const Text('PROCEED WITH APPROVAL'),
           ),
         ],
       ),
@@ -88,16 +81,7 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
       }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            behavior: SnackBarBehavior.floating,
-            content: Row(
-              children: [
-                const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
-                const SizedBox(width: 12),
-                Text('Successfully approved ${_selectedSupplierUids.length} suppliers'),
-              ],
-            ),
-          ),
+          const SnackBar(content: Text('Bulk supplier activation completed.')),
         );
         setState(() => _selectedSupplierUids.clear());
       }
@@ -110,75 +94,102 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
   Widget build(BuildContext context) {
     final adminVM = Provider.of<AdminViewModel>(context);
 
-    final content = TabBarView(
-      controller: _tabController,
+    Widget content = Column(
       children: [
-        _buildSupplierList('pending', adminVM),
-        _buildSupplierList('active', adminVM),
-        _buildSupplierList('suspended', adminVM),
-        _buildSupplierList('rejected', adminVM),
+        if (!widget.embedded) _buildHeader(),
+        _buildTabs(),
+        Expanded(
+          child: TabBarView(
+            controller: _tabController,
+            children: [
+              _buildSupplierContent('pending', adminVM),
+              _buildSupplierContent('active', adminVM),
+              _buildSupplierContent('suspended', adminVM),
+              _buildSupplierContent('rejected', adminVM),
+            ],
+          ),
+        ),
       ],
     );
 
-    return Scaffold(
-      backgroundColor: AdminColors.screenBg,
-      appBar: widget.embedded 
-          ? null 
-          : AdminAppBar(
-              title: 'Supplier Management',
-              bottom: TabBar(
-                controller: _tabController,
-                indicatorColor: AdminColors.amber,
-                indicatorWeight: 3,
-                labelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 13),
-                unselectedLabelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w500, fontSize: 13),
-                tabs: const [
-                  Tab(text: 'Pending'),
-                  Tab(text: 'Active'),
-                  Tab(text: 'Suspended'),
-                  Tab(text: 'Rejected'),
-                ],
-              ),
-            ),
-      body: widget.embedded 
-          ? Column(
-              children: [
-                Material(
-                  color: AdminColors.navy,
-                  child: TabBar(
-                    controller: _tabController,
-                    indicatorColor: AdminColors.amber,
-                    indicatorWeight: 3,
-                    labelColor: AdminColors.amber,
-                    unselectedLabelColor: Colors.white70,
-                    labelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 12),
-                    unselectedLabelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w500, fontSize: 12),
-                    tabs: const [
-                      Tab(text: 'Pending'),
-                      Tab(text: 'Active'),
-                      Tab(text: 'Suspended'),
-                      Tab(text: 'Rejected'),
-                    ],
-                  ),
-                ),
-                Expanded(child: content),
-              ],
-            )
-          : content,
-      floatingActionButton: (_tabController.index == 0 && _selectedSupplierUids.isNotEmpty)
-          ? FloatingActionButton.extended(
-              onPressed: _isBulkProcessing ? null : () => _bulkApprove(adminVM),
-              backgroundColor: AdminColors.navy,
-              label: _isBulkProcessing 
-                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                  : Text('Approve Selected (${_selectedSupplierUids.length})', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-              icon: const Icon(Icons.verified_user_rounded, color: Colors.white),
-            )
-          : null,
+    if (!widget.embedded) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Suppliers'),
+        ),
+        body: content,
+      );
+    }
+
+    return Container(
+      color: AdminColors.screenBg,
+      child: content,
     );
   }
 
-  Widget _buildSupplierList(String status, AdminViewModel adminVM) {
+  Widget _buildHeader() {
+    final double screenWidth = MediaQuery.of(context).size.width;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(screenWidth < 600 ? 12 : 24, 24, screenWidth < 600 ? 12 : 24, 0),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Supply Chain Partners', style: AdminTheme.titleStyle(size: screenWidth < 600 ? 20 : 24)),
+                const SizedBox(height: 4),
+                Text('Oversee material suppliers, product inventories, and service levels.', style: AdminTheme.mutedStyle(size: screenWidth < 600 ? 12 : 14)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTabs() {
+    final double screenWidth = MediaQuery.of(context).size.width;
+    return Container(
+      margin: EdgeInsets.fromLTRB(screenWidth < 600 ? 12 : 24, 20, screenWidth < 600 ? 12 : 24, 0),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: AdminColors.border)),
+      ),
+      child: TabBar(
+        controller: _tabController,
+        isScrollable: true,
+        tabAlignment: TabAlignment.start,
+        indicatorColor: AdminColors.primary,
+        indicatorWeight: 3,
+        labelColor: AdminColors.primary,
+        unselectedLabelColor: AdminColors.textGrey,
+        labelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 13),
+        unselectedLabelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w500, fontSize: 13),
+        tabs: [
+          _buildTab('Awaiting Approval', Icons.pending_outlined),
+          _buildTab('Active Partners', Icons.storefront_outlined),
+          _buildTab('Suspended', Icons.block_outlined),
+          _buildTab('Rejected', Icons.domain_disabled_outlined),
+        ],
+      ),
+    );
+  }
+
+  Tab _buildTab(String label, IconData icon) {
+    return Tab(
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16),
+          const SizedBox(width: 8),
+          Text(label),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSupplierContent(String status, AdminViewModel adminVM) {
+    final double screenWidth = MediaQuery.of(context).size.width;
     return StreamBuilder<List<UserModel>>(
       stream: _db
           .collection('users')
@@ -192,360 +203,478 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
         }
 
         final suppliers = snapshot.data ?? [];
-
         if (suppliers.isEmpty) {
           return AdminEmptyState(
             icon: _emptyIcon(status),
-            message: 'No $status suppliers found.',
+            message: 'No suppliers found in this segment.',
           );
         }
 
-        return ListView.builder(
-          padding: const EdgeInsets.all(16),
-          itemCount: suppliers.length,
-          itemBuilder: (context, index) {
-            final supplier = suppliers[index];
-            return FutureBuilder<DocumentSnapshot>(
-              future: _db
-                  .collection('suppliers')
-                  .doc(supplier.uid)
-                  .get(),
-              builder: (context, profileSnap) {
-                SupplierModel? profile;
-                if (profileSnap.hasData && profileSnap.data!.exists) {
-                  profile = SupplierModel.fromMap(
-                    profileSnap.data!.data() as Map<String, dynamic>,
-                  );
-                }
-                return _buildSupplierCard(supplier, profile, adminVM);
-              },
-            );
-          },
+        return SingleChildScrollView(
+          padding: EdgeInsets.all(screenWidth < 600 ? 12 : 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (status == 'pending' && _selectedSupplierUids.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: Row(
+                    children: [
+                      Text('${_selectedSupplierUids.length} selected', style: AdminTheme.bodyStyle(weight: FontWeight.w700)),
+                      const Spacer(),
+                      ElevatedButton.icon(
+                        onPressed: _isBulkProcessing ? null : () => _bulkApprove(adminVM),
+                        icon: const Icon(Icons.check_circle_rounded, size: 16),
+                        label: const Text('Bulk Approve'),
+                        style: AdminTheme.primaryButtonStyle().copyWith(
+                          backgroundColor: WidgetStateProperty.all(AdminColors.green),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              screenWidth >= 900
+                  ? AdminCard(
+                      padding: EdgeInsets.zero,
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: _buildSupplierTable(suppliers, adminVM, status),
+                      ),
+                    )
+                  : _buildSupplierMobileList(suppliers, adminVM, status),
+            ],
+          ),
         );
       },
     );
   }
 
-  IconData _emptyIcon(String status) {
-    switch(status) {
-      case 'pending': return Icons.person_search_rounded;
-      case 'active': return Icons.storefront_rounded;
-      case 'suspended': return Icons.block_rounded;
-      default: return Icons.domain_disabled_rounded;
-    }
-  }
-
-  Widget _buildSupplierCard(
-    UserModel supplier,
-    SupplierModel? profile,
-    AdminViewModel adminVM,
-  ) {
-    final status = (supplier.status ?? 'pending').toLowerCase();
-    final isPending = status == 'pending';
-    final isSelected = _selectedSupplierUids.contains(supplier.uid);
-
-    return AdminCard(
-      margin: const EdgeInsets.only(bottom: 16),
-      child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (isPending)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: Checkbox(
-                        value: isSelected,
-                        onChanged: (val) {
-                          setState(() {
-                            if (val == true) {
-                              _selectedSupplierUids.add(supplier.uid);
-                            } else {
-                              _selectedSupplierUids.remove(supplier.uid);
-                            }
-                          });
-                        },
-                        activeColor: AdminColors.amber,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+  Widget _buildSupplierTable(List<UserModel> suppliers, AdminViewModel adminVM, String status) {
+    return Theme(
+      data: Theme.of(context).copyWith(dividerColor: const Color(0xFFF1F5F9)),
+      child: DataTable(
+        headingRowHeight: 48,
+        dataRowMaxHeight: 64,
+        headingRowColor: WidgetStateProperty.all(const Color(0xFFF8FAFC)),
+        horizontalMargin: 20,
+        columnSpacing: 24,
+        columns: [
+          DataColumn(label: Text('BUSINESS ENTITY', style: AdminTheme.sectionHeaderStyle())),
+          DataColumn(label: Text('LOCATION', style: AdminTheme.sectionHeaderStyle())),
+          DataColumn(label: Text('TRUST SCORE', style: AdminTheme.sectionHeaderStyle())),
+          DataColumn(label: Text('STATUS', style: AdminTheme.sectionHeaderStyle())),
+          DataColumn(label: Text('OPERATIONS', style: AdminTheme.sectionHeaderStyle())),
+        ],
+        rows: suppliers.map((supplier) {
+          return DataRow(
+            cells: [
+              DataCell(
+                Row(
+                  children: [
+                    if (status == 'pending')
+                      SizedBox(
+                        width: 32,
+                        child: Checkbox(
+                          value: _selectedSupplierUids.contains(supplier.uid),
+                          onChanged: (val) {
+                            setState(() {
+                              if (val == true) _selectedSupplierUids.add(supplier.uid);
+                              else _selectedSupplierUids.remove(supplier.uid);
+                            });
+                          },
+                        ),
                       ),
+                    CircleAvatar(
+                      radius: 14,
+                      backgroundColor: AdminColors.amber.withValues(alpha: 0.1),
+                      child: Text(supplier.name[0].toUpperCase(), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AdminColors.darkAmber)),
                     ),
-                  ),
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: AdminColors.amber.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(Icons.store_rounded,
-                      color: AdminColors.amber, size: 24),
+                    const SizedBox(width: 12),
+                    Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(supplier.name, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, color: AdminColors.navy, fontSize: 13)),
+                        Text(supplier.email, style: AdminTheme.mutedStyle(size: 11)),
+                      ],
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(profile?.name ?? supplier.name,
-                          style: GoogleFonts.plusJakartaSans(
-                              fontWeight: FontWeight.w700, fontSize: 16, color: AdminColors.navy)),
-                      Row(
-                        children: [
-                          const Icon(Icons.email_outlined, size: 12, color: AdminColors.textGrey),
-                          const SizedBox(width: 4),
-                          Text(supplier.email,
-                              style: const TextStyle(
-                                  color: AdminColors.textGrey, fontSize: 12)),
-                        ],
+              ),
+              DataCell(Text(supplier.city, style: AdminTheme.bodyStyle())),
+              DataCell(
+                Row(
+                  children: [
+                    const Icon(Icons.star_rounded, color: AdminColors.amber, size: 16),
+                    const SizedBox(width: 4),
+                    Text((supplier.rating ?? 0.0).toStringAsFixed(1), style: AdminTheme.bodyStyle(weight: FontWeight.w700)),
+                  ],
+                ),
+              ),
+              DataCell(StatusChip(status: supplier.status ?? 'pending')),
+              DataCell(
+                Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.visibility_outlined, size: 18, color: AdminColors.primary),
+                      onPressed: () => _showSupplierDetails(supplier),
+                      tooltip: 'View Profile',
+                    ),
+                    if (status == 'pending') ...[
+                      IconButton(
+                        icon: const Icon(Icons.check_circle_outline, color: AdminColors.green, size: 18),
+                        onPressed: () => adminVM.approveSupplier(supplier.uid),
+                        tooltip: 'Approve',
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.cancel_outlined, color: AdminColors.red, size: 18),
+                        onPressed: () => _showRejectDialog(supplier.uid, adminVM),
+                        tooltip: 'Reject',
                       ),
                     ],
-                  ),
+                    if (status == 'active')
+                      IconButton(
+                        icon: const Icon(Icons.block_rounded, color: AdminColors.red, size: 18),
+                        onPressed: () => adminVM.suspendSupplier(supplier.uid),
+                        tooltip: 'Suspend',
+                      ),
+                  ],
                 ),
-                StatusChip(status: status),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                const Icon(Icons.location_on_outlined,
-                    size: 14, color: AdminColors.textGrey),
-                const SizedBox(width: 4),
-                Text(profile?.city ?? supplier.city,
-                    style: const TextStyle(
-                        fontSize: 12, color: AdminColors.textGrey)),
-                const SizedBox(width: 16),
-                const Icon(Icons.calendar_today_outlined,
-                    size: 14, color: AdminColors.textGrey),
-                const SizedBox(width: 4),
-                Text(
-                  DateFormat('MMM d, yyyy').format(supplier.createdAt),
-                  style: const TextStyle(
-                      fontSize: 12, color: AdminColors.textGrey),
-                ),
-              ],
-            ),
-            const Divider(height: 32),
-            SupplierPerformanceScorecard(
-              supplierId: supplier.uid,
-              averageRating: supplier.rating ?? 0.0,
-            ),
-            const SizedBox(height: 20),
-            AdminApprovalSection(
-              title: 'BUSINESS IDENTITY',
-              children: [
-                AdminDetailRow(label: 'Business name', value: profile?.name ?? supplier.name),
-                AdminDetailRow(label: 'Business type', value: profile?.businessType ?? supplier.businessType ?? ''),
-                AdminDetailRow(
-                  label: 'Years in business',
-                  value: profile?.yearsInBusiness?.toString() ?? '',
-                ),
-                AdminDetailRow(
-                  label: 'Registration / NTN',
-                  value: profile?.businessRegistrationNumber ?? '',
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-            AdminApprovalSection(
-              title: 'DECLARED CATEGORIES',
-              children: [
-                AdminChipList(
-                  items: profile?.declaredCategories ?? profile?.categories ?? const [],
-                  color: AdminColors.navy,
-                ),
-              ],
-            ),
-            const Divider(height: 32),
-            _buildActionButtons(supplier, adminVM),
-          ],
-        ),
-    );
-  }
-
-  Widget _buildActionButtons(UserModel supplier, AdminViewModel adminVM) {
-    final status = (supplier.status ?? 'pending').toLowerCase();
-
-    return Wrap(
-      spacing: 12,
-      runSpacing: 12,
-      children: [
-        if (status == 'pending') ...[
-          ElevatedButton.icon(
-            onPressed: () => _confirmAction(
-              context,
-              'Approve Supplier?',
-              'This will activate the supplier and grant access to their dashboard.',
-              () => adminVM.approveSupplier(supplier.uid),
-              confirmIcon: Icons.check_circle_rounded,
-            ),
-            icon: const Icon(Icons.check_rounded, size: 18),
-            label: const Text('Approve'),
-            style: AdminTheme.primaryButtonStyle(height: 46).copyWith(
-              minimumSize: WidgetStateProperty.all(const Size(140, 46)),
-            ),
-          ),
-          OutlinedButton.icon(
-            onPressed: () => _showRejectDialog(context, supplier.uid, adminVM),
-            icon: const Icon(Icons.close_rounded, size: 18),
-            label: const Text('Reject'),
-            style: AdminTheme.destructiveButtonStyle().copyWith(
-              minimumSize: WidgetStateProperty.all(const Size(120, 46)),
-            ),
-          ),
-        ],
-        if (status == 'active') ...[
-          OutlinedButton.icon(
-            onPressed: () => _confirmAction(
-              context,
-              'Suspend Supplier?',
-              'The supplier will lose dashboard access immediately.',
-              () => adminVM.suspendSupplier(supplier.uid),
-              confirmIcon: Icons.block_rounded,
-              isDestructive: true,
-            ),
-            icon: const Icon(Icons.block_rounded, size: 18),
-            label: const Text('Suspend Account'),
-            style: AdminTheme.destructiveButtonStyle().copyWith(
-              minimumSize: WidgetStateProperty.all(const Size(160, 46)),
-            ),
-          ),
-        ],
-        if (status == 'suspended' || status == 'rejected') ...[
-          ElevatedButton.icon(
-            onPressed: () => _confirmAction(
-              context,
-              'Activate Supplier?',
-              'The supplier will regain full access to the platform.',
-              () => adminVM.reactivateSupplier(supplier.uid),
-              confirmIcon: Icons.bolt_rounded,
-            ),
-            icon: const Icon(Icons.bolt_rounded, size: 18),
-            label: const Text('Activate Account'),
-            style: AdminTheme.primaryButtonStyle(height: 46).copyWith(
-              minimumSize: WidgetStateProperty.all(const Size(160, 46)),
-            ),
-          ),
-        ],
-        OutlinedButton.icon(
-          onPressed: () => _confirmAction(
-            context,
-            'Delete Permanently?',
-            'This action is irreversible. All supplier records will be removed.',
-            () => adminVM.deleteSupplierPermanently(supplier.uid),
-            confirmIcon: Icons.delete_forever_rounded,
-            isDestructive: true,
-          ),
-          icon: const Icon(Icons.delete_forever_rounded, size: 18),
-          label: const Text('Delete'),
-          style: AdminTheme.destructiveButtonStyle().copyWith(
-            minimumSize: WidgetStateProperty.all(const Size(120, 46)),
-          ),
-        ),
-      ],
-    );
-  }
-
-  void _confirmAction(
-    BuildContext context,
-    String title,
-    String message,
-    Future<void> Function() onConfirm, {
-    bool isDestructive = false,
-    IconData? confirmIcon,
-  }) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Row(
-          children: [
-            if (confirmIcon != null) Icon(confirmIcon, color: isDestructive ? AdminColors.red : AdminColors.navy),
-            if (confirmIcon != null) const SizedBox(width: 10),
-            Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
-          ],
-        ),
-        content: Text(message),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('CANCEL')),
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              try {
-                await onConfirm();
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                        behavior: SnackBarBehavior.floating,
-                        content: Text('Action completed successfully')),
-                  );
-                }
-              } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(behavior: SnackBarBehavior.floating, content: Text('Error: $e')),
-                  );
-                }
-              }
-            },
-            child: Text(
-              'CONFIRM',
-              style: TextStyle(
-                color: isDestructive ? AdminColors.red : AdminColors.navy,
-                fontWeight: FontWeight.bold,
               ),
-            ),
-          ),
-        ],
+            ],
+          );
+        }).toList(),
       ),
     );
   }
 
-  void _showRejectDialog(
-    BuildContext context,
-    String uid,
-    AdminViewModel adminVM,
-  ) {
+  Widget _buildSupplierMobileList(List<UserModel> suppliers, AdminViewModel adminVM, String status) {
+    return ListView.separated(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: suppliers.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      itemBuilder: (context, index) {
+        final supplier = suppliers[index];
+
+        return Card(
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: const BorderSide(color: AdminColors.border),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    if (status == 'pending')
+                      Checkbox(
+                        value: _selectedSupplierUids.contains(supplier.uid),
+                        onChanged: (val) {
+                          setState(() {
+                            if (val == true) _selectedSupplierUids.add(supplier.uid);
+                            else _selectedSupplierUids.remove(supplier.uid);
+                          });
+                        },
+                      ),
+                    CircleAvatar(
+                      radius: 16,
+                      backgroundColor: AdminColors.amber.withValues(alpha: 0.1),
+                      child: Text(supplier.name[0].toUpperCase(), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AdminColors.darkAmber)),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(supplier.name, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, color: AdminColors.navy, fontSize: 14)),
+                          Text(supplier.email, style: AdminTheme.mutedStyle(size: 12)),
+                        ],
+                      ),
+                    ),
+                    StatusChip(status: supplier.status ?? 'pending'),
+                  ],
+                ),
+                const Divider(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Location:', style: AdminTheme.mutedStyle(size: 12)),
+                    Text(supplier.city, style: AdminTheme.bodyStyle(weight: FontWeight.w600, size: 13)),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Trust Score:', style: AdminTheme.mutedStyle(size: 12)),
+                    Row(
+                      children: [
+                        const Icon(Icons.star_rounded, color: AdminColors.amber, size: 14),
+                        const SizedBox(width: 4),
+                        Text((supplier.rating ?? 0.0).toStringAsFixed(1), style: AdminTheme.bodyStyle(weight: FontWeight.w700, size: 13)),
+                      ],
+                    ),
+                  ],
+                ),
+                const Divider(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.visibility_outlined, size: 20, color: AdminColors.primary),
+                      onPressed: () => _showSupplierDetails(supplier),
+                      tooltip: 'View Profile',
+                    ),
+                    if (status == 'pending') ...[
+                      IconButton(
+                        icon: const Icon(Icons.check_circle_outline, color: AdminColors.green, size: 20),
+                        onPressed: () => adminVM.approveSupplier(supplier.uid),
+                        tooltip: 'Approve',
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.cancel_outlined, color: AdminColors.red, size: 20),
+                        onPressed: () => _showRejectDialog(supplier.uid, adminVM),
+                        tooltip: 'Reject',
+                      ),
+                    ],
+                    if (status == 'active')
+                      IconButton(
+                        icon: const Icon(Icons.block_rounded, color: AdminColors.red, size: 20),
+                        onPressed: () => adminVM.suspendSupplier(supplier.uid),
+                        tooltip: 'Suspend',
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showSupplierDetails(UserModel supplier) {
+    showDialog(
+      context: context,
+      builder: (context) => FutureBuilder<DocumentSnapshot>(
+        future: _db.collection('suppliers').doc(supplier.uid).get(),
+        builder: (context, profileSnap) {
+          SupplierModel? profile;
+          if (profileSnap.hasData && profileSnap.data!.exists) {
+            profile = SupplierModel.fromMap(profileSnap.data!.data() as Map<String, dynamic>);
+          }
+          final double screenWidth = MediaQuery.of(context).size.width;
+
+          return Dialog(
+            backgroundColor: Colors.white,
+            insetPadding: const EdgeInsets.all(16),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: Container(
+              width: screenWidth > 850 ? 800 : screenWidth - 32,
+              padding: EdgeInsets.all(screenWidth < 600 ? 16 : 32),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Supplier Entity Verification', style: AdminTheme.titleStyle(size: screenWidth < 600 ? 18 : 22)),
+                              const SizedBox(height: 4),
+                              Text('Evaluating marketplace compatibility and business status.', style: AdminTheme.mutedStyle(size: screenWidth < 600 ? 11 : 13)),
+                            ],
+                          ),
+                        ),
+                        IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close_rounded)),
+                      ],
+                    ),
+                    const SizedBox(height: 32),
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        if (constraints.maxWidth > 650) {
+                          return Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                flex: 1,
+                                child: Column(
+                                  children: [
+                                    AdminApprovalSection(
+                                      title: 'Trade Information',
+                                      children: [
+                                        AdminDetailRow(label: 'Trading Name', value: profile?.name ?? supplier.name),
+                                        AdminDetailRow(label: 'Legal Entity', value: profile?.businessType ?? 'Individual'),
+                                        AdminDetailRow(label: 'Industry Experience', value: '${profile?.yearsInBusiness ?? 0} Years'),
+                                        AdminDetailRow(label: 'Tax / NTN', value: profile?.businessRegistrationNumber ?? 'N/A'),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 20),
+                                    AdminApprovalSection(
+                                      title: 'Product Catalog',
+                                      children: [
+                                        AdminChipList(items: profile?.declaredCategories ?? const []),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 24),
+                              Expanded(
+                                flex: 1,
+                                child: Column(
+                                  children: [
+                                    AdminApprovalSection(
+                                      title: 'Performance Metrics',
+                                      children: [
+                                        SupplierPerformanceScorecard(
+                                          supplierId: supplier.uid,
+                                          averageRating: supplier.rating ?? 0.0,
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 20),
+                                    AdminApprovalSection(
+                                      title: 'Identity Documents',
+                                      children: [
+                                        const SizedBox(height: 8),
+                                        AdminDocumentThumbnailRow(
+                                          documents: [
+                                            (label: 'IDENTITY FRONT', url: profile?.cnicFrontUrl),
+                                            (label: 'IDENTITY BACK', url: profile?.cnicBackUrl),
+                                            if (profile?.shopPhotoUrl != null) (label: 'SHOP PHOTO', url: profile?.shopPhotoUrl),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          );
+                        } else {
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              AdminApprovalSection(
+                                title: 'Trade Information',
+                                children: [
+                                  AdminDetailRow(label: 'Trading Name', value: profile?.name ?? supplier.name),
+                                  AdminDetailRow(label: 'Legal Entity', value: profile?.businessType ?? 'Individual'),
+                                  AdminDetailRow(label: 'Industry Experience', value: '${profile?.yearsInBusiness ?? 0} Years'),
+                                  AdminDetailRow(label: 'Tax / NTN', value: profile?.businessRegistrationNumber ?? 'N/A'),
+                                ],
+                              ),
+                              const SizedBox(height: 20),
+                              AdminApprovalSection(
+                                title: 'Product Catalog',
+                                children: [
+                                  AdminChipList(items: profile?.declaredCategories ?? const []),
+                                ],
+                              ),
+                              const SizedBox(height: 20),
+                              AdminApprovalSection(
+                                title: 'Performance Metrics',
+                                children: [
+                                  SupplierPerformanceScorecard(
+                                    supplierId: supplier.uid,
+                                    averageRating: supplier.rating ?? 0.0,
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 20),
+                              AdminApprovalSection(
+                                title: 'Identity Documents',
+                                children: [
+                                  const SizedBox(height: 8),
+                                  AdminDocumentThumbnailRow(
+                                    documents: [
+                                      (label: 'IDENTITY FRONT', url: profile?.cnicFrontUrl),
+                                      (label: 'IDENTITY BACK', url: profile?.cnicBackUrl),
+                                      if (profile?.shopPhotoUrl != null) (label: 'SHOP PHOTO', url: profile?.shopPhotoUrl),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ],
+                          );
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 32),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('CLOSE'),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ApprovalActions(
+                            onApprove: () {
+                              Provider.of<AdminViewModel>(context, listen: false).approveSupplier(supplier.uid);
+                              Navigator.pop(context);
+                            },
+                            onReject: (reason) {
+                              Provider.of<AdminViewModel>(context, listen: false).rejectSupplier(supplier.uid, reason);
+                              Navigator.pop(context);
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  IconData _emptyIcon(String status) {
+    switch(status) {
+      case 'pending': return Icons.assignment_ind_outlined;
+      case 'active': return Icons.store_outlined;
+      case 'suspended': return Icons.block_outlined;
+      default: return Icons.no_accounts_outlined;
+    }
+  }
+
+  void _showRejectDialog(String uid, AdminViewModel adminVM) {
     final reasonController = TextEditingController();
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Row(
-          children: [
-            const Icon(Icons.cancel_outlined, color: AdminColors.red),
-            const SizedBox(width: 10),
-            const Text('Reject Application'),
-          ],
-        ),
+        title: const Text('Decline Supplier Access'),
         content: TextField(
           controller: reasonController,
-          decoration: AdminTheme.inputDecoration(
-            labelText: 'Reason for rejection',
-            hintText: 'Shown to the applicant',
-          ),
           maxLines: 3,
+          decoration: AdminTheme.inputDecoration(
+            labelText: 'Reason for Denial',
+            hintText: 'This will be communicated to the partner...',
+          ),
         ),
         actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('CANCEL')),
-          TextButton(
-            onPressed: () async {
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('CANCEL')),
+          ElevatedButton(
+            onPressed: () {
               final reason = reasonController.text.trim();
               if (reason.isEmpty) return;
-              await adminVM.rejectSupplier(uid, reason);
-              if (context.mounted) Navigator.pop(context);
+              adminVM.rejectSupplier(uid, reason);
+              Navigator.pop(context);
             },
-            child: Text(
-              'REJECT',
-              style: GoogleFonts.plusJakartaSans(
-                color: AdminColors.red,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
+            style: ElevatedButton.styleFrom(backgroundColor: AdminColors.red),
+            child: const Text('REJECT PARTNER'),
           ),
         ],
       ),

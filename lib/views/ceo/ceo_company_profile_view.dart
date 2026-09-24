@@ -104,12 +104,12 @@ class _CeoCompanyProfileViewState extends State<CeoCompanyProfileView> {
             onPressed: () => Navigator.pop(context, false),
             child: const Text('Cancel'),
           ),
-          FilledButton(
+          TextButton(
             onPressed: () => Navigator.pop(context, true),
-            style: FilledButton.styleFrom(
-              backgroundColor: FieldColors.statusDanger,
+            style: TextButton.styleFrom(
+              foregroundColor: FieldColors.statusDanger,
             ),
-            child: const Text('Log out'),
+            child: const Text('Log out', style: TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
       ),

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
@@ -118,9 +119,6 @@ class _RateBridgeAppState extends State<RateBridgeApp> {
   void initState() {
     super.initState();
 
-    // Imperative push/pop keep their own stack. Reflecting them into the
-    // browser URL makes GoRouter rebuild from that URL as a single page, so
-    // Back can no longer return to the previous screen.
     GoRouter.optionURLReflectsImperativeAPIs = false;
 
     _router = GoRouter(
@@ -175,6 +173,20 @@ class _RateBridgeAppState extends State<RateBridgeApp> {
         GoRoute(
           path: RouteNames.rejected,
           builder: (context, state) => const RejectedView(),
+        ),
+        GoRoute(
+          path: RouteNames.platformBlocked,
+          builder: (context, state) {
+            final role = Provider.of<AuthViewModel>(context, listen: false).role?.toLowerCase();
+            final isAdmin = role == 'admin' || role == 'administrator';
+            
+            return PlatformBlockedView(
+              title: isAdmin ? "Desktop Access Required" : "Mobile Access Only",
+              message: isAdmin 
+                ? "Administrative management tools are restricted to Web and Windows Desktop platforms for security and data integrity."
+                : "This account is optimized for our mobile platform to facilitate on-site operations. Please use the RateBridge Android application to continue.",
+            );
+          },
         ),
 
         GoRoute(
@@ -711,8 +723,7 @@ class _RateBridgeAppState extends State<RateBridgeApp> {
         ),
         GoRoute(
           path: RouteNames.adminDisputes,
-          builder:
-              (context, state) => AdminTheme.wrap(const AdminDisputeListView()),
+          builder: (context, state) => AdminTheme.wrap(const AdminDisputeListView()),
         ),
         GoRoute(
           path: RouteNames.adminAuditLogs,
@@ -746,10 +757,27 @@ class _RateBridgeAppState extends State<RateBridgeApp> {
             .replaceAll('_', '');
         final status = (authVM.user!.status ?? 'pending').toLowerCase();
 
+        // 1. Role + Platform Enforcement
+        final bool isWeb = kIsWeb;
+        final bool isWindows = !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
+        final bool isAndroid = !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+
+        bool platformBlocked = false;
+        if (role == 'admin' || role == 'administrator') {
+          if (!isWeb && !isWindows) platformBlocked = true;
+        } else if (role == 'ceo' || role == 'supplier' || role == 'fielduser') {
+          if (!isAndroid) platformBlocked = true;
+        }
+
+        if (platformBlocked) {
+          return path == RouteNames.platformBlocked ? null : RouteNames.platformBlocked;
+        }
+
         if (status == 'pending') {
           if (path != RouteNames.pendingApproval &&
               path != RouteNames.ceoPending &&
-              path != RouteNames.supplierPending) {
+              path != RouteNames.supplierPending &&
+              path != RouteNames.platformBlocked) {
             if (role == 'ceo') return RouteNames.ceoPending;
             if (role == 'supplier') return RouteNames.supplierPending;
             return RouteNames.pendingApproval;

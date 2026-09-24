@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
@@ -107,6 +108,34 @@ class _SplashViewState extends State<SplashView>
     final role = authVm.user?.role.toLowerCase().replaceAll(' ', '').replaceAll('_', '');
     final status = (authVm.user?.status ?? 'pending').toLowerCase();
 
+    // Platform detection
+    final bool isWeb = kIsWeb;
+    final bool isWindows = !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
+    final bool isAndroid = !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+
+    bool isAllowed = false;
+
+    // Role + Platform validation
+    if (role == 'admin' || role == 'administrator') {
+      if (isWeb || isWindows) {
+        isAllowed = true;
+      }
+    } else if (role == 'ceo' || role == 'supplier' || role == 'fielduser') {
+      if (isAndroid) {
+        isAllowed = true;
+      }
+    } else {
+      context.go(RouteNames.login);
+      return;
+    }
+
+    if (!isAllowed) {
+      context.go(RouteNames.platformBlocked);
+      return;
+    }
+
+    if (!mounted) return;
+
     switch (role) {
       case 'admin':
       case 'administrator':
@@ -165,146 +194,168 @@ class _SplashViewState extends State<SplashView>
     final textTheme = Theme.of(context).textTheme;
 
     return Scaffold(
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [AppColors.navy, AppColors.navyDark],
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          // Background Construction Image
+          Image.asset(
+            'assets/images/construction_bg.jpg',
+            fit: BoxFit.cover,
           ),
-        ),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            AnimatedBuilder(
-              animation: _controller,
-              builder: (context, _) {
-                return Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      FadeTransition(
-                        opacity: _logoFade,
-                        child: ScaleTransition(
-                          scale: _logoScale,
-                          child: Container(
-                            width: 160,
-                            height: 160,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: Colors.white,
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.white.withValues(alpha: 0.15),
-                                  blurRadius: 24,
-                                  spreadRadius: 4,
-                                ),
-                              ],
-                            ),
-                            child: const Icon(
-                              Icons.construction,
-                              color: AppColors.navy,
-                              size: 52,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      FadeTransition(
-                        opacity: _titleFade,
-                        child: SlideTransition(
-                          position: _titleSlide,
-                          child: Text(
-                            'RateBridge',
-                            style: textTheme.displayMedium?.copyWith(
-                              color: Colors.white,
-                              letterSpacing: 1.2,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      FadeTransition(
-                        opacity: _taglineFade,
-                        child: Text(
-                          'Smart Material Procurement',
-                          style: textTheme.bodyMedium?.copyWith(
-                            color: Colors.white.withValues(alpha: 0.7),
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 48,
-              child: FadeTransition(
-                opacity: _loaderFade,
+          AnimatedBuilder(
+            animation: _controller,
+            builder: (context, _) {
+              return Center(
                 child: Column(
-                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    SizedBox(
-                      width: 120,
-                      height: 2,
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(1),
-                        child: LinearProgressIndicator(
-                          color: AppColors.amber,
-                          backgroundColor: Colors.white.withValues(alpha: 0.2),
-                          minHeight: 2,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 24),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              'Pakistan\'s B2B Construction Platform',
-                              style: textTheme.labelSmall?.copyWith(
-                                fontStyle: FontStyle.italic,
-                                color: Colors.white.withValues(alpha: 0.5),
-                              ),
-                            ),
-                          ),
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Container(
-                                width: 6,
-                                height: 6,
-                                decoration: const BoxDecoration(
-                                  color: AppColors.amber,
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                'v1.0',
-                                style: textTheme.labelSmall?.copyWith(
-                                  color: Colors.white.withValues(alpha: 0.5),
-                                ),
+                    FadeTransition(
+                      opacity: _logoFade,
+                      child: ScaleTransition(
+                        scale: _logoScale,
+                        child: Container(
+                          width: 160,
+                          height: 160,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.white,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.white.withValues(alpha: 0.15),
+                                blurRadius: 24,
+                                spreadRadius: 4,
                               ),
                             ],
                           ),
-                        ],
+                          child: const Icon(
+                            Icons.construction,
+                            color: AppColors.navy,
+                            size: 52,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    FadeTransition(
+                      opacity: _titleFade,
+                      child: SlideTransition(
+                        position: _titleSlide,
+                        child: Text(
+                          'RateBridge',
+                          style: textTheme.displayMedium?.copyWith(
+                            color: Colors.white,
+                            letterSpacing: 1.2,
+                            shadows: [
+                              Shadow(
+                                color: Colors.black.withValues(alpha: 0.5),
+                                offset: const Offset(0, 2),
+                                blurRadius: 4,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    FadeTransition(
+                      opacity: _taglineFade,
+                      child: Text(
+                        'Smart Material Procurement',
+                        style: textTheme.bodyMedium?.copyWith(
+                          color: Colors.white,
+                          letterSpacing: 0.5,
+                          shadows: [
+                            Shadow(
+                              color: Colors.black.withValues(alpha: 0.5),
+                              offset: const Offset(0, 1),
+                              blurRadius: 2,
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ],
                 ),
+              );
+            },
+          ),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 48,
+            child: FadeTransition(
+              opacity: _loaderFade,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    width: 120,
+                    height: 2,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(1),
+                      child: LinearProgressIndicator(
+                        color: AppColors.amber,
+                        backgroundColor: Colors.white.withValues(alpha: 0.2),
+                        minHeight: 2,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Pakistan\'s B2B Construction Platform',
+                            style: textTheme.labelSmall?.copyWith(
+                              fontStyle: FontStyle.italic,
+                              color: Colors.white,
+                              shadows: [
+                                Shadow(
+                                  color: Colors.black.withValues(alpha: 0.5),
+                                  offset: const Offset(0, 1),
+                                  blurRadius: 2,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 6,
+                              height: 6,
+                              decoration: const BoxDecoration(
+                                color: AppColors.amber,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              'v1.0',
+                              style: textTheme.labelSmall?.copyWith(
+                                color: Colors.white,
+                                shadows: [
+                                  Shadow(
+                                    color: Colors.black.withValues(alpha: 0.5),
+                                    offset: const Offset(0, 1),
+                                    blurRadius: 2,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

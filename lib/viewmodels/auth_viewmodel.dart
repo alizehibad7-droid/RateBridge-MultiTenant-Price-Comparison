@@ -823,6 +823,7 @@ class AuthViewModel extends ChangeNotifier {
       _cancelUserSubscription();
       await _userRepo.logout();
       _user = null;
+      _errorMessage = null; // Clear error message on logout
       _status = AuthStatus.unauthenticated;
       isRegistered = false;
       pendingInviteCompanyId = null;
@@ -849,6 +850,14 @@ class AuthViewModel extends ChangeNotifier {
       _errorMessage = e.toString();
       notifyListeners();
     }
+  }
+
+  void setErrorMessage(String? message) {
+    _errorMessage = message;
+    if (message != null) {
+      _status = AuthStatus.error;
+    }
+    notifyListeners();
   }
 
   void clearError() {

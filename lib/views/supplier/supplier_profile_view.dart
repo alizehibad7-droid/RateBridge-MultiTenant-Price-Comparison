@@ -17,7 +17,6 @@ import '../../viewmodels/auth_viewmodel.dart';
 import '../../viewmodels/supplier_viewmodel.dart';
 import '../../widgets/app_network_image.dart';
 import '../../widgets/supplier_nav_bar.dart';
-import 'supplier_change_password_sheet.dart';
 import 'supplier_notification_prefs_sheet.dart';
 
 const _businessTypes = [
@@ -215,16 +214,6 @@ class _SupplierProfileViewState extends State<SupplierProfileView> {
     await showSupplierNotificationPrefsSheet(context);
   }
 
-  Future<void> _openChangePassword(String email) async {
-    if (email.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No email found on this account')),
-      );
-      return;
-    }
-    await showSupplierChangePasswordSheet(context, email: email);
-  }
-
   Future<void> _confirmSignOut(AuthViewModel authVM) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -238,9 +227,10 @@ class _SupplierProfileViewState extends State<SupplierProfileView> {
             onPressed: () => Navigator.pop(context, false),
             child: const Text('Cancel'),
           ),
-          FilledButton(
+          TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Sign Out'),
+            style: TextButton.styleFrom(foregroundColor: FieldColors.statusDanger),
+            child: const Text('Sign Out', style: TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -373,9 +363,6 @@ class _SupplierProfileViewState extends State<SupplierProfileView> {
                 child: _AccountSettingsCard(
                   email: profile?.email ?? authVM.user?.email ?? '',
                   onNotifications: _openNotificationPrefs,
-                  onChangePassword: () => _openChangePassword(
-                    profile?.email ?? authVM.user?.email ?? '',
-                  ),
                   onTerms: _showTermsDialog,
                   onRatings: () => context.push(RouteNames.supplierRatings),
                   onDisputes: () => context.push(RouteNames.supplierMyDisputes),
@@ -995,7 +982,6 @@ class _InfoRow extends StatelessWidget {
 class _AccountSettingsCard extends StatelessWidget {
   final String email;
   final VoidCallback onNotifications;
-  final VoidCallback onChangePassword;
   final VoidCallback onTerms;
   final VoidCallback onRatings;
   final VoidCallback onDisputes;
@@ -1006,7 +992,6 @@ class _AccountSettingsCard extends StatelessWidget {
   const _AccountSettingsCard({
     required this.email,
     required this.onNotifications,
-    required this.onChangePassword,
     required this.onTerms,
     required this.onRatings,
     required this.onDisputes,
@@ -1035,11 +1020,6 @@ class _AccountSettingsCard extends StatelessWidget {
             icon: Icons.notifications_outlined,
             title: 'Notification Preferences',
             onTap: onNotifications,
-          ),
-          _SettingsRow(
-            icon: Icons.lock_outline,
-            title: 'Change Password',
-            onTap: onChangePassword,
           ),
           _SettingsRow(
             icon: Icons.description_outlined,

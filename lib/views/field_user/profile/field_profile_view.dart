@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../../constants/route_names.dart';
@@ -21,7 +22,6 @@ import '../../../viewmodels/field_user/field_orders_viewmodel.dart';
 import '../../../viewmodels/field_user/field_session_viewmodel.dart';
 import '../shell/field_shell_view.dart';
 import '../widgets/field_async_states.dart';
-import 'field_change_password_sheet.dart';
 
 class FieldProfileView extends StatefulWidget {
   const FieldProfileView({super.key});
@@ -174,16 +174,6 @@ class _FieldProfileViewState extends State<FieldProfileView> {
     }
   }
 
-  Future<void> _openChangePassword(String email) async {
-    if (email.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No email found on this account')),
-      );
-      return;
-    }
-    await showFieldChangePasswordSheet(context, email: email);
-  }
-
   void _showAboutDialog() {
     showDialog<void>(
       context: context,
@@ -249,7 +239,7 @@ class _FieldProfileViewState extends State<FieldProfileView> {
             onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Cancel'),
           ),
-          FilledButton(
+          TextButton(
             onPressed: () async {
               Navigator.pop(dialogContext);
               await context.read<AuthViewModel>().signOut();
@@ -257,10 +247,10 @@ class _FieldProfileViewState extends State<FieldProfileView> {
                 context.go(RouteNames.login);
               }
             },
-            style: FilledButton.styleFrom(
-              backgroundColor: FieldColors.statusDanger,
+            style: TextButton.styleFrom(
+              foregroundColor: FieldColors.statusDanger,
             ),
-            child: const Text('Sign out'),
+            child: const Text('Sign out', style: TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -291,6 +281,20 @@ class _FieldProfileViewState extends State<FieldProfileView> {
         builder: (_) => _FieldMyRatingsScreen(userId: uid),
       ),
     );
+  }
+
+  String _formatLastLogin(DateTime? lastLogin) {
+    if (lastLogin == null) return 'Never';
+    final now = DateTime.now();
+    final difference = now.difference(lastLogin);
+
+    if (difference.inDays == 0) {
+      return 'Today, ${DateFormat('h:mm a').format(lastLogin)}';
+    } else if (difference.inDays == 1) {
+      return 'Yesterday, ${DateFormat('h:mm a').format(lastLogin)}';
+    } else {
+      return DateFormat('MMM d, h:mm a').format(lastLogin);
+    }
   }
 
   @override
@@ -366,6 +370,7 @@ class _FieldProfileViewState extends State<FieldProfileView> {
                             phoneController: _phoneController,
                             emailController: _emailController,
                             companyName: session.companyName,
+                            lastLogin: _formatLastLogin(DateTime.now()),
                             saveError: _saveError,
                             saveSuccess: _saveSuccess,
                             isSaving: session.isLoading,
@@ -377,10 +382,10 @@ class _FieldProfileViewState extends State<FieldProfileView> {
                           _MyAccountCard(
                             onOrders: () => _openOrdersSubTab(0),
                             onMessages: _openMessagesTab,
+                            onNotifications: () => context.push(RouteNames.fieldNotifications),
                             onRatings: _openMyRatings,
                             onDisputes: () =>
                                 context.push(RouteNames.fieldMyDisputes),
-                            onChangePassword: () => _openChangePassword(user.email),
                             onAbout: _showAboutDialog,
                           ),
                           const SizedBox(height: 12),
@@ -718,6 +723,7 @@ class _PersonalDetailsCard extends StatelessWidget {
   final TextEditingController phoneController;
   final TextEditingController emailController;
   final String companyName;
+  final String lastLogin;
   final String? saveError;
   final String? saveSuccess;
   final bool isSaving;
@@ -731,6 +737,7 @@ class _PersonalDetailsCard extends StatelessWidget {
     required this.phoneController,
     required this.emailController,
     required this.companyName,
+    required this.lastLogin,
     this.saveError,
     this.saveSuccess,
     required this.isSaving,
@@ -789,6 +796,11 @@ class _PersonalDetailsCard extends StatelessWidget {
               icon: Icons.business_outlined,
               label: 'Company',
               value: companyName,
+            ),
+            _DetailRow(
+              icon: Icons.login_rounded,
+              label: 'Last Login',
+              value: lastLogin,
             ),
           ] else ...[
             _EditableField(
@@ -981,17 +993,17 @@ class _ReadOnlyField extends StatelessWidget {
 class _MyAccountCard extends StatelessWidget {
   final VoidCallback onOrders;
   final VoidCallback onMessages;
+  final VoidCallback onNotifications;
   final VoidCallback onRatings;
   final VoidCallback onDisputes;
-  final VoidCallback onChangePassword;
   final VoidCallback onAbout;
 
   const _MyAccountCard({
     required this.onOrders,
     required this.onMessages,
+    required this.onNotifications,
     required this.onRatings,
     required this.onDisputes,
-    required this.onChangePassword,
     required this.onAbout,
   });
 
@@ -1023,6 +1035,11 @@ class _MyAccountCard extends StatelessWidget {
             onTap: onMessages,
           ),
           _AccountSettingsRow(
+            emoji: '🔔',
+            title: 'Notification',
+            onTap: onNotifications,
+          ),
+          _AccountSettingsRow(
             emoji: '⭐',
             title: 'My Ratings',
             onTap: onRatings,
@@ -1031,11 +1048,6 @@ class _MyAccountCard extends StatelessWidget {
             emoji: '⚖️',
             title: 'My Disputes',
             onTap: onDisputes,
-          ),
-          _AccountSettingsRow(
-            emoji: '🔒',
-            title: 'Change Password',
-            onTap: onChangePassword,
           ),
           _AccountSettingsRow(
             emoji: 'ℹ️',

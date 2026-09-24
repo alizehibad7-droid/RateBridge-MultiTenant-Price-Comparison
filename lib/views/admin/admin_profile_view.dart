@@ -1,8 +1,11 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 
 import '../../constants/route_names.dart';
 import '../../repositories/user_repository.dart';
@@ -12,7 +15,7 @@ import '../../utils/app_navigation.dart';
 import '../../utils/chat_image_utils.dart';
 import '../../viewmodels/auth_viewmodel.dart';
 import '../../widgets/profile_layout.dart';
-import 'admin_change_password_sheet.dart';
+import '../../widgets/admin/admin_widgets.dart';
 
 class AdminProfileView extends StatefulWidget {
   const AdminProfileView({super.key});
@@ -23,6 +26,10 @@ class AdminProfileView extends StatefulWidget {
 
 class _AdminProfileViewState extends State<AdminProfileView> {
   bool _isUploadingImage = false;
+
+  bool _checkIsDesktop(BuildContext context) {
+    return MediaQuery.of(context).size.width >= 1024;
+  }
 
   String _initials(String? name) {
     final trimmed = name?.trim() ?? '';
@@ -87,16 +94,6 @@ class _AdminProfileViewState extends State<AdminProfileView> {
     }
   }
 
-  Future<void> _openChangePassword(String email) async {
-    if (email.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No email found on this account')),
-      );
-      return;
-    }
-    await showAdminChangePasswordSheet(context, email: email);
-  }
-
   void _showAboutDialog() {
     showDialog<void>(
       context: context,
@@ -131,7 +128,7 @@ class _AdminProfileViewState extends State<AdminProfileView> {
             onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Cancel'),
           ),
-          FilledButton(
+          TextButton(
             onPressed: () async {
               Navigator.pop(dialogContext);
               await context.read<AuthViewModel>().signOut();
@@ -139,8 +136,7 @@ class _AdminProfileViewState extends State<AdminProfileView> {
                 context.go(RouteNames.login);
               }
             },
-            style: FilledButton.styleFrom(backgroundColor: AdminColors.red),
-            child: const Text('Sign out'),
+            child: const Text('Sign out', style: TextStyle(color: AdminColors.red, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -149,6 +145,8 @@ class _AdminProfileViewState extends State<AdminProfileView> {
 
   @override
   Widget build(BuildContext context) {
+    if (_checkIsDesktop(context)) return _buildDesktopLayout(context);
+    
     final user = context.watch<AuthViewModel>().user;
     final topPadding = MediaQuery.paddingOf(context).top;
     final status = (user?.status ?? 'active');
@@ -163,7 +161,6 @@ class _AdminProfileViewState extends State<AdminProfileView> {
           elevation: 0,
           scrolledUnderElevation: 0,
           automaticallyImplyLeading: false,
-          leading: AppNavigation.leading(context, color: Colors.white),
           systemOverlayStyle: SystemUiOverlayStyle.light,
           title: Text(
             'My Profile',
@@ -206,14 +203,17 @@ class _AdminProfileViewState extends State<AdminProfileView> {
                         label: 'Status',
                         value: status.toUpperCase(),
                       ),
+                      ProfileDetailRow(
+                        icon: Icons.login_rounded,
+                        label: 'Last Login',
+                        value: DateFormat('MMM d, h:mm a').format(DateTime.now()),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 12),
                   _AccountSettingsCard(
                     onNotifications: () =>
                         context.push(RouteNames.adminNotifications),
-                    onChangePassword: () =>
-                        _openChangePassword(user?.email ?? ''),
                     onCategories: () =>
                         context.push(RouteNames.adminCategories),
                     onAbout: _showAboutDialog,
@@ -231,17 +231,254 @@ class _AdminProfileViewState extends State<AdminProfileView> {
       ),
     );
   }
+
+  Widget _buildDesktopLayout(BuildContext context) {
+    final user = context.watch<AuthViewModel>().user;
+    final status = (user?.status ?? 'active');
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Settings & Profile', style: AdminTheme.titleStyle(size: 28)),
+          const SizedBox(height: 8),
+          Text('Manage your account preferences and platform configuration.', style: AdminTheme.mutedStyle(size: 16)),
+          const SizedBox(height: 32),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Left column: Profile Summary
+              Expanded(
+                flex: 1,
+                child: Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: AdminTheme.cardDecoration(),
+                  child: Column(
+                    children: [
+                      Stack(
+                        children: [
+                          Container(
+                            width: 120,
+                            height: 120,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: AdminColors.amber.withValues(alpha: 0.1),
+                              border: Border.all(color: Colors.white, width: 4),
+                              boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10)],
+                            ),
+                            child: ClipOval(
+                              child: user?.profileImageUrl != null
+                                  ? Image.network(user!.profileImageUrl!, fit: BoxFit.cover)
+                                  : Center(
+                                      child: Text(
+                                        _initials(user?.name),
+                                        style: GoogleFonts.plusJakartaSans(fontSize: 32, fontWeight: FontWeight.w800, color: AdminColors.navy),
+                                      ),
+                                    ),
+                            ),
+                          ),
+                          Positioned(
+                            bottom: 0,
+                            right: 0,
+                            child: GestureDetector(
+                              onTap: _pickProfileImage,
+                              child: Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: const BoxDecoration(color: AdminColors.amber, shape: BoxShape.circle),
+                                child: const Icon(Icons.camera_alt_rounded, size: 16, color: Colors.white),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      Text(user?.name ?? 'Admin', style: AdminTheme.titleStyle(size: 20)),
+                      Text(user?.role ?? 'Administrator', style: AdminTheme.mutedStyle()),
+                      const SizedBox(height: 16),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: AdminColors.green.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          status.toUpperCase(),
+                          style: GoogleFonts.plusJakartaSans(fontSize: 10, fontWeight: FontWeight.w800, color: AdminColors.green),
+                        ),
+                      ),
+                      const Divider(height: 48),
+                      _ProfileInfoItem(label: 'Email Address', value: user?.email ?? 'N/A', icon: Icons.email_outlined),
+                      const SizedBox(height: 16),
+                      _ProfileInfoItem(label: 'Last Login', value: DateFormat('MMM d, h:mm a').format(DateTime.now()), icon: Icons.login_rounded),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 32),
+              // Right column: Actions and Settings
+              Expanded(
+                flex: 2,
+                child: Column(
+                  children: [
+                    _DesktopSettingsSection(
+                      title: 'Account Settings',
+                      children: [
+                        _DesktopSettingsTile(
+                          icon: Icons.notifications_none_rounded,
+                          title: 'Notifications',
+                          subtitle: 'Click and see notifications',
+                          onTap: () => context.push(RouteNames.adminNotifications),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    _DesktopSettingsSection(
+                      title: 'Platform Management',
+                      children: [
+                        _DesktopSettingsTile(
+                          icon: Icons.grid_view_rounded,
+                          title: 'Material Taxonomy',
+                          subtitle: 'Manage construction material categories, units, and brands.',
+                          onTap: () => context.push(RouteNames.adminCategories),
+                        ),
+                        _DesktopSettingsTile(
+                          icon: Icons.info_outline_rounded,
+                          title: 'About RateBridge',
+                          subtitle: 'View system version, legal information, and platform credits.',
+                          onTap: _showAboutDialog,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    _DesktopSettingsSection(
+                      title: 'Session',
+                      children: [
+                        _DesktopSettingsTile(
+                          icon: Icons.logout_rounded,
+                          title: 'Sign Out',
+                          subtitle: 'Securely end your current administrative session.',
+                          onTap: _confirmSignOut,
+                          destructive: true,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProfileInfoItem extends StatelessWidget {
+  final String label;
+  final String value;
+  final IconData icon;
+
+  const _ProfileInfoItem({required this.label, required this.value, required this.icon});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: AdminColors.textGrey),
+        const SizedBox(width: 12),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label, style: AdminTheme.mutedStyle(size: 11).copyWith(fontWeight: FontWeight.bold)),
+            Text(value, style: AdminTheme.bodyStyle()),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _DesktopSettingsSection extends StatelessWidget {
+  final String title;
+  final List<Widget> children;
+
+  const _DesktopSettingsSection({required this.title, required this.children});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 4, bottom: 12),
+          child: Text(title.toUpperCase(), style: AdminTheme.sectionHeaderStyle()),
+        ),
+        AdminCard(
+          padding: EdgeInsets.zero,
+          child: Column(children: children),
+        ),
+      ],
+    );
+  }
+}
+
+class _DesktopSettingsTile extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+  final bool destructive;
+
+  const _DesktopSettingsTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+    this.destructive = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = destructive ? AdminColors.red : AdminColors.navy;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(color: color.withValues(alpha: 0.05), borderRadius: BorderRadius.circular(10)),
+              child: Icon(icon, color: color, size: 24),
+            ),
+            const SizedBox(width: 20),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: AdminTheme.titleStyle(size: 16).copyWith(color: color)),
+                  const SizedBox(height: 2),
+                  Text(subtitle, style: AdminTheme.mutedStyle()),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: AdminColors.textGrey),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _AccountSettingsCard extends StatelessWidget {
   final VoidCallback onNotifications;
-  final VoidCallback onChangePassword;
   final VoidCallback onCategories;
   final VoidCallback onAbout;
 
   const _AccountSettingsCard({
     required this.onNotifications,
-    required this.onChangePassword,
     required this.onCategories,
     required this.onAbout,
   });
@@ -263,11 +500,6 @@ class _AccountSettingsCard extends StatelessWidget {
             icon: Icons.notifications_outlined,
             title: 'Notifications',
             onTap: onNotifications,
-          ),
-          _SettingsRow(
-            icon: Icons.lock_outline,
-            title: 'Change Password',
-            onTap: onChangePassword,
           ),
           _SettingsRow(
             icon: Icons.grid_view_rounded,
