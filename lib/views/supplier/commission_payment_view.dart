@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../models/payment_proof_model.dart';
 import '../../theme/supplier_theme.dart';
 import '../../utils/app_theme.dart';
 import '../../utils/currency_formatter.dart';
+import '../../repositories/transaction_repository.dart';
+import '../../viewmodels/auth_viewmodel.dart';
 import '../../viewmodels/supplier_viewmodel.dart';
-import '../payment/payment_method_view.dart';
+import '../../services/stripe_service.dart';
 
 class CommissionPaymentView extends StatefulWidget {
   const CommissionPaymentView({super.key});
@@ -25,7 +26,7 @@ class _CommissionPaymentViewState extends State<CommissionPaymentView> {
     super.dispose();
   }
 
-  void _proceedToPayment(double totalOwed) {
+  void _proceedToPayment(double totalOwed, List<String> txIds) async {
     final input = double.tryParse(_amountController.text.trim());
 
     if (input == null || input <= 0) {
@@ -43,15 +44,35 @@ class _CommissionPaymentViewState extends State<CommissionPaymentView> {
 
     setState(() => _error = null);
 
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => PaymentMethodView(
-          amount: input,
-          type: PaymentType.commission,
-        ),
-      ),
-    );
+    try {
+      final stripe = context.read<StripeService>();
+      final txRepo = context.read<TransactionRepository>();
+      final authVM = context.read<AuthViewModel>();
+      final supplierUid = authVM.user?.uid ?? '';
+
+      await stripe.payWithStripe(
+        amountPKR: input.round(),
+        type: 'commission',
+        transactionIds: txIds,
+      );
+
+      if (supplierUid.isNotEmpty && txIds.isNotEmpty) {
+        await txRepo.settleSupplierCommissions(supplierUid, txIds);
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Payment successful! Commissions settled.')),
+        );
+        if (Navigator.canPop(context)) {
+          Navigator.pop(context);
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _error = e.toString());
+      }
+    }
   }
 
   @override
@@ -62,6 +83,7 @@ class _CommissionPaymentViewState extends State<CommissionPaymentView> {
       body: Consumer<SupplierViewModel>(
         builder: (context, viewModel, child) {
           final owed = viewModel.commissionOwed;
+          final txIds = viewModel.unsettledTransactionIds;
 
           return ListView(
             padding: const EdgeInsets.fromLTRB(
@@ -152,7 +174,7 @@ class _CommissionPaymentViewState extends State<CommissionPaymentView> {
               ),
               const SizedBox(height: FieldSpacing.xl),
               FilledButton(
-                onPressed: () => _proceedToPayment(owed),
+                onPressed: () => _proceedToPayment(owed, txIds),
                 child: const Text('Continue to payment'),
               ),
             ],

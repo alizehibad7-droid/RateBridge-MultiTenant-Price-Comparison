@@ -15,7 +15,6 @@ function channelForType(type) {
   if (normalized.includes('order') || normalized.includes('delivery')) {
     return 'orders_channel';
   }
-  if (normalized.includes('appeal')) return 'system_channel';
   return 'system_channel';
 }
 
@@ -174,40 +173,7 @@ exports.onUserRegistration = functions.firestore
     return null;
   });
 
-exports.onPaymentProofCreated = functions.firestore
-  .document('payment_proofs/{proofId}')
-  .onCreate(async (snap, context) => {
-    const proof = snap.data();
-    const adminUids = await getAdminUids();
-    const typeLabel = proof.type === 'subscription' ? 'Subscription' : 'Commission';
-    
-    for (const adminUid of adminUids) {
-      await writeNotificationRecord(adminUid, {
-        type: 'payment',
-        title: 'New Payment Proof',
-        body: `${proof.payerName} submitted proof for ${typeLabel}.`,
-        data: { proofId: snap.id, payerId: proof.payerId, type: proof.type }
-      });
-    }
-    return null;
-  });
 
-exports.onAppealSubmitted = functions.firestore
-  .document('appeals/{appealId}')
-  .onCreate(async (snap, context) => {
-    const appeal = snap.data();
-    const adminUids = await getAdminUids();
-    
-    for (const adminUid of adminUids) {
-      await writeNotificationRecord(adminUid, {
-        type: 'appeal',
-        title: 'New Account Appeal',
-        body: `${appeal.name} (${appeal.role}) has submitted an appeal for reconsidering their account status.`,
-        data: { appealId: snap.id, uid: appeal.uid, role: appeal.role }
-      });
-    }
-    return null;
-  });
 
 exports.onDisputeCreated = functions.firestore
   .document('disputes/{disputeId}')

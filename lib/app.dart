@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
@@ -31,7 +30,6 @@ import 'views/auth/status_screens.dart';
 import 'theme/ceo_theme.dart';
 import 'views/ceo/ceo_dashboard_view.dart';
 import 'views/ceo/ceo_pending_view.dart';
-import 'views/ceo/ceo_appeal_view.dart';
 import 'views/ceo/ceo_invite_hub_view.dart';
 import 'views/ceo/ceo_supplier_marketplace_view.dart';
 import 'views/ceo/ceo_join_requests_view.dart';
@@ -103,7 +101,6 @@ import 'views/admin/admin_payment_queue_view.dart';
 import 'views/admin/admin_subscription_view.dart';
 import 'views/admin/admin_dispute_list_view.dart';
 import 'views/admin/admin_audit_log_view.dart';
-import 'views/admin/admin_appeals_view.dart';
 
 class RateBridgeApp extends StatefulWidget {
   const RateBridgeApp({super.key});
@@ -119,6 +116,9 @@ class _RateBridgeAppState extends State<RateBridgeApp> {
   void initState() {
     super.initState();
 
+    // Imperative push/pop keep their own stack. Reflecting them into the
+    // browser URL makes GoRouter rebuild from that URL as a single page, so
+    // Back can no longer return to the previous screen.
     GoRouter.optionURLReflectsImperativeAPIs = false;
 
     _router = GoRouter(
@@ -174,20 +174,6 @@ class _RateBridgeAppState extends State<RateBridgeApp> {
           path: RouteNames.rejected,
           builder: (context, state) => const RejectedView(),
         ),
-        GoRoute(
-          path: RouteNames.platformBlocked,
-          builder: (context, state) {
-            final role = Provider.of<AuthViewModel>(context, listen: false).role?.toLowerCase();
-            final isAdmin = role == 'admin' || role == 'administrator';
-            
-            return PlatformBlockedView(
-              title: isAdmin ? "Desktop Access Required" : "Mobile Access Only",
-              message: isAdmin 
-                ? "Administrative management tools are restricted to Web and Windows Desktop platforms for security and data integrity."
-                : "This account is optimized for our mobile platform to facilitate on-site operations. Please use the RateBridge Android application to continue.",
-            );
-          },
-        ),
 
         GoRoute(
           path: RouteNames.ceoDashboard,
@@ -196,10 +182,6 @@ class _RateBridgeAppState extends State<RateBridgeApp> {
         GoRoute(
           path: RouteNames.ceoPending,
           builder: (context, state) => CeoTheme.wrap(const CeoPendingView()),
-        ),
-        GoRoute(
-          path: RouteNames.ceoAppeal,
-          builder: (context, state) => CeoTheme.wrap(const CeoAppealView()),
         ),
         GoRoute(
           path: RouteNames.ceoInvite,
@@ -362,18 +344,7 @@ class _RateBridgeAppState extends State<RateBridgeApp> {
             );
             return fieldTransitionPage(
               key: state.pageKey,
-              child: FieldCompareView(
-                materialName: materialName,
-                category: RouteNames.compareExtraString(
-                  state.extra,
-                  'category',
-                ),
-                qualityGrade: RouteNames.compareExtraString(
-                  state.extra,
-                  'qualityGrade',
-                ),
-                unit: RouteNames.compareExtraString(state.extra, 'unit'),
-              ),
+              child: FieldCompareView(materialName: materialName),
             );
           },
         ),
@@ -594,15 +565,7 @@ class _RateBridgeAppState extends State<RateBridgeApp> {
           builder: (context, state) {
             final tab =
                 int.tryParse(state.uri.queryParameters['tab'] ?? '') ?? 0;
-            final orderId = state.uri.queryParameters['orderId'];
-            final companyId = state.uri.queryParameters['companyId'];
-            return SupplierTheme.wrap(
-              SupplierOrdersView(
-                initialTabIndex: tab,
-                initialOrderId: orderId,
-                initialCompanyId: companyId,
-              ),
-            );
+            return SupplierTheme.wrap(SupplierOrdersView(initialTabIndex: tab));
           },
         ),
         GoRoute(
@@ -723,16 +686,13 @@ class _RateBridgeAppState extends State<RateBridgeApp> {
         ),
         GoRoute(
           path: RouteNames.adminDisputes,
-          builder: (context, state) => AdminTheme.wrap(const AdminDisputeListView()),
+          builder:
+              (context, state) => AdminTheme.wrap(const AdminDisputeListView()),
         ),
         GoRoute(
           path: RouteNames.adminAuditLogs,
           builder:
               (context, state) => AdminTheme.wrap(const AdminAuditLogView()),
-        ),
-        GoRoute(
-          path: '/admin/appeals',
-          builder: (context, state) => AdminTheme.wrap(const AdminAppealsView()),
         ),
       ],
       redirect: (context, state) {
@@ -757,27 +717,10 @@ class _RateBridgeAppState extends State<RateBridgeApp> {
             .replaceAll('_', '');
         final status = (authVM.user!.status ?? 'pending').toLowerCase();
 
-        // 1. Role + Platform Enforcement
-        final bool isWeb = kIsWeb;
-        final bool isWindows = !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
-        final bool isAndroid = !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
-
-        bool platformBlocked = false;
-        if (role == 'admin' || role == 'administrator') {
-          if (!isWeb && !isWindows) platformBlocked = true;
-        } else if (role == 'ceo' || role == 'supplier' || role == 'fielduser') {
-          if (!isAndroid) platformBlocked = true;
-        }
-
-        if (platformBlocked) {
-          return path == RouteNames.platformBlocked ? null : RouteNames.platformBlocked;
-        }
-
         if (status == 'pending') {
           if (path != RouteNames.pendingApproval &&
               path != RouteNames.ceoPending &&
-              path != RouteNames.supplierPending &&
-              path != RouteNames.platformBlocked) {
+              path != RouteNames.supplierPending) {
             if (role == 'ceo') return RouteNames.ceoPending;
             if (role == 'supplier') return RouteNames.supplierPending;
             return RouteNames.pendingApproval;
@@ -793,8 +736,7 @@ class _RateBridgeAppState extends State<RateBridgeApp> {
           if (path != RouteNames.rejected &&
               path != RouteNames.ceoPending &&
               path != RouteNames.supplierPending &&
-              path != RouteNames.supplierAppeal &&
-              path != RouteNames.ceoAppeal) {
+              path != RouteNames.supplierAppeal) {
             if (role == 'ceo') return RouteNames.ceoPending;
             if (role == 'supplier') return RouteNames.supplierPending;
             return RouteNames.rejected;
@@ -854,18 +796,6 @@ class _RateBridgeAppState extends State<RateBridgeApp> {
       ],
       supportedLocales: const [Locale('en', '')],
       routerConfig: _router,
-      builder: (context, child) {
-        return GestureDetector(
-          onTap: () {
-            // Global focus manager to unfocus when tapping outside
-            final currentFocus = FocusScope.of(context);
-            if (!currentFocus.hasPrimaryFocus && currentFocus.focusedChild != null) {
-              FocusManager.instance.primaryFocus?.unfocus();
-            }
-          },
-          child: child,
-        );
-      },
     );
   }
 }

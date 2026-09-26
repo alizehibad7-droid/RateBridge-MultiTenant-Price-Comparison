@@ -99,13 +99,7 @@ class FieldCompareViewModel extends ChangeNotifier {
     return null;
   }
 
-  Future<void> loadComparison(
-    String companyId,
-    String materialName, {
-    String? category,
-    String? qualityGrade,
-    String? unit,
-  }) async {
+  Future<void> loadComparison(String companyId, String materialName) async {
     final trimmedName = materialName.trim();
     _isLoading = true;
     _errorMessage = null;
@@ -119,15 +113,11 @@ class FieldCompareViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final hasCategory = category != null && category.trim().isNotEmpty;
-      final listings = trimmedName.isEmpty && !hasCategory
+      final listings = trimmedName.isEmpty
           ? <MaterialListing>[]
           : await _materialRepo.getCompareListingsForMaterial(
               companyId,
-              trimmedName.isEmpty ? (category ?? '') : trimmedName,
-              category: category,
-              qualityGrade: qualityGrade,
-              unit: unit,
+              trimmedName,
             );
       _compareResults = _applyAnomalyAndBestValue(listings);
       _requestAiInsight();
@@ -257,96 +247,34 @@ Use the listing id values from the rows as keys. Cover BEST_VALUE and ANOMALY li
   }
 
   void _applyAiResponse(String text) {
-    _aiSummary = null;
-    _aiLines.clear();
-
     final parsed = _tryJsonObject(text);
-    final rawSummary = parsed?['summary']?.toString();
-    final summary = _cleanAiSummaryText(
-      (rawSummary != null && rawSummary.trim().isNotEmpty)
-          ? rawSummary
-          : _extractSummaryField(text),
-    );
-    if (summary == null) {
-      debugPrint('Compare AI: could not extract summary; hiding banner');
+    if (parsed == null) {
+      _aiSummary = text.trim();
       return;
     }
-    _aiSummary = summary;
-
-    final lines = parsed?['lines'];
+    final summary = parsed['summary']?.toString().trim();
+    _aiSummary = (summary != null && summary.isNotEmpty) ? summary : text.trim();
+    final lines = parsed['lines'];
     if (lines is Map) {
       lines.forEach((key, value) {
         final id = key.toString().trim();
-        final line = _cleanAiSummaryText(value.toString());
-        if (id.isNotEmpty && line != null) _aiLines[id] = line;
+        final line = value.toString().trim();
+        if (id.isNotEmpty && line.isNotEmpty) _aiLines[id] = line;
       });
     }
   }
 
-  /// Strips markdown fences / raw JSON syntax; returns null if unusable.
-  String? _cleanAiSummaryText(String? value) {
-    if (value == null) return null;
-    var text = value.trim();
-    if (text.isEmpty) return null;
-
-    text = _stripMarkdownFences(text);
-    if (text.isEmpty) return null;
-
-    // Reject anything that still looks like a JSON payload or fence.
-    if (text.startsWith('{') ||
-        text.startsWith('[') ||
-        text.contains('```') ||
-        RegExp(r'"summary"\s*:').hasMatch(text)) {
-      return null;
-    }
-
-    // Drop wrapping quotes the model sometimes leaves on the string value.
-    if ((text.startsWith('"') && text.endsWith('"')) ||
-        (text.startsWith("'") && text.endsWith("'"))) {
-      text = text.substring(1, text.length - 1).trim();
-    }
-    return text.isEmpty ? null : text;
-  }
-
-  String _stripMarkdownFences(String text) {
-    var trimmed = text.trim();
-    final fence = RegExp(
-      r'^```(?:json|JSON)?\s*\n?([\s\S]*?)\n?```\s*$',
-    );
-    final match = fence.firstMatch(trimmed);
-    if (match != null) {
-      return match.group(1)?.trim() ?? trimmed;
-    }
-    return trimmed
-        .replaceAll(RegExp(r'```(?:json|JSON)?'), '')
-        .replaceAll('```', '')
-        .trim();
-  }
-
-  /// Last-resort pull of the "summary" string when full JSON decode fails.
-  String? _extractSummaryField(String text) {
-    final cleaned = _stripMarkdownFences(text);
-    final match = RegExp(
-      r'"summary"\s*:\s*"((?:[^"\\]|\\.)*)"',
-    ).firstMatch(cleaned);
-    if (match == null) return null;
-    try {
-      return jsonDecode('"${match.group(1)}"') as String?;
-    } catch (_) {
-      return match.group(1)
-          ?.replaceAll(r'\"', '"')
-          .replaceAll(r'\n', ' ')
-          .trim();
-    }
-  }
-
   Map<String, dynamic>? _tryJsonObject(String text) {
-    final stripped = _stripMarkdownFences(text);
-    final start = stripped.indexOf('{');
-    final end = stripped.lastIndexOf('}');
+    var trimmed = text.trim();
+    if (trimmed.startsWith('```')) {
+      trimmed = trimmed.replaceAll(RegExp(r'^```(?:json)?', multiLine: true), '');
+      trimmed = trimmed.replaceAll('```', '').trim();
+    }
+    final start = trimmed.indexOf('{');
+    final end = trimmed.lastIndexOf('}');
     if (start < 0 || end <= start) return null;
     try {
-      final decoded = jsonDecode(stripped.substring(start, end + 1));
+      final decoded = jsonDecode(trimmed.substring(start, end + 1));
       if (decoded is Map<String, dynamic>) return decoded;
       if (decoded is Map) return Map<String, dynamic>.from(decoded);
       return null;

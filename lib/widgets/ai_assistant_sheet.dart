@@ -119,195 +119,190 @@ class _AiAssistantSheetState extends State<AiAssistantSheet> {
       expand: false,
       builder: (context, scrollController) {
         _listScrollController = scrollController;
-        final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-
         return Material(
           color: Colors.white,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
           clipBehavior: Clip.antiAlias,
-          child: Padding(
-            padding: EdgeInsets.only(bottom: bottomInset),
-            child: Column(
-              children: [
-                const SizedBox(height: 10),
-                Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: FieldColors.borderSubtle,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
+          child: Column(
+            children: [
+              const SizedBox(height: 10),
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: FieldColors.borderSubtle,
+                  borderRadius: BorderRadius.circular(2),
                 ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 14, 8, 10),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 36,
-                        height: 36,
-                        decoration: const BoxDecoration(
-                          color: FieldColors.primaryNavy,
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(Icons.auto_awesome,
-                            color: Colors.white, size: 18),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'RateBridge Assistant',
-                              style: FieldTypography.titleMedium.copyWith(
-                                fontWeight: FontWeight.w700,
-                                color: FieldColors.primaryNavy,
-                                fontSize: 15,
-                              ),
-                            ),
-                            Text(
-                              'Helping with: $screenLabel',
-                              style: FieldTypography.bodyMedium.copyWith(
-                                fontSize: 11,
-                                color: FieldColors.textSecondary,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close,
-                            color: FieldColors.textSecondary),
-                        onPressed: () => Navigator.pop(context),
-                      ),
-                    ],
-                  ),
-                ),
-                if (_messages.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: SizedBox(
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 14, 8, 10),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 36,
                       height: 36,
-                      child: ListView(
-                        scrollDirection: Axis.horizontal,
-                        children: suggestions
-                            .map((q) => Padding(
-                                  padding: const EdgeInsets.only(right: 8),
-                                  child: ActionChip(
-                                    label: Text(q,
-                                        style: const TextStyle(fontSize: 12)),
-                                    backgroundColor: FieldColors.accentAmber
-                                        .withValues(alpha: 0.12),
-                                    onPressed: () => _send(q),
-                                  ),
-                                ))
-                            .toList(),
+                      decoration: const BoxDecoration(
+                        color: FieldColors.primaryNavy,
+                        shape: BoxShape.circle,
                       ),
+                      child: const Icon(Icons.auto_awesome,
+                          color: Colors.white, size: 18),
                     ),
-                  ),
-                Expanded(
-                  child: ListView.builder(
-                    controller: scrollController,
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _messages.length + (_isResponding ? 1 : 0),
-                    itemBuilder: (context, index) {
-                      if (index == _messages.length && _isResponding) {
-                        return Align(
-                          alignment: Alignment.centerLeft,
-                          child: Container(
-                            margin: const EdgeInsets.only(bottom: 10),
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 14, vertical: 10),
-                            decoration: BoxDecoration(
-                              color: FieldColors.borderSubtle,
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                            child: const SizedBox(
-                              width: 30,
-                              child: Text('...'),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'RateBridge Assistant',
+                            style: FieldTypography.titleMedium.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: FieldColors.primaryNavy,
+                              fontSize: 15,
                             ),
                           ),
-                        );
-                      }
-                      final msg = _messages[index];
+                          Text(
+                            'Helping with: $screenLabel',
+                            style: FieldTypography.bodyMedium.copyWith(
+                              fontSize: 11,
+                              color: FieldColors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close,
+                          color: FieldColors.textSecondary),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+              ),
+              if (_messages.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: SizedBox(
+                    height: 36,
+                    child: ListView(
+                      scrollDirection: Axis.horizontal,
+                      children: suggestions
+                          .map((q) => Padding(
+                                padding: const EdgeInsets.only(right: 8),
+                                child: ActionChip(
+                                  label: Text(q,
+                                      style: const TextStyle(fontSize: 12)),
+                                  backgroundColor: FieldColors.accentAmber
+                                      .withValues(alpha: 0.12),
+                                  onPressed: () => _send(q),
+                                ),
+                              ))
+                          .toList(),
+                    ),
+                  ),
+                ),
+              Expanded(
+                child: ListView.builder(
+                  controller: scrollController,
+                  padding: const EdgeInsets.all(16),
+                  itemCount: _messages.length + (_isResponding ? 1 : 0),
+                  itemBuilder: (context, index) {
+                    if (index == _messages.length && _isResponding) {
                       return Align(
-                        alignment: msg.isUser
-                            ? Alignment.centerRight
-                            : Alignment.centerLeft,
+                        alignment: Alignment.centerLeft,
                         child: Container(
                           margin: const EdgeInsets.only(bottom: 10),
                           padding: const EdgeInsets.symmetric(
                               horizontal: 14, vertical: 10),
-                          constraints: BoxConstraints(
-                            maxWidth: MediaQuery.of(context).size.width * 0.75,
-                          ),
                           decoration: BoxDecoration(
-                            color: msg.isUser
-                                ? FieldColors.accentAmber
-                                : FieldColors.borderSubtle,
+                            color: FieldColors.borderSubtle,
                             borderRadius: BorderRadius.circular(14),
                           ),
-                          child: Text(
-                            msg.text,
-                            style: TextStyle(
-                              color: msg.isUser
-                                  ? Colors.white
-                                  : FieldColors.primaryNavy,
-                              fontSize: 13,
-                            ),
+                          child: const SizedBox(
+                            width: 30,
+                            child: Text('...'),
                           ),
                         ),
                       );
-                    },
-                  ),
-                ),
-                SafeArea(
-                  top: false,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _inputController,
-                            decoration: InputDecoration(
-                              hintText: 'Ask anything about RateBridge...',
-                              filled: true,
-                              fillColor: FieldColors.screenBackground,
-                              contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 14, vertical: 10),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(24),
-                                borderSide: BorderSide.none,
-                              ),
-                            ),
-                            onSubmitted: _send,
+                    }
+                    final msg = _messages[index];
+                    return Align(
+                      alignment: msg.isUser
+                          ? Alignment.centerRight
+                          : Alignment.centerLeft,
+                      child: Container(
+                        margin: const EdgeInsets.only(bottom: 10),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 10),
+                        constraints: BoxConstraints(
+                          maxWidth: MediaQuery.of(context).size.width * 0.75,
+                        ),
+                        decoration: BoxDecoration(
+                          color: msg.isUser
+                              ? FieldColors.accentAmber
+                              : FieldColors.borderSubtle,
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Text(
+                          msg.text,
+                          style: TextStyle(
+                            color: msg.isUser
+                                ? Colors.white
+                                : FieldColors.primaryNavy,
+                            fontSize: 13,
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        GestureDetector(
-                          onTap: _isResponding
-                              ? null
-                              : () => _send(_inputController.text),
-                          child: Container(
-                            width: 40,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              color: _isResponding
-                                  ? FieldColors.borderSubtle
-                                  : FieldColors.accentAmber,
-                              shape: BoxShape.circle,
+                      ),
+                    );
+                  },
+                ),
+              ),
+              SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _inputController,
+                          decoration: InputDecoration(
+                            hintText: 'Ask anything about RateBridge...',
+                            filled: true,
+                            fillColor: FieldColors.screenBackground,
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 10),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(24),
+                              borderSide: BorderSide.none,
                             ),
-                            child: const Icon(Icons.arrow_upward,
-                                color: Colors.white, size: 18),
                           ),
+                          onSubmitted: _send,
                         ),
-                      ],
-                    ),
+                      ),
+                      const SizedBox(width: 8),
+                      GestureDetector(
+                        onTap: _isResponding
+                            ? null
+                            : () => _send(_inputController.text),
+                        child: Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: _isResponding
+                                ? FieldColors.borderSubtle
+                                : FieldColors.accentAmber,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.arrow_upward,
+                              color: Colors.white, size: 18),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         );
       },

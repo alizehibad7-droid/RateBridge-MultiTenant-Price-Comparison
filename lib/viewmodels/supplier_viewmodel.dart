@@ -1,19 +1,15 @@
 // MVVM: ViewModel — business logic only
 import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
-import 'dart:developer' as developer;
 import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:image_picker/image_picker.dart';
 import '../models/rfq_model.dart';
 import '../models/rfq_bid_model.dart';
 import '../models/material_model.dart';
 import '../models/order_model.dart';
 import '../models/rating_model.dart';
 import '../models/transaction_model.dart';
-import '../models/payment_proof_model.dart';
 import '../constants/app_constants.dart';
 import '../constants/firestore_paths.dart';
 import '../models/company_model.dart';
@@ -41,7 +37,6 @@ class SupplierViewModel extends ChangeNotifier {
   final MaterialRepository _materialRepo;
   final OrderRepository _orderRepo;
   final TransactionRepository _transactionRepo;
-  // ignore: unused_field
   final StorageService _storageService;
   final UserRepository _userRepo;
   final CompanyRepository _companyRepo;
@@ -49,31 +44,20 @@ class SupplierViewModel extends ChangeNotifier {
   final NotificationService _notificationService;
   final CloudFunctionService _cloudFunctions;
   final FirebaseFirestore _db;
-  final Future<String?> Function({
-    required List<int> bytes,
-    required String folder,
-    String filename,
-  }) _uploadImageBytes;
 
   SupplierViewModel(
     this._materialRepo,
     this._orderRepo,
     this._transactionRepo,
     this._storageService,
-    PriceHistoryRepository _,
+    PriceHistoryRepository priceHistoryRepo,
     this._cloudFunctions,
     this._userRepo,
     this._companyRepo,
     this._partnershipRepo,
     this._notificationService, {
     FirebaseFirestore? firestore,
-    Future<String?> Function({
-      required List<int> bytes,
-      required String folder,
-      String filename,
-    })? uploadImageBytes,
-  })  : _db = firestore ?? FirebaseFirestore.instance,
-        _uploadImageBytes = uploadImageBytes ?? CloudinaryService.uploadImageBytes;
+  })  : _db = firestore ?? FirebaseFirestore.instance;
 
   static String monthKey([DateTime? date]) =>
       DateFormat('yyyy-MM').format(date ?? DateTime.now());
@@ -91,9 +75,6 @@ class SupplierViewModel extends ChangeNotifier {
   List<RatingModel> _ratings = [];
   List<TransactionModel> _transactions = [];
   List<TransactionModel> _allCommissions = [];
-  List<PaymentProofModel> _confirmedCommissionPayments = [];
-  List<PaymentProofModel> _pendingCommissionPayments = [];
-  List<InvitationModel> _invitations = [];
   
   List<CompanyModel> _companies = [];
   List<CompanyModel> _companyDirectory = [];
@@ -106,6 +87,7 @@ class SupplierViewModel extends ChangeNotifier {
   bool _partnershipHubDataLoaded = false;
   bool _commissionRestricted = false;
   String? _commissionRestrictionReason;
+  List<InvitationModel> _invitations = [];
   List<MonthlyEarning> _monthlyEarnings = [];
   UserModel? _profile;
   String _status = 'pending';
@@ -123,7 +105,6 @@ class SupplierViewModel extends ChangeNotifier {
   StreamSubscription? _materialsSubscription;
   StreamSubscription? _ordersSubscription;
   StreamSubscription? _commissionsSub;
-  StreamSubscription? _paymentsSub;
   StreamSubscription? _invitationsSubscription;
   StreamSubscription? _ratingsSubscription;
   StreamSubscription? _supplierRestrictionSub;
@@ -136,52 +117,19 @@ class SupplierViewModel extends ChangeNotifier {
   bool _earningsInitialized = false;
   bool _ratingsInitialized = false;
 
-  // --- Getters ---
-  String? get supplierUid => _supplierUid;
-  String? get selectedCompanyId => _selectedCompanyId;
-  String? get rejectionReason => _rejectionReason;
-  String? get error => _error;
-  String? get successMessage => _successMessage;
-  bool get isLoading => _isLoading;
-  bool get partnershipListsReady => _partnershipListsReady;
-  
-  // Public exposure for View files
-  List<MaterialModel> get materials => _materials;
-  List<OrderModel> get orders => _orders;
-  List<RatingModel> get ratings => _ratings;
-  List<TransactionModel> get transactions => _transactions;
-  List<CompanyModel> get companies => _companies;
-  List<CompanyModel> get companyDirectory => _companyDirectory;
-  List<InvitationModel> get invitations => _invitations;
-  bool get isDashboardLoading => _isDashboardLoading;
-  bool get companiesLoaded => _companiesLoaded;
-  bool get companiesLoadFailed => _companiesLoadFailed;
-  bool get appealSubmitted => _appealSubmitted;
-  UserModel? get profile => _profile;
-  String get status => _status;
-
-  List<PartnershipRequestModel> get incomingPartnershipRequests => List<PartnershipRequestModel>.unmodifiable(_incomingPartnershipRequests);
-  List<PartnershipRequestModel> get outgoingPartnershipRequests => List<PartnershipRequestModel>.unmodifiable(_outgoingPartnershipRequests);
-  List<PartnershipRequestModel> get allPartnershipRequests => List<PartnershipRequestModel>.unmodifiable(_allPartnershipRequests);
-  List<PartnershipRequestModel> get pendingCeoInvitations => _allPartnershipRequests.where((r) => r.isCeoInitiated && r.status == 'pending').toList();
-  List<PartnershipRequestModel> get pendingSupplierSentRequests => _allPartnershipRequests.where((r) => r.isSupplierInitiated && r.status == 'pending').toList();
-  List<PartnershipRequestModel> get pastPartnershipRequests => _allPartnershipRequests.where((r) => r.status == 'rejected' || r.status == 'removed').take(10).toList();
-  int get pendingPartnershipRequestsCount => _allPartnershipRequests.where((r) => r.status == 'pending').length;
-  List<CompanyModel> get activePartnerCompanies => List<CompanyModel>.unmodifiable(_companies);
-  bool get partnershipHubDataLoaded => _partnershipHubDataLoaded;
-  bool get isCommissionRestricted => _commissionRestricted;
-  String? get commissionRestrictionReason => _commissionRestrictionReason;
-  List<PaymentProofModel> get paymentHistory => [..._confirmedCommissionPayments, ..._pendingCommissionPayments]..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-  List<MonthlyEarning> get monthlyEarnings => _monthlyEarnings;
-
   // --- Commission Ledger Getters ---
   double get totalCommissionGenerated => _allCommissions.fold(0.0, (acc, tx) => acc + tx.commissionAmount);
-  double get totalCommissionPaid => _confirmedCommissionPayments.fold(0.0, (acc, p) => acc + p.amount);
+  double get totalCommissionPaid => _allCommissions.where((tx) => tx.isSettled).fold(0.0, (acc, tx) => acc + tx.commissionAmount);
   double get commissionOwed {
-    final owed = totalCommissionGenerated - totalCommissionPaid;
+    final owed = _allCommissions.where((tx) => tx.isUnsettled).fold(0.0, (acc, tx) => acc + tx.commissionAmount);
     return owed < 0.01 ? 0 : owed;
   }
-  double get pendingCommissionApproval => _pendingCommissionPayments.fold(0.0, (acc, p) => acc + p.amount);
+  double get pendingCommissionApproval => 0.0; // Manual flow removed
+
+  List<String> get unsettledTransactionIds => _allCommissions
+      .where((tx) => tx.isUnsettled)
+      .map((tx) => tx.txId)
+      .toList();
 
   // --- Stats and Aggregates ---
   double get totalEarnings => _orders.where((o) => o.status == 'confirmed').fold(0.0, (acc, o) => acc + o.totalAmount);
@@ -201,6 +149,41 @@ class SupplierViewModel extends ChangeNotifier {
   double netEarningsForMonth(String month) {
     return grossSalesForMonth(month) * (1 - AppConstants.commissionRate);
   }
+
+  // --- Getters ---
+  String? get supplierUid => _supplierUid;
+  String? get selectedCompanyId => _selectedCompanyId;
+  String? get rejectionReason => _rejectionReason;
+  String? get error => _error;
+  String? get successMessage => _successMessage;
+  bool get isLoading => _isLoading;
+  bool get partnershipListsReady => _partnershipListsReady;
+  List<PartnershipRequestModel> get incomingPartnershipRequests => List<PartnershipRequestModel>.unmodifiable(_incomingPartnershipRequests);
+  List<PartnershipRequestModel> get outgoingPartnershipRequests => List<PartnershipRequestModel>.unmodifiable(_outgoingPartnershipRequests);
+  List<PartnershipRequestModel> get allPartnershipRequests => List<PartnershipRequestModel>.unmodifiable(_allPartnershipRequests);
+  List<PartnershipRequestModel> get pendingCeoInvitations => _allPartnershipRequests.where((r) => r.isCeoInitiated && r.status == 'pending').toList();
+  List<PartnershipRequestModel> get pendingSupplierSentRequests => _allPartnershipRequests.where((r) => r.isSupplierInitiated && r.status == 'pending').toList();
+  List<PartnershipRequestModel> get pastPartnershipRequests => _allPartnershipRequests.where((r) => r.status == 'rejected' || r.status == 'removed').take(10).toList();
+  int get pendingPartnershipRequestsCount => _allPartnershipRequests.where((r) => r.status == 'pending').length;
+  List<CompanyModel> get activePartnerCompanies => List<CompanyModel>.unmodifiable(_companies);
+  bool get partnershipHubDataLoaded => _partnershipHubDataLoaded;
+  bool get isDashboardLoading => _isDashboardLoading;
+  bool get companiesLoaded => _companiesLoaded;
+  bool get companiesLoadFailed => _companiesLoadFailed;
+  bool get appealSubmitted => _appealSubmitted;
+  List<MaterialModel> get materials => _materials;
+  List<OrderModel> get orders => _orders;
+  List<RatingModel> get ratings => _ratings;
+  List<TransactionModel> get transactions => _transactions;
+  List<CompanyModel> get companies => _companies;
+  List<CompanyModel> get companyDirectory => _companyDirectory;
+  List<InvitationModel> get invitations => _invitations;
+  List<MonthlyEarning> get monthlyEarnings => _monthlyEarnings;
+  UserModel? get profile => _profile;
+  bool get isCommissionRestricted => _commissionRestricted;
+  String? get commissionRestrictionReason => _commissionRestrictionReason;
+  String get status => _status;
+  List<dynamic> get paymentHistory => []; // Manual flow removed
 
   int get totalMaterialsCount => _materials.length;
   int get pendingOrdersCount => _orders.where((o) {
@@ -264,23 +247,6 @@ class SupplierViewModel extends ChangeNotifier {
     _companiesLoadFailed = false;
     _selectedCompanyId = null;
     _companies = [];
-    _materials = [];
-    _orders = [];
-    _allCommissions = [];
-    _transactions = [];
-    _confirmedCommissionPayments = [];
-    _pendingCommissionPayments = [];
-    _invitations = [];
-    _allPartnershipRequests = [];
-    _incomingPartnershipRequests = [];
-    _outgoingPartnershipRequests = [];
-    _latestPartnershipByCompanyId.clear();
-    _activePartnerCompanyIds.clear();
-    _profile = null;
-    _status = 'pending';
-    _rejectionReason = null;
-    _partnershipListsReady = false;
-    _partnershipHubDataLoaded = false;
 
     if (_supplierUid != null) {
       _profile = auth.user;
@@ -311,28 +277,11 @@ class SupplierViewModel extends ChangeNotifier {
     _commissionsSub = _db.collection(FirestorePaths.transactionsCol)
         .where('supplierUid', isEqualTo: uid)
         .snapshots().listen((snap) {
-          _allCommissions = snap.docs
-              .map((d) => TransactionModel.fromMap(d.id, d.data()))
-              .where((tx) => !tx.hiddenBy.contains(uid))
-              .toList();
+          _allCommissions = snap.docs.map((d) => TransactionModel.fromMap(d.id, d.data())).toList();
           _earningsInitialized = true;
           _checkDashboardReady();
           notifyListeners();
         }, onError: (e) => _onDashboardStreamError('earnings', e));
-
-    _paymentsSub?.cancel();
-    _paymentsSub = _db.collection('payment_proofs')
-        .where('payerId', isEqualTo: uid)
-        .where('type', isEqualTo: 'commission')
-        .snapshots().listen((snap) {
-          final all = snap.docs
-              .map((d) => PaymentProofModel.fromMap(d.id, d.data()))
-              .where((p) => !p.hiddenBy.contains(uid))
-              .toList();
-          _confirmedCommissionPayments = all.where((p) => p.status == 'confirmed' || p.status == 'approved' || p.status == 'settled').toList();
-          _pendingCommissionPayments = all.where((p) => p.status == 'pending').toList();
-          notifyListeners();
-        });
 
     _db.collection('commission_ensure_jobs').doc(uid).set({
       'uid': uid,
@@ -344,6 +293,9 @@ class SupplierViewModel extends ChangeNotifier {
     _backfillMissingCommissionTransactions(uid);
   }
 
+  /// Confirmed orders update gross/net from the orders collection. Owed is
+  /// read from `transactions`. If a confirm path skipped that write, create
+  /// the missing unsettled rows (idempotent doc id `comm_{orderId}`).
   Future<void> _backfillMissingCommissionTransactions(String uid) async {
     try {
       final snap = await _db
@@ -360,6 +312,7 @@ class SupplierViewModel extends ChangeNotifier {
         await _transactionRepo.createUnsettledCommissionTransaction(
           orderId: doc.id,
           companyId: (data['companyId'] ?? '').toString(),
+          companyName: data['companyName'] as String?,
           supplierUid: uid,
           totalAmount: totalAmount,
           commissionAmount: commissionAmount,
@@ -392,6 +345,7 @@ class SupplierViewModel extends ChangeNotifier {
       }, onError: (_) {});
   }
 
+  // --- Notification Prefs ---
   static const Map<String, bool> defaultNotificationPrefs = {
     'pushEnabled': true, 'newOrders': true, 'orderUpdates': true,
     'chatMessages': true, 'ratings': true, 'earnings': true,
@@ -487,12 +441,26 @@ class SupplierViewModel extends ChangeNotifier {
     }
   }
 
+  String directoryActionFor(String companyId) {
+    if (_activePartnerCompanyIds.contains(companyId)) return 'Partners ✓';
+    final request = _latestPartnershipByCompanyId[companyId];
+    if (request?.status == 'pending') return request!.isCeoInitiated ? 'Respond' : 'Pending';
+    if ((request?.status == 'rejected' || request?.status == 'removed') && canReapplyToCompany(companyId)) return 'Request Again';
+    return 'Send Request';
+  }
+
   bool canReapplyToCompany(String companyId) {
     final request = _latestPartnershipByCompanyId[companyId];
     if (request == null) return true;
     if (request.status != 'rejected' && request.status != 'removed') return false;
     final closedAt = request.respondedAt ?? request.createdAt;
     return DateTime.now().difference(closedAt).inDays >= 7;
+  }
+
+  String pastRequestStatusLabel(PartnershipRequestModel request) {
+    if (request.status == 'removed') return 'Removed';
+    if (request.status == 'rejected') return request.isSupplierInitiated ? 'Declined by Them' : 'You Declined';
+    return request.status;
   }
 
   PartnerCompanyStats partnerStatsFor(String companyId) {
@@ -550,6 +518,12 @@ class SupplierViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  List<String> interestCategoriesFor(CompanyModel company) {
+    final categories = <String>{};
+    if (company.companyType != null && company.companyType!.isNotEmpty) categories.add(company.companyType!);
+    return categories.take(3).toList();
+  }
+
   void _onDashboardStreamError(String section, Object error) {
     _error = 'Some data failed to load ($section).';
     if (section == 'materials') _materialsInitialized = true;
@@ -588,15 +562,7 @@ class SupplierViewModel extends ChangeNotifier {
             _companies = list;
             _companiesLoaded = true;
             _companiesLoadFailed = false;
-            
-            if (list.isNotEmpty) {
-              if (_selectedCompanyId == null || !list.any((c) => c.id == _selectedCompanyId)) {
-                _selectedCompanyId = list.first.id;
-                loadDashboard();
-              }
-            } else {
-              _selectedCompanyId = null;
-            }
+            if (_selectedCompanyId == null && _companies.isNotEmpty) switchCompany(_companies.first.id);
             notifyListeners();
           }, onError: (e) {
             _companiesLoaded = true; _companiesLoadFailed = true; _error = e.toString();
@@ -709,17 +675,19 @@ class SupplierViewModel extends ChangeNotifier {
         );
       }
 
-      await _db.collection('materials').doc(matId).delete();
+      final payload = <String, dynamic>{
+        'archived': true,
+        'archivedAt': FieldValue.serverTimestamp(),
+      };
+      await _db.collection('materials').doc(matId).update(payload);
       try {
         await _db
             .collection('companies')
             .doc(companyId)
             .collection('materials')
             .doc(matId)
-            .delete();
+            .update(payload);
       } catch (_) {}
-      
-      _successMessage = 'Material deleted successfully.';
     } catch (e) {
       _error = e is AppException ? e.message : e.toString();
       rethrow;
@@ -736,6 +704,14 @@ class SupplierViewModel extends ChangeNotifier {
           _materials = snap.docs.map((d) {
             final data = Map<String, dynamic>.from(d.data())..putIfAbsent('id', () => d.id);
             final material = MaterialModel.fromMap(data);
+            assert(() {
+              debugPrint(
+                '[Materials] id=${material.id} name=${material.name} '
+                'raw.profileImageUrl=${data['profileImageUrl']} '
+                'parsed=${material.profileImageUrl}',
+              );
+              return true;
+            }());
             return material;
           }).toList();
           _materialsInitialized = true; _checkDashboardReady(); notifyListeners();
@@ -743,10 +719,9 @@ class SupplierViewModel extends ChangeNotifier {
   }
 
   Future<void> loadOrders(String companyId, String? statusFilter) async {
-    final uid = _supplierUid;
-    if (uid == null) { _ordersInitialized = true; _checkDashboardReady(); notifyListeners(); return; }
+    if (_supplierUid == null) { _ordersInitialized = true; _checkDashboardReady(); notifyListeners(); return; }
     _ordersSubscription?.cancel();
-    _ordersSubscription = _orderRepo.getOrdersForSupplier(uid, userId: uid).listen((data) {
+    _ordersSubscription = _orderRepo.getOrdersForSupplier(_supplierUid!).listen((data) {
         _orders = data.where((o) => o.companyId == companyId).toList();
         _ordersInitialized = true; _checkDashboardReady(); notifyListeners();
       });
@@ -764,66 +739,10 @@ class SupplierViewModel extends ChangeNotifier {
   Future<void> rejectOrder(String orderId, String companyId, String reason) async {
     _isLoading = true; notifyListeners();
     try {
-      await _orderRepo.updateStatus(orderId, companyId, 'rejected',
-          reason: reason, rejectedBy: 'supplier');
+      await _orderRepo.updateStatus(orderId, companyId, 'rejected', reason: reason);
       final order = _orders.firstWhere((o) => o.orderId == orderId);
       await _notificationService.notifyOrderRejected(fieldUserUid: order.fieldUserUid, orderId: orderId, companyId: companyId, materialName: order.materialName, supplierName: order.supplierName, reason: reason);
     } catch (_) {} finally { _isLoading = false; notifyListeners(); }
-  }
-
-  Future<void> acceptCancellationRequest(OrderModel order) async {
-    _isLoading = true;
-    notifyListeners();
-    try {
-      await _orderRepo.acceptCancellationRequest(
-        orderId: order.orderId,
-        companyId: order.companyId,
-      );
-      final ceoUid = await _orderRepo.resolveCeoUid(order.companyId);
-      if (ceoUid != null) {
-        await _notificationService.notifyCancellationAccepted(
-          ceoUid: ceoUid,
-          orderId: order.orderId,
-          companyId: order.companyId,
-          materialName: order.materialName,
-          supplierName: _profile?.name ?? order.supplierName,
-        );
-      }
-    } catch (_) {
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
-  }
-
-  Future<void> declineCancellationRequest(
-    OrderModel order, {
-    String? reason,
-  }) async {
-    _isLoading = true;
-    notifyListeners();
-    try {
-      await _orderRepo.rejectCancellationRequest(
-        orderId: order.orderId,
-        companyId: order.companyId,
-        responseReason: reason,
-      );
-      final ceoUid = await _orderRepo.resolveCeoUid(order.companyId);
-      if (ceoUid != null) {
-        await _notificationService.notifyCancellationDeclined(
-          ceoUid: ceoUid,
-          orderId: order.orderId,
-          companyId: order.companyId,
-          materialName: order.materialName,
-          supplierName: _profile?.name ?? order.supplierName,
-          reason: reason,
-        );
-      }
-    } catch (_) {
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
   }
 
   Future<void> markDelivered(String orderId, String companyId) async {
@@ -836,21 +755,17 @@ class SupplierViewModel extends ChangeNotifier {
   }
 
   Future<void> loadEarnings(String month) async {
-    final uid = _supplierUid;
-    if (uid == null) return;
     final start = DateTime.parse('$month-01');
     final end = DateTime(start.month == 12 ? start.year + 1 : start.year, start.month == 12 ? 1 : start.month + 1, 1);
     _transactions = _allCommissions.where((tx) => !tx.createdAt.isBefore(start) && tx.createdAt.isBefore(end)).toList()..sort((a, b) => b.createdAt.compareTo(a.createdAt));
     try {
-        final summary = await _transactionRepo.getMonthlyEarningsSummary(uid, 6);
+        final summary = await _transactionRepo.getMonthlyEarningsSummary(_supplierUid!, 6);
         _monthlyEarnings = summary;
     } catch (_) {}
     notifyListeners();
   }
 
-  Future<void> changeMonth(String month) async {
-    await loadEarnings(month);
-  }
+  Future<void> changeMonth(String month) => loadEarnings(month);
 
   Future<void> loadProfile() async {
     if (_supplierUid == null) return;
@@ -865,91 +780,14 @@ class SupplierViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> submitAppeal(String message, File? file, String? phone, {Uint8List? webBytes}) async {
-    if (_supplierUid == null) {
-      _error = 'User session expired. Please log in again.';
-      notifyListeners();
-      return;
-    }
-
-    developer.log('[Appeal] Supplier Submission Started for UID: $_supplierUid');
-    _error = null;
-    _isLoading = true;
-    notifyListeners();
-
+  Future<void> submitAppeal(String message, File? file, String? phone) async {
+    _isLoading = true; notifyListeners();
     try {
-      // 1. Duplicate Check
-      developer.log('[Appeal] Step 1: Checking for existing pending appeals...');
-      final existing = await _db.collection('appeals')
-          .where('uid', isEqualTo: _supplierUid)
-          .where('status', isEqualTo: 'pending')
-          .get()
-          .timeout(const Duration(seconds: 10), onTimeout: () => throw TimeoutException('Connection check timed out.'));
-
-      if (existing.docs.isNotEmpty) {
-        developer.log('[Appeal] Blocked: Existing pending appeal found.');
-        throw Exception('Your appeal is already under review.');
-      }
-
-      // 2. Cloudinary Upload
       String? imageUrl;
-      if (webBytes != null || file != null) {
-        developer.log('[Appeal] Step 2: Uploading image to Cloudinary...');
-        if (webBytes != null) {
-          imageUrl = await _uploadImageBytes(
-            bytes: webBytes, 
-            folder: 'ratebridge/appeals',
-            filename: 'supplier_appeal_${_supplierUid}_${DateTime.now().millisecondsSinceEpoch}.jpg'
-          ).timeout(const Duration(seconds: 45), onTimeout: () => throw TimeoutException('Image upload timed out.'));
-        } else if (file != null) {
-          imageUrl = await CloudinaryService.uploadImage(
-            filePath: file.path, 
-            folder: 'ratebridge/appeals'
-          ).timeout(const Duration(seconds: 45), onTimeout: () => throw TimeoutException('Image upload timed out.'));
-        }
-        
-        if (imageUrl == null) {
-          developer.log('[Appeal] Error: Cloudinary upload returned null.');
-          throw Exception('Failed to upload supporting document. Please try again.');
-        }
-        developer.log('[Appeal] Step 2: Image uploaded successfully: $imageUrl');
-      } else {
-        developer.log('[Appeal] Step 2: No image selected, skipping upload.');
-      }
-      
-      // 3. Firestore Write
-      developer.log('[Appeal] Step 3: Writing appeal to Firestore...');
-      await _db.collection('appeals').add({
-        'uid': _supplierUid,
-        'supplierUid': _supplierUid,
-        'role': 'Supplier',
-        'name': _profile?.name ?? 'Supplier',
-        'companyId': _selectedCompanyId ?? '',
-        'message': message,
-        'phone': phone,
-        'imageUrl': imageUrl,
-        'createdAt': FieldValue.serverTimestamp(),
-        'status': 'pending',
-        'rejectionReason': _rejectionReason ?? '',
-      }).timeout(const Duration(seconds: 15), onTimeout: () => throw TimeoutException('Firestore write timed out.'));
-
-      developer.log('[Appeal] Final Step: Submission complete.');
+      if (file != null) imageUrl = await _storageService.uploadFile(file: file, path: 'appeals/$_supplierUid');
+      await _db.collection('appeals').add({'supplierUid': _supplierUid, 'message': message, 'phone': phone, 'imageUrl': imageUrl, 'createdAt': FieldValue.serverTimestamp(), 'status': 'pending'});
       _appealSubmitted = true;
-    } catch (e) {
-      developer.log('[Appeal] Submission Failed: $e');
-      _error = e is TimeoutException 
-          ? 'Network timeout. Please check your internet connection and try again.' 
-          : e.toString().replaceAll('Exception: ', '');
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
-  }
-
-  void clearAppealState() {
-    _appealSubmitted = false;
-    _error = null;
-    notifyListeners();
+    } catch (e) { _error = e.toString(); } finally { _isLoading = false; notifyListeners(); }
   }
 
   Future<void> loadCompanyDirectory() async {
@@ -1045,50 +883,11 @@ class SupplierViewModel extends ChangeNotifier {
     _isDashboardLoading = false; notifyListeners();
   }
 
-  Future<bool> submitCommissionPayment({required double amount, required String method, required XFile screenshotFile}) async {
-    if (_supplierUid == null) return false;
-    if (amount <= 0 || amount > commissionOwed + 0.01) { _error = "Invalid amount"; notifyListeners(); return false; }
-    _isLoading = true; notifyListeners();
-    try {
-      final url = await _uploadImageBytes(bytes: await screenshotFile.readAsBytes(), folder: 'commission_proofs/$_supplierUid', filename: 'comm_${DateTime.now().millisecondsSinceEpoch}.jpg');
-      if (url == null) throw Exception("Upload failed");
 
-      final unsettledTxIds = _allCommissions
-          .where((tx) => tx.status.toLowerCase() == 'unsettled' || tx.status.toLowerCase() == 'pending')
-          .map((tx) => tx.txId)
-          .toList();
-
-      final proof = PaymentProofModel(
-        id: '', 
-        payerId: _supplierUid!, 
-        companyId: '', 
-        payerName: _profile?.name ?? 'Supplier', 
-        payerRole: 'Supplier', 
-        amount: amount, 
-        method: method, 
-        screenshotUrl: url, 
-        status: 'pending', 
-        type: 'commission', 
-        createdAt: DateTime.now(),
-        relatedTransactions: unsettledTxIds,
-      );
-      
-      await _db.collection('payment_proofs').add(proof.toMap());
-      _successMessage = 'Payment submitted.';
-      return true;
-    } catch (e) { _error = e.toString(); return false; } finally { _isLoading = false; notifyListeners(); }
-  }
 
   Stream<List<RfqModel>> streamOpenRfqsForSupplier() {
-    final uid = _supplierUid;
-    if (uid == null) return Stream.value([]);
-    return _db.collection('rfqs')
-        .where('status', isEqualTo: 'open')
-        .snapshots()
-        .map((snap) => snap.docs
-            .map((doc) => RfqModel.fromMap(doc.id, doc.data()))
-            .where((r) => !r.hiddenBy.contains(uid))
-            .toList());
+    if (_supplierUid == null) return Stream.value([]);
+    return _db.collection('rfqs').where('status', isEqualTo: 'open').snapshots().map((snap) => snap.docs.map((doc) => RfqModel.fromMap(doc.id, doc.data())).toList());
   }
 
   Future<void> submitRfqBid({required String rfqId, required double bidPrice, required String deliveryTime, String? note}) async {
@@ -1098,6 +897,7 @@ class SupplierViewModel extends ChangeNotifier {
     _error = null;
     notifyListeners();
     try {
+      // Firestore job instead of HTTPS callable — Flutter web is blocked by CORS.
       final ref = _db.collection('rfq_bid_jobs').doc();
       await ref.set({
         'uid': uid,
@@ -1190,103 +990,10 @@ class SupplierViewModel extends ChangeNotifier {
     return bid;
   }
 
-  Future<void> hideTransaction(String txId) async {
-    if (_supplierUid == null) return;
-    try {
-      await _transactionRepo.hideTransactionForUser(txId, _supplierUid!);
-      _allCommissions.removeWhere((tx) => tx.txId == txId);
-      _transactions.removeWhere((tx) => tx.txId == txId);
-      notifyListeners();
-    } catch (e) {
-      _error = e.toString();
-      notifyListeners();
-    }
-  }
-
-  Future<void> clearPaymentHistory() async {
-    if (_supplierUid == null) return;
-    _isLoading = true;
-    notifyListeners();
-    try {
-      await _transactionRepo.hideAllPaymentProofsForUser(_supplierUid!);
-      _confirmedCommissionPayments.clear();
-      _pendingCommissionPayments.clear();
-      notifyListeners();
-    } catch (e) {
-      _error = e.toString();
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
-  }
-
-  Future<void> hideOrder(String orderId) async {
-    if (_supplierUid == null) return;
-    try {
-      await _orderRepo.hideOrderForUser(orderId, _supplierUid!);
-      _orders.removeWhere((o) => o.orderId == orderId);
-      notifyListeners();
-    } catch (e) {
-      _error = e.toString();
-      notifyListeners();
-      rethrow;
-    }
-  }
-
-  Future<void> hideOrders(List<String> orderIds) async {
-    if (_supplierUid == null) return;
-    try {
-      await _orderRepo.hideOrdersForUser(orderIds, _supplierUid!);
-      _orders.removeWhere((o) => orderIds.contains(o.orderId));
-      notifyListeners();
-    } catch (e) {
-      _error = e.toString();
-      notifyListeners();
-      rethrow;
-    }
-  }
-
-  String pastRequestStatusLabel(PartnershipRequestModel request) {
-    if (request.status == 'removed') return 'Partnership Ended';
-    if (request.status == 'rejected') {
-      return request.isSupplierInitiated ? 'Declined by Them' : 'Declined by You';
-    }
-    return request.status.toUpperCase();
-  }
-
-  String directoryActionFor(String companyId) {
-    if (_activePartnerCompanyIds.contains(companyId)) return 'Partners ✓';
-    final request = _latestPartnershipByCompanyId[companyId];
-    if (request == null) return 'Send Request';
-
-    if (request.status == 'pending') {
-      return request.isCeoInitiated ? 'Respond' : 'Pending';
-    }
-
-    if (request.status == 'rejected' || request.status == 'removed') {
-      return canReapplyToCompany(companyId) ? 'Request Again' : 'Pending';
-    }
-
-    return 'Send Request';
-  }
-
-  List<String> interestCategoriesFor(CompanyModel company) {
-    final type = company.companyType;
-    if (type == null || type.isEmpty) return [];
-    return [type];
-  }
-
   void _cancelSubscriptions() {
-    _statusSubscription?.cancel(); _statusSubscription = null;
-    _partnershipRequestsSub?.cancel(); _partnershipRequestsSub = null;
-    _linkedCompaniesSub?.cancel(); _linkedCompaniesSub = null;
-    _companiesSubscription?.cancel(); _companiesSubscription = null;
-    _materialsSubscription?.cancel(); _materialsSubscription = null;
-    _ordersSubscription?.cancel(); _ordersSubscription = null;
-    _commissionsSub?.cancel(); _commissionsSub = null;
-    _paymentsSub?.cancel(); _paymentsSub = null;
-    _invitationsSubscription?.cancel(); _invitationsSubscription = null;
-    _ratingsSubscription?.cancel(); _ratingsSubscription = null;
-    _supplierRestrictionSub?.cancel(); _supplierRestrictionSub = null;
+    _statusSubscription?.cancel(); _partnershipRequestsSub?.cancel(); _linkedCompaniesSub?.cancel();
+    _companiesSubscription?.cancel(); _materialsSubscription?.cancel(); _ordersSubscription?.cancel();
+    _commissionsSub?.cancel(); _invitationsSubscription?.cancel();
+    _ratingsSubscription?.cancel(); _supplierRestrictionSub?.cancel();
   }
 }

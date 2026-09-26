@@ -5,14 +5,12 @@ import '../models/order_model.dart';
 import '../models/rating_model.dart';
 import '../repositories/order_repository.dart';
 import '../repositories/transaction_repository.dart';
-import '../services/cloud_function_service.dart';
 import '../constants/app_constants.dart';
 import 'auth_viewmodel.dart';
 
 class OrderViewModel extends ChangeNotifier {
   final OrderRepository _orderRepo;
   final TransactionRepository _transactionRepo;
-  final CloudFunctionService _cloudFunctions;
 
   List<OrderModel> _orders = [];
   bool _isLoading = false;
@@ -23,7 +21,7 @@ class OrderViewModel extends ChangeNotifier {
   bool? _hasExistingRating;
   StreamSubscription? _ordersSubscription;
 
-  OrderViewModel(this._orderRepo, this._transactionRepo, this._cloudFunctions);
+  OrderViewModel(this._orderRepo, this._transactionRepo);
 
   void updateAuth(AuthViewModel auth) {
     notifyListeners();
@@ -77,6 +75,7 @@ class OrderViewModel extends ChangeNotifier {
       await _transactionRepo.createUnsettledCommissionTransaction(
         orderId: orderId,
         companyId: companyId,
+        companyName: order.companyName,
         supplierUid: order.supplierId,
         totalAmount: order.totalAmount,
         commissionAmount: commissionAmount,
@@ -96,13 +95,7 @@ class OrderViewModel extends ChangeNotifier {
   }
 
   Future<void> rejectOrder(String orderId, String companyId, String reason) async {
-    await _updateOrderStatus(
-      orderId,
-      companyId,
-      'rejected',
-      reason: reason,
-      rejectedBy: 'supplier',
-    );
+    await _updateOrderStatus(orderId, companyId, 'rejected', reason: reason);
   }
 
   Future<void> markDelivered(String orderId, String companyId) async {
@@ -118,7 +111,6 @@ class OrderViewModel extends ChangeNotifier {
     String companyId,
     String status, {
     String? reason,
-    String? rejectedBy,
     DateTime? deliveredAt,
     DateTime? confirmedAt,
   }) async {
@@ -127,10 +119,7 @@ class OrderViewModel extends ChangeNotifier {
     notifyListeners();
     try {
       await _orderRepo.updateStatus(orderId, companyId, status, 
-        reason: reason,
-        rejectedBy: rejectedBy,
-        deliveredAt: deliveredAt,
-        confirmedAt: confirmedAt);
+        reason: reason, deliveredAt: deliveredAt, confirmedAt: confirmedAt);
     } catch(e) {
       _error = e.toString();
     } finally {
@@ -204,32 +193,6 @@ class OrderViewModel extends ChangeNotifier {
     } finally {
       _isLoading = false;
       notifyListeners();
-    }
-  }
-
-  /// Hides a single order from the current user's view (soft delete).
-  Future<void> hideOrder(String orderId, String userId) async {
-    try {
-      await _orderRepo.hideOrderForUser(orderId, userId);
-      _orders.removeWhere((o) => o.orderId == orderId);
-      notifyListeners();
-    } catch (e) {
-      _error = e.toString();
-      notifyListeners();
-      rethrow;
-    }
-  }
-
-  /// Hides multiple orders from the current user's view.
-  Future<void> hideOrders(List<String> orderIds, String userId) async {
-    try {
-      await _orderRepo.hideOrdersForUser(orderIds, userId);
-      _orders.removeWhere((o) => orderIds.contains(o.orderId));
-      notifyListeners();
-    } catch (e) {
-      _error = e.toString();
-      notifyListeners();
-      rethrow;
     }
   }
 

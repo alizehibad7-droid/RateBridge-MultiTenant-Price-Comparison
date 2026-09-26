@@ -2,22 +2,19 @@ import 'package:flutter/material.dart';
 import '../models/rfq_model.dart';
 import '../models/rfq_bid_model.dart';
 import '../models/supplier_model.dart';
-import '../services/cloud_function_service.dart';
 import '../services/firestore_service.dart';
 import '../services/notification_service.dart';
 import '../utils/app_exception.dart';
 
 class RfqViewModel extends ChangeNotifier {
   final FirestoreService _firestoreService;
-  final CloudFunctionService _cloudFunctions;
   final NotificationService? _notificationService;
 
   bool _isLoading = false;
   String? _error;
 
   RfqViewModel(
-    this._firestoreService,
-    this._cloudFunctions, [
+    this._firestoreService, [
     this._notificationService,
   ]);
 
@@ -115,30 +112,6 @@ class RfqViewModel extends ChangeNotifier {
     } finally {
       _isLoading = false;
       notifyListeners();
-    }
-  }
-
-  /// Hides an RFQ from the user's history (soft-delete).
-  Future<void> hideRfq(String rfqId, String userId) async {
-    try {
-      await _firestoreService.hideRfqForUser(rfqId, userId);
-      notifyListeners();
-    } catch (e) {
-      _error = e.toString();
-      notifyListeners();
-      rethrow;
-    }
-  }
-
-  /// Bulk hides RFQs from history.
-  Future<void> hideRfqs(List<String> rfqIds, String userId) async {
-    try {
-      await _firestoreService.hideRfqsForUser(rfqIds, userId);
-      notifyListeners();
-    } catch (e) {
-      _error = e.toString();
-      notifyListeners();
-      rethrow;
     }
   }
 

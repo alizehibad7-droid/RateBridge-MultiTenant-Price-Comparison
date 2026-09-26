@@ -18,17 +18,8 @@ import '../widgets/field_material_card.dart';
 
 class FieldCompareView extends StatefulWidget {
   final String materialName;
-  final String? category;
-  final String? qualityGrade;
-  final String? unit;
 
-  const FieldCompareView({
-    super.key,
-    required this.materialName,
-    this.category,
-    this.qualityGrade,
-    this.unit,
-  });
+  const FieldCompareView({super.key, required this.materialName});
 
   @override
   State<FieldCompareView> createState() => _FieldCompareViewState();
@@ -74,13 +65,7 @@ class _FieldCompareViewState extends State<FieldCompareView> {
     }
     await context
         .read<FieldCompareViewModel>()
-        .loadComparison(
-          companyId,
-          materialName,
-          category: widget.category,
-          qualityGrade: widget.qualityGrade,
-          unit: widget.unit,
-        );
+        .loadComparison(companyId, materialName);
 
     _loadScheduled = false;
 
@@ -112,13 +97,7 @@ class _FieldCompareViewState extends State<FieldCompareView> {
     if (companyId == null) return;
     await context
         .read<FieldCompareViewModel>()
-        .loadComparison(
-          companyId,
-          widget.materialName,
-          category: widget.category,
-          qualityGrade: widget.qualityGrade,
-          unit: widget.unit,
-        );
+        .loadComparison(companyId, widget.materialName);
   }
 
   void _openTrends() {
@@ -185,9 +164,7 @@ class _FieldCompareViewState extends State<FieldCompareView> {
           leading: AppNavigation.leading(context, color: Colors.white),
           iconTheme: const IconThemeData(color: Colors.white),
           title: Text(
-            (widget.category != null && widget.category!.trim().isNotEmpty)
-                ? widget.category!.trim()
-                : widget.materialName,
+            widget.materialName,
             style: FieldTypography.titleMedium.copyWith(
               color: Colors.white,
               fontWeight: FontWeight.w700,
@@ -209,10 +186,7 @@ class _FieldCompareViewState extends State<FieldCompareView> {
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               _MaterialSummaryStrip(
-                                materialName: (widget.category != null &&
-                                        widget.category!.trim().isNotEmpty)
-                                    ? widget.category!.trim()
-                                    : widget.materialName,
+                                materialName: widget.materialName,
                                 category: vm.rawResults.first.category,
                                 supplierCount: vm.rawResults.length,
                               ),

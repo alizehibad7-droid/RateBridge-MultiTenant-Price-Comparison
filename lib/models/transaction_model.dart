@@ -5,6 +5,7 @@ class TransactionModel {
   final String txId;
   final String orderId;
   final String companyId;
+  final String? companyName;
   final String supplierUid;
   final double totalAmount;
   final double commissionRate; // always 0.02
@@ -13,12 +14,12 @@ class TransactionModel {
   final String status; // unsettled | settled | pending | failed
   final DateTime createdAt;
   final DateTime? settledAt;
-  final List<String> hiddenBy;
 
   const TransactionModel({
     required this.txId,
     required this.orderId,
     required this.companyId,
+    this.companyName,
     required this.supplierUid,
     required this.totalAmount,
     required this.commissionRate,
@@ -27,7 +28,6 @@ class TransactionModel {
     required this.status,
     required this.createdAt,
     this.settledAt,
-    this.hiddenBy = const [],
   });
 
   bool get isUnsettled => status.toLowerCase() == 'unsettled' || status.toLowerCase() == 'pending';
@@ -37,6 +37,7 @@ class TransactionModel {
     txId: id,
     orderId: map['orderId'] ?? '',
     companyId: map['companyId'] ?? '',
+    companyName: map['companyName'],
     supplierUid: map['supplierUid'] ?? map['supplierId'] ?? '',
     totalAmount: (map['totalAmount'] as num?)?.toDouble() ?? 0.0,
     commissionRate: (map['commissionRate'] as num?)?.toDouble() ?? 0.02,
@@ -49,12 +50,12 @@ class TransactionModel {
     settledAt: map['settledAt'] is Timestamp
         ? (map['settledAt'] as Timestamp).toDate()
         : DateTime.tryParse(map['settledAt']?.toString() ?? ''),
-    hiddenBy: List<String>.from(map['hiddenBy'] ?? []),
   );
 
   Map<String, dynamic> toMap() => {
     'orderId': orderId,
     'companyId': companyId,
+    if (companyName != null) 'companyName': companyName,
     'supplierUid': supplierUid,
     'totalAmount': totalAmount,
     'commissionRate': commissionRate,
@@ -63,7 +64,6 @@ class TransactionModel {
     'status': status,
     'createdAt': FieldValue.serverTimestamp(),
     if (settledAt != null) 'settledAt': Timestamp.fromDate(settledAt!),
-    'hiddenBy': hiddenBy,
   };
 }
 

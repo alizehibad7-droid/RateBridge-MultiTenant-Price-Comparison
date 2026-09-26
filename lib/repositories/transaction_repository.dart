@@ -1,9 +1,7 @@
 // MVVM: Repository — Firestore access only
 import 'dart:async';
-import 'dart:developer' as developer;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/transaction_model.dart';
-import '../models/payment_proof_model.dart';
 import '../services/firestore_service.dart';
 import '../constants/firestore_paths.dart';
 import '../constants/app_constants.dart';
@@ -57,6 +55,7 @@ class TransactionRepository {
   Future<void> createUnsettledCommissionTransaction({
     required String orderId,
     required String companyId,
+    String? companyName,
     required String supplierUid,
     required double totalAmount,
     required double commissionAmount,
@@ -74,6 +73,7 @@ class TransactionRepository {
       await docRef.set({
         'orderId': orderId,
         'companyId': companyId,
+        if (companyName != null) 'companyName': companyName,
         'supplierUid': supplierUid,
         'totalAmount': totalAmount,
         'commissionRate': AppConstants.commissionRate,
@@ -92,93 +92,64 @@ class TransactionRepository {
 
   // --- Admin Ledger Integration (Source of Truth) ---
 
-  /// Live stream of the entire ledger, reactive to both transactions and payments.
+  /// Live stream of the entire ledger, reactive to transactions.
   Stream<CommissionLedgerSnapshot> watchCommissionLedger() {
-    late StreamController<CommissionLedgerSnapshot> controller;
-    StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? txSub;
-    StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? paySub;
-
-    Future<void> refresh() async {
-      if (controller.isClosed) return;
-      try {
-        final txSnap = await _db
-            .collection(FirestorePaths.transactionsCol)
-            .orderBy('createdAt', descending: true)
-            .get();
-
-        final paymentSnap = await _db
-            .collection('payment_proofs')
-            .where('type', isEqualTo: 'commission')
-            .where('status', whereIn: ['confirmed', 'settled', 'approved'])
-            .get();
-
-        final snapshot = await _buildSnapshotFromData(txSnap, paymentSnap);
-        if (!controller.isClosed) controller.add(snapshot);
-      } catch (e) {
-        developer.log('Error refreshing commission ledger: $e');
-      }
-    }
-
-    controller = StreamController<CommissionLedgerSnapshot>.broadcast(
-      onListen: () {
-        txSub ??= _db
-            .collection(FirestorePaths.transactionsCol)
-            .snapshots()
-            .listen((_) => refresh());
-        paySub ??= _db
-            .collection('payment_proofs')
-            .where('type', isEqualTo: 'commission')
-            .snapshots()
-            .listen((_) => refresh());
-        refresh();
-      },
-      onCancel: () {
-        txSub?.cancel();
-        paySub?.cancel();
-        txSub = null;
-        paySub = null;
-      },
-    );
-
-    return controller.stream;
+    return _db.collection(FirestorePaths.transactionsCol)
+        .snapshots()
+        .asyncMap((snap) => _buildSnapshotFromData(snap));
   }
 
   Future<CommissionLedgerSnapshot> _buildSnapshotFromData(
-    QuerySnapshot<Map<String, dynamic>> txSnap, 
-    QuerySnapshot<Map<String, dynamic>> paymentSnap
+    QuerySnapshot<Map<String, dynamic>> txSnap
   ) async {
     final allTxs = txSnap.docs.map((d) => TransactionModel.fromMap(d.id, d.data())).toList();
-    final payments = paymentSnap.docs.map((d) => PaymentProofModel.fromMap(d.id, d.data())).toList();
 
     double collectedThisMonth = 0;
-    double grandTotalCollected = payments.fold(0.0, (sum, p) => sum + p.amount);
+    double grandTotalCollected = 0;
     final now = DateTime.now();
 
-    for (final p in payments) {
-      final date = p.confirmedAt ?? p.createdAt;
-      if (date.year == now.year && date.month == now.month) {
-        collectedThisMonth += p.amount;
+    final dataBySupplier = <String, Map<String, dynamic>>{};
+    
+    for (final tx in allTxs) {
+      if (tx.isSettled) {
+        grandTotalCollected += tx.commissionAmount;
+        final settledAt = tx.settledAt ?? tx.createdAt;
+        if (settledAt.year == now.year && settledAt.month == now.month) {
+          collectedThisMonth += tx.commissionAmount;
+        }
+      }
+
+      if (tx.isUnsettled) {
+        dataBySupplier.putIfAbsent(tx.supplierUid, () => {'generated': 0.0, 'orders': 0, 'txIds': <String>[]});
+        dataBySupplier[tx.supplierUid]!['generated'] += tx.commissionAmount;
+        dataBySupplier[tx.supplierUid]!['orders'] += 1;
+        dataBySupplier[tx.supplierUid]!['txIds'].add(tx.txId);
       }
     }
 
-    final dataBySupplier = <String, Map<String, dynamic>>{};
-    for (final tx in allTxs) {
-      dataBySupplier.putIfAbsent(tx.supplierUid, () => {'generated': 0.0, 'orders': 0, 'txIds': <String>[]});
-      dataBySupplier[tx.supplierUid]!['generated'] += tx.commissionAmount;
-      dataBySupplier[tx.supplierUid]!['orders'] += 1;
-      dataBySupplier[tx.supplierUid]!['txIds'].add(tx.txId);
-    }
-
-    final paymentsBySupplier = <String, double>{};
-    for (final p in payments) {
-      paymentsBySupplier[p.payerId] = (paymentsBySupplier[p.payerId] ?? 0.0) + p.amount;
+    final proofSnap = await _db.collection('payment_proofs')
+        .where('status', isEqualTo: 'confirmed')
+        .get();
+    final paidBySupplier = <String, double>{};
+    for (final doc in proofSnap.docs) {
+      final p = doc.data();
+      final payerId = (p['payerId'] ?? p['supplierUid'] ?? '').toString();
+      final amt = (p['amount'] as num?)?.toDouble() ?? 0.0;
+      if (payerId.isNotEmpty) {
+        paidBySupplier[payerId] = (paidBySupplier[payerId] ?? 0.0) + amt;
+        grandTotalCollected += amt;
+        final confirmedAt = (p['confirmedAt'] as Timestamp?)?.toDate() ?? now;
+        if (confirmedAt.year == now.year && confirmedAt.month == now.month) {
+          collectedThisMonth += amt;
+        }
+      }
     }
 
     final suppliers = <SupplierUnsettledSummary>[];
     for (final uid in dataBySupplier.keys) {
-      final totalGenerated = dataBySupplier[uid]!['generated'] as double;
-      final totalPaid = paymentsBySupplier[uid] ?? 0.0;
-      final netOwed = totalGenerated - totalPaid;
+      final generated = dataBySupplier[uid]!['generated'] as double;
+      final paid = paidBySupplier[uid] ?? 0.0;
+      final netOwed = generated - paid;
 
       if (netOwed > 0.01) {
         // Fetch name
@@ -196,7 +167,7 @@ class TransactionRepository {
     }
 
     suppliers.sort((a, b) => b.unsettledAmount.compareTo(a.unsettledAmount));
-    final outstandingThisMonth = suppliers.fold(0.0, (sum, s) => sum + s.unsettledAmount);
+    final outstandingThisMonth = suppliers.fold(0.0, (acc, s) => acc + s.unsettledAmount);
 
     return CommissionLedgerSnapshot(
       outstandingThisMonth: outstandingThisMonth,
@@ -241,39 +212,5 @@ class TransactionRepository {
     final parts = month.split('-');
     final y = int.parse(parts[0]); final m = int.parse(parts[1]);
     return DateTime(m == 12 ? y + 1 : y, m == 12 ? 1 : m + 1, 1);
-  }
-
-  /// Soft-delete: Hide transaction for current user
-  Future<void> hideTransactionForUser(String txId, String userId) async {
-    await _db.collection(FirestorePaths.transactionsCol).doc(txId).update({
-      'hiddenBy': FieldValue.arrayUnion([userId]),
-    });
-  }
-
-  /// Bulk soft-delete transactions
-  Future<void> hideTransactionsForUser(List<String> txIds, String userId) async {
-    final batch = _db.batch();
-    for (final id in txIds) {
-      batch.update(_db.collection(FirestorePaths.transactionsCol).doc(id), {
-        'hiddenBy': FieldValue.arrayUnion([userId]),
-      });
-    }
-    await batch.commit();
-  }
-
-  /// Clear entire payment history for supplier
-  Future<void> hideAllPaymentProofsForUser(String supplierUid) async {
-    final snap = await _db
-        .collection('payment_proofs')
-        .where('payerId', isEqualTo: supplierUid)
-        .get();
-
-    final batch = _db.batch();
-    for (final doc in snap.docs) {
-      batch.update(doc.reference, {
-        'hiddenBy': FieldValue.arrayUnion([supplierUid]),
-      });
-    }
-    await batch.commit();
   }
 }

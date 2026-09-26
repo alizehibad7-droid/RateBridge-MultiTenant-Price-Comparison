@@ -12,7 +12,6 @@ class AdminStatCard extends StatelessWidget {
   final String label;
   final String value;
   final Color color;
-  final VoidCallback? onTap;
 
   const AdminStatCard({
     super.key,
@@ -20,57 +19,37 @@ class AdminStatCard extends StatelessWidget {
     required this.label,
     required this.value,
     this.color = AdminColors.amber,
-    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    final double screenWidth = MediaQuery.of(context).size.width;
-    final bool isMobile = screenWidth < 600;
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          padding: EdgeInsets.symmetric(
-            horizontal: isMobile ? 12 : 16,
-            vertical: isMobile ? 10 : 16,
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: AdminTheme.cardDecoration(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: color, size: 18),
           ),
-          decoration: AdminTheme.cardDecoration(),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                width: isMobile ? 28 : 36,
-                height: isMobile ? 28 : 36,
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(isMobile ? 6 : 10),
-                ),
-                child: Icon(icon, color: color, size: isMobile ? 14 : 18),
-              ),
-              SizedBox(height: isMobile ? 6 : 12),
-              Text(
-                value,
-                style: GoogleFonts.plusJakartaSans(
-                  fontSize: isMobile ? 18 : 24,
-                  fontWeight: FontWeight.w800,
-                  color: AdminColors.navy,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                label, 
-                style: AdminTheme.mutedStyle(size: isMobile ? 9 : 11).copyWith(fontWeight: FontWeight.w600),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
+          const SizedBox(height: 12),
+          Text(
+            value,
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 24,
+              fontWeight: FontWeight.w800,
+              color: AdminColors.navy,
+            ),
           ),
-        ),
+          const SizedBox(height: 2),
+          Text(label, style: AdminTheme.mutedStyle(size: 11).copyWith(fontWeight: FontWeight.w600)),
+        ],
       ),
     );
   }
@@ -93,31 +72,23 @@ class AdminSectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final double screenWidth = MediaQuery.of(context).size.width;
-    final bool isMobile = screenWidth < 600;
-
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Row(
           children: [
             if (icon != null) ...[
-              Icon(icon, size: isMobile ? 18 : 20, color: AdminColors.navy),
+              Icon(icon, size: 20, color: AdminColors.navy),
               const SizedBox(width: 8),
             ],
-            Text(title, style: AdminTheme.titleStyle(size: isMobile ? 14 : 16)),
+            Text(title, style: AdminTheme.titleStyle(size: 16)),
           ],
         ),
         if (actionLabel != null)
           TextButton.icon(
             onPressed: onAction,
-            icon: Icon(Icons.arrow_forward_rounded, size: isMobile ? 12 : 14),
-            label: Text(actionLabel!, style: TextStyle(fontSize: isMobile ? 11 : 13)),
-            style: TextButton.styleFrom(
-              padding: isMobile ? const EdgeInsets.symmetric(horizontal: 8) : null,
-              minimumSize: isMobile ? Size.zero : null,
-              tapTargetSize: isMobile ? MaterialTapTargetSize.shrinkWrap : null,
-            ),
+            icon: const Icon(Icons.arrow_forward_rounded, size: 14),
+            label: Text(actionLabel!),
           ),
       ],
     );
@@ -154,16 +125,13 @@ class StatusChip extends StatelessWidget {
         children: [
           Icon(statusIcon, size: 10, color: style.fg),
           const SizedBox(width: 4),
-          Flexible(
-            child: Text(
-              label.toUpperCase(),
-              style: GoogleFonts.plusJakartaSans(
-                color: style.fg,
-                fontSize: 9,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 0.5,
-              ),
-              overflow: TextOverflow.ellipsis,
+          Text(
+            label.toUpperCase(),
+            style: GoogleFonts.plusJakartaSans(
+              color: style.fg,
+              fontSize: 9,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.5,
             ),
           ),
         ],
@@ -280,35 +248,32 @@ class ApprovalActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final double screenWidth = MediaQuery.of(context).size.width;
-    final bool isMobile = screenWidth < 600;
-
     return Row(
       children: [
         Expanded(
           child: OutlinedButton.icon(
             onPressed: isLoading ? null : () => _showRejectDialog(context),
-            icon: Icon(Icons.close_rounded, size: isMobile ? 16 : 18),
-            label: Text('REJECT', style: TextStyle(fontSize: isMobile ? 11 : 13)),
-            style: AdminTheme.destructiveButtonStyle(height: isMobile ? 40 : 46),
+            icon: const Icon(Icons.close_rounded, size: 18),
+            label: const Text('REJECT'),
+            style: AdminTheme.destructiveButtonStyle(height: 46),
           ),
         ),
-        SizedBox(width: isMobile ? 8 : 12),
+        const SizedBox(width: 12),
         Expanded(
           child: ElevatedButton.icon(
             onPressed: isLoading ? null : onApprove,
             icon: isLoading
-                ? SizedBox(
-                    width: isMobile ? 14 : 18,
-                    height: isMobile ? 14 : 18,
-                    child: const CircularProgressIndicator(
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
                       color: Colors.white,
                       strokeWidth: 2,
                     ),
                   )
-                : Icon(Icons.check_rounded, size: isMobile ? 16 : 18),
-            label: Text('APPROVE', style: TextStyle(fontSize: isMobile ? 11 : 13)),
-            style: AdminTheme.primaryButtonStyle(height: isMobile ? 40 : 46).copyWith(
+                : const Icon(Icons.check_rounded, size: 18),
+            label: const Text('APPROVE'),
+            style: AdminTheme.primaryButtonStyle(height: 46).copyWith(
               backgroundColor: WidgetStateProperty.all(AdminColors.green),
             ),
           ),
@@ -331,16 +296,13 @@ class AdminApprovalSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final double screenWidth = MediaQuery.of(context).size.width;
-    final bool isMobile = screenWidth < 600;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(title.toUpperCase(), style: AdminTheme.sectionHeaderStyle(size: isMobile ? 10 : 11)),
+        AdminSectionLabel(title),
         const SizedBox(height: 12),
         Container(
-          padding: EdgeInsets.all(isMobile ? 10 : 12),
+          padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             color: AdminColors.screenBg.withValues(alpha: 0.5),
             borderRadius: BorderRadius.circular(10),
@@ -368,9 +330,6 @@ class AdminDetailRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final double screenWidth = MediaQuery.of(context).size.width;
-    final bool isMobile = screenWidth < 600;
-
     final display = value.trim().isEmpty ? 'Not Provided' : value.trim();
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
@@ -378,8 +337,8 @@ class AdminDetailRow extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: isMobile ? 90 : 120,
-            child: Text(label, style: AdminTheme.mutedStyle(size: isMobile ? 10 : 11).copyWith(fontWeight: FontWeight.w600)),
+            width: 120,
+            child: Text(label, style: AdminTheme.mutedStyle(size: 11).copyWith(fontWeight: FontWeight.w600)),
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -388,7 +347,7 @@ class AdminDetailRow extends StatelessWidget {
               maxLines: maxLines,
               overflow: TextOverflow.ellipsis,
               style: GoogleFonts.plusJakartaSans(
-                fontSize: isMobile ? 11 : 12,
+                fontSize: 12,
                 fontWeight: FontWeight.w700,
                 color: AdminColors.navy,
               ),
@@ -413,11 +372,8 @@ class AdminChipList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final double screenWidth = MediaQuery.of(context).size.width;
-    final bool isMobile = screenWidth < 600;
-
     if (items.isEmpty) {
-      return Text('None declared', style: AdminTheme.mutedStyle(size: isMobile ? 11 : 12).copyWith(fontStyle: FontStyle.italic));
+      return Text('None declared', style: AdminTheme.mutedStyle(size: 12).copyWith(fontStyle: FontStyle.italic));
     }
     final chipColor = color ?? AdminColors.navy;
     return Wrap(
@@ -425,7 +381,7 @@ class AdminChipList extends StatelessWidget {
       runSpacing: 6,
       children: items.map((item) {
         return Container(
-          padding: EdgeInsets.symmetric(horizontal: isMobile ? 8 : 10, vertical: isMobile ? 3 : 4),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
           decoration: BoxDecoration(
             color: chipColor.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(6),
@@ -434,7 +390,7 @@ class AdminChipList extends StatelessWidget {
           child: Text(
             item,
             style: GoogleFonts.plusJakartaSans(
-              fontSize: isMobile ? 9 : 10,
+              fontSize: 10,
               fontWeight: FontWeight.w800,
               color: chipColor,
               letterSpacing: 0.3,
@@ -459,9 +415,6 @@ class AdminDocumentThumbnail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final double screenWidth = MediaQuery.of(context).size.width;
-    final bool isMobile = screenWidth < 600;
-
     final hasImage = imageUrl != null && imageUrl!.trim().isNotEmpty;
     return Expanded(
       child: Column(
@@ -469,14 +422,14 @@ class AdminDocumentThumbnail extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(Icons.description_rounded, size: isMobile ? 10 : 12, color: AdminColors.textGrey),
+              const Icon(Icons.description_rounded, size: 12, color: AdminColors.textGrey),
               const SizedBox(width: 4),
               Expanded(
                 child: Text(
                   label.toUpperCase(),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: AdminTheme.mutedStyle(size: isMobile ? 8 : 10).copyWith(fontWeight: FontWeight.w800, letterSpacing: 0.5),
+                  style: AdminTheme.mutedStyle(size: 10).copyWith(fontWeight: FontWeight.w800, letterSpacing: 0.5),
                 ),
               ),
             ],
@@ -486,7 +439,7 @@ class AdminDocumentThumbnail extends StatelessWidget {
             aspectRatio: 16 / 10,
             child: Material(
               color: AdminColors.screenBg,
-              borderRadius: BorderRadius.circular(isMobile ? 8 : 10),
+              borderRadius: BorderRadius.circular(10),
               clipBehavior: Clip.antiAlias,
               child: InkWell(
                 onTap: hasImage
@@ -498,7 +451,7 @@ class AdminDocumentThumbnail extends StatelessWidget {
                 child: DecoratedBox(
                   decoration: BoxDecoration(
                     border: Border.all(color: AdminColors.border),
-                    borderRadius: BorderRadius.circular(isMobile ? 8 : 10),
+                    borderRadius: BorderRadius.circular(10),
                   ),
                   child: hasImage
                       ? Stack(
@@ -521,10 +474,10 @@ class AdminDocumentThumbnail extends StatelessWidget {
                                   color: Colors.black54,
                                   borderRadius: BorderRadius.circular(6),
                                 ),
-                                child: Icon(
+                                child: const Icon(
                                   Icons.zoom_in_rounded,
                                   color: Colors.white,
-                                  size: isMobile ? 12 : 16,
+                                  size: 16,
                                 ),
                               ),
                             ),
@@ -546,17 +499,14 @@ class _MissingDocPlaceholder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final double screenWidth = MediaQuery.of(context).size.width;
-    final bool isMobile = screenWidth < 600;
-
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(Icons.image_not_supported_rounded,
-              size: isMobile ? 20 : 24, color: AdminColors.textGrey.withValues(alpha: 0.5)),
+              size: 24, color: AdminColors.textGrey.withValues(alpha: 0.5)),
           const SizedBox(height: 4),
-          Text('NO DOCUMENT', style: AdminTheme.mutedStyle(size: isMobile ? 8 : 9).copyWith(fontWeight: FontWeight.bold)),
+          Text('NO DOCUMENT', style: AdminTheme.mutedStyle(size: 9).copyWith(fontWeight: FontWeight.bold)),
         ],
       ),
     );
@@ -589,42 +539,23 @@ class AdminDocumentThumbnailRow extends StatelessWidget {
 /// White card container matching admin panel style.
 class AdminCard extends StatelessWidget {
   final Widget child;
-  final EdgeInsetsGeometry? padding;
+  final EdgeInsetsGeometry padding;
   final EdgeInsetsGeometry? margin;
-  final Color? color;
-  final String? title;
 
   const AdminCard({
     super.key,
     required this.child,
-    this.padding,
+    this.padding = const EdgeInsets.all(20),
     this.margin,
-    this.color,
-    this.title,
   });
 
   @override
   Widget build(BuildContext context) {
-    final double screenWidth = MediaQuery.of(context).size.width;
-    final bool isMobile = screenWidth < 600;
-    
-    final effectivePadding = padding ?? EdgeInsets.all(isMobile ? 14 : 20);
-
     return Container(
       margin: margin,
-      padding: effectivePadding,
-      decoration: AdminTheme.cardDecoration().copyWith(color: color),
-      child: title == null
-          ? child
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(title!, style: AdminTheme.titleStyle(size: isMobile ? 15 : 16)),
-                SizedBox(height: isMobile ? 12 : 16),
-                child,
-              ],
-            ),
+      padding: padding,
+      decoration: AdminTheme.cardDecoration(),
+      child: child,
     );
   }
 }

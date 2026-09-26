@@ -2,7 +2,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../viewmodels/supplier_viewmodel.dart';
 import '../../viewmodels/auth_viewmodel.dart';
 import '../../theme/supplier_theme.dart';
@@ -24,22 +23,11 @@ class SupplierPendingView extends StatelessWidget {
 
         return Scaffold(
           backgroundColor: FieldColors.screenBackground,
-          body: StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance.collection('appeals')
-                .where('uid', isEqualTo: viewModel.supplierUid)
-                .where('status', isEqualTo: 'pending')
-                .limit(1)
-                .snapshots(),
-            builder: (context, appealSnap) {
-              final hasPendingAppeal = appealSnap.hasData && appealSnap.data!.docs.isNotEmpty;
-
-              return Padding(
-                padding: const EdgeInsets.all(32.0),
-                child: viewModel.status == 'rejected'
-                    ? (hasPendingAppeal ? _buildAppealPendingState(context, viewModel) : _buildRejectedState(context, viewModel))
-                    : _buildPendingState(context, viewModel),
-              );
-            }
+          body: Padding(
+            padding: const EdgeInsets.all(32.0),
+            child: viewModel.status == 'rejected'
+                ? _buildRejectedState(context, viewModel)
+                : _buildPendingState(context, viewModel),
           ),
         );
       },
@@ -84,7 +72,7 @@ class SupplierPendingView extends StatelessWidget {
         SizedBox(
           width: double.infinity,
           child: OutlinedButton(
-            onPressed: () => viewModel.loadProfile(),
+            onPressed: () => viewModel.loadProfile(), // Logic for signout is usually in AuthVM
             child: const Text('Refresh Status'),
           ),
         ),
@@ -133,51 +121,9 @@ class SupplierPendingView extends StatelessWidget {
         ),
         const SizedBox(height: 32),
         ElevatedButton(
-          onPressed: () {
-            viewModel.clearAppealState();
-            context.push(RouteNames.supplierAppeal);
-          },
+          onPressed: () => context.push(RouteNames.supplierAppeal),
           style: ElevatedButton.styleFrom(minimumSize: const Size(double.infinity, 56)),
           child: const Text('SUBMIT APPEAL'),
-        ),
-        const SizedBox(height: 16),
-        TextButton(
-          onPressed: () async {
-            await context.read<AuthViewModel>().signOut();
-            if (context.mounted) {
-              context.go(RouteNames.roleSelection);
-            }
-          },
-          child: const Text('Sign Out', style: TextStyle(color: FieldColors.statusDanger)),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildAppealPendingState(BuildContext context, SupplierViewModel viewModel) {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        const Icon(Icons.hourglass_top_rounded, size: 80, color: FieldColors.accentAmber),
-        const SizedBox(height: 24),
-        Text(
-          'Appeal Under Review',
-          style: FieldTypography.headlineMedium,
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: 16),
-        Text(
-          'Your appeal has been submitted and is currently being reviewed by our administration. Please check back later.',
-          textAlign: TextAlign.center,
-          style: FieldTypography.bodyLarge.copyWith(color: FieldColors.textSecondary),
-        ),
-        const SizedBox(height: 40),
-        SizedBox(
-          width: double.infinity,
-          child: OutlinedButton(
-            onPressed: () => viewModel.loadProfile(),
-            child: const Text('Refresh Status'),
-          ),
         ),
         const SizedBox(height: 16),
         TextButton(

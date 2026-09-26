@@ -1,7 +1,5 @@
 // MVVM: View — no business logic
 import 'dart:io';
-import 'dart:developer' as developer;
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
@@ -20,33 +18,15 @@ class _SupplierAppealViewState extends State<SupplierAppealView> {
   final _messageController = TextEditingController();
   final _phoneController = TextEditingController();
   File? _selectedFile;
-  Uint8List? _webImage;
 
   Future<void> _pickDocument() async {
     final picker = ImagePicker();
     final image = await picker.pickImage(source: ImageSource.gallery);
     if (image != null) {
-      if (kIsWeb) {
-        final bytes = await image.readAsBytes();
-        setState(() {
-          _webImage = bytes;
-          _selectedFile = null;
-        });
-      } else {
-        setState(() {
-          _selectedFile = File(image.path);
-          _webImage = null;
-        });
-      }
+      setState(() {
+        _selectedFile = File(image.path);
+      });
     }
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      Provider.of<SupplierViewModel>(context, listen: false).clearAppealState();
-    });
   }
 
   @override
@@ -92,7 +72,6 @@ class _SupplierAppealViewState extends State<SupplierAppealView> {
                 TextFormField(
                   controller: _messageController,
                   maxLines: 6,
-                  enabled: !viewModel.isLoading,
                   decoration: const InputDecoration(
                     labelText: 'Appeal Message',
                     hintText: 'Describe why your account should be reconsidered...',
@@ -103,7 +82,6 @@ class _SupplierAppealViewState extends State<SupplierAppealView> {
                 const SizedBox(height: 20),
                 TextFormField(
                   controller: _phoneController,
-                  enabled: !viewModel.isLoading,
                   decoration: const InputDecoration(
                     labelText: 'Contact Phone (Optional)',
                     prefixIcon: Icon(Icons.phone_outlined),
@@ -114,7 +92,7 @@ class _SupplierAppealViewState extends State<SupplierAppealView> {
                 Text('SUPPORTING DOCUMENT', style: FieldTypography.labelSmall),
                 const SizedBox(height: 12),
                 InkWell(
-                  onTap: viewModel.isLoading ? null : _pickDocument,
+                  onTap: _pickDocument,
                   child: Container(
                     height: 150,
                     decoration: BoxDecoration(
@@ -122,7 +100,7 @@ class _SupplierAppealViewState extends State<SupplierAppealView> {
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(color: FieldColors.borderSubtle, style: BorderStyle.solid),
                     ),
-                    child: (_selectedFile == null && _webImage == null)
+                    child: _selectedFile == null
                         ? const Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
@@ -136,58 +114,37 @@ class _SupplierAppealViewState extends State<SupplierAppealView> {
                             children: [
                               ClipRRect(
                                 borderRadius: BorderRadius.circular(16),
-                                child: kIsWeb
-                                  ? Image.memory(_webImage!, fit: BoxFit.cover)
-                                  : Image.file(_selectedFile!, fit: BoxFit.cover),
+                                child: Image.file(_selectedFile!, fit: BoxFit.cover),
                               ),
-                              if (!viewModel.isLoading)
-                                Positioned(
-                                  right: 8,
-                                  top: 8,
-                                  child: CircleAvatar(
-                                    backgroundColor: FieldColors.statusDanger,
-                                    radius: 14,
-                                    child: IconButton(
-                                      icon: const Icon(Icons.close, size: 14, color: Colors.white),
-                                      onPressed: () => setState(() {
-                                        _selectedFile = null;
-                                        _webImage = null;
-                                      }),
-                                    ),
+                              Positioned(
+                                right: 8,
+                                top: 8,
+                                child: CircleAvatar(
+                                  backgroundColor: FieldColors.statusDanger,
+                                  radius: 14,
+                                  child: IconButton(
+                                    icon: const Icon(Icons.close, size: 14, color: Colors.white),
+                                    onPressed: () => setState(() => _selectedFile = null),
                                   ),
-                                )
+                                ),
+                              )
                             ],
                           ),
                   ),
                 ),
-                if (viewModel.error != null) ...[
-                  const SizedBox(height: 20),
-                  Text(
-                    viewModel.error!,
-                    style: const TextStyle(color: FieldColors.statusDanger, fontSize: 14, fontWeight: FontWeight.w500),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
                 const SizedBox(height: 48),
                 ElevatedButton(
                   onPressed: viewModel.isLoading ? null : () async {
-                    developer.log('[UI] Supplier Appeal: Submit button pressed');
                     if (_formKey.currentState!.validate()) {
-                      developer.log('[UI] Supplier Appeal: Validation passed');
                       await viewModel.submitAppeal(
                         _messageController.text,
                         _selectedFile,
                         _phoneController.text.isEmpty ? null : _phoneController.text,
-                        webBytes: _webImage,
                       );
                     }
                   },
                   child: viewModel.isLoading 
-                    ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                      )
+                    ? const CircularProgressIndicator(color: Colors.white)
                     : const Text('SUBMIT APPEAL'),
                 ),
               ],

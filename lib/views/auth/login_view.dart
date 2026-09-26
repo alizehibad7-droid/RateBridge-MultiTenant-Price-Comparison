@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -43,10 +42,6 @@ class _LoginViewState extends State<LoginView> {
 
   Future<void> _submit(AuthViewModel authVm) async {
     if (!_formKey.currentState!.validate()) return;
-    
-    // Dismiss keyboard on submit
-    FocusScope.of(context).unfocus();
-    
     authVm.clearError();
     final success = await authVm.signIn(
       _emailController.text,
@@ -66,42 +61,8 @@ class _LoginViewState extends State<LoginView> {
         .replaceAll('_', '');
     final status = authVm.user?.status?.toLowerCase();
 
-    // Platform detection
-    final bool isWeb = kIsWeb;
-    final bool isWindows = !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
-    final bool isAndroid = !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
-
-    bool isAllowed = false;
-
-    // Routing logic based on Role + Platform enforcement
-    if (role == 'admin' || role == 'administrator') {
-      if (isWeb || isWindows) {
-        isAllowed = true;
-      }
-    } else if (role == 'ceo' || role == 'supplier' || role == 'fielduser') {
-      if (isAndroid) {
-        isAllowed = true;
-      }
-    } else {
-      // Handle cases with no role or unexpected role
-      if (mounted) {
-        context.push(RouteNames.roleSelection);
-      }
-      return;
-    }
-
-    if (!isAllowed) {
-      // Navigate to professional blocked screen
-      context.go(RouteNames.platformBlocked);
-      return;
-    }
-
-    if (!mounted) return;
-
-    // Navigation for authorized users
     switch (role) {
       case 'admin':
-      case 'administrator':
         context.go(RouteNames.adminDashboard);
         break;
       case 'ceo':
@@ -126,11 +87,12 @@ class _LoginViewState extends State<LoginView> {
             break;
           case 'suspended':
             context.go(RouteNames.suspended);
-            break;
           default:
             context.go(RouteNames.pendingApproval);
         }
         break;
+      default:
+        context.push(RouteNames.roleSelection);
     }
   }
 
@@ -244,7 +206,6 @@ class _LoginViewState extends State<LoginView> {
                               TextFormField(
                                 controller: _emailController,
                                 keyboardType: TextInputType.emailAddress,
-                                textInputAction: TextInputAction.next,
                                 validator: _validateEmail,
                                 style: textTheme.bodyLarge,
                                 decoration: const InputDecoration(
@@ -266,8 +227,6 @@ class _LoginViewState extends State<LoginView> {
                               TextFormField(
                                 controller: _passwordController,
                                 obscureText: _obscurePassword,
-                                textInputAction: TextInputAction.done,
-                                onFieldSubmitted: (_) => _submit(authVm),
                                 validator: _validatePassword,
                                 style: textTheme.bodyLarge,
                                 decoration: InputDecoration(

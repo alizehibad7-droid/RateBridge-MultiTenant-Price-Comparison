@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 /// Central back-navigation for the whole app.
@@ -56,29 +55,27 @@ class AppBackButton extends StatelessWidget {
   }
 }
 
-/// Simple tab index management for IndexedStack shells.
-/// Modified to support "Any non-home tab -> Back -> Home" flow.
+/// History of IndexedStack tab indices so system/browser back can return to
+/// the tab the user actually came from (Field shell, Admin shell).
 class TabHistory {
-  TabHistory({int initial = 0}) : _index = initial;
+  TabHistory({int initial = 0}) : _stack = <int>[initial];
 
-  int _index;
+  final List<int> _stack;
 
-  int get index => _index;
+  int get index => _stack.last;
 
-  /// Can pop if not on the Home tab (index 0).
-  bool get canPop => _index != 0;
+  bool get canPop => _stack.length > 1;
 
   /// Records a tab change. Returns `false` if [index] is already selected.
   bool select(int index) {
-    if (_index == index) return false;
-    _index = index;
+    if (_stack.last == index) return false;
+    _stack.add(index);
     return true;
   }
 
-  /// Returns to Home tab (index 0).
   bool pop() {
     if (!canPop) return false;
-    _index = 0;
+    _stack.removeLast();
     return true;
   }
 }
@@ -99,41 +96,10 @@ class TabHistoryPopScope extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: !history.canPop || AppNavigation.canPop(context),
+      canPop: !history.canPop,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
         if (history.pop()) onChanged();
-      },
-      child: child,
-    );
-  }
-}
-
-/// Intercepts Android back button for top-level routes that act as tabs.
-class RootTabPopScope extends StatelessWidget {
-  const RootTabPopScope({
-    super.key,
-    required this.isHome,
-    required this.homeRoute,
-    required this.child,
-  });
-
-  final bool isHome;
-  final String homeRoute;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return PopScope(
-      canPop: AppNavigation.canPop(context),
-      onPopInvokedWithResult: (didPop, _) {
-        if (didPop) return;
-        if (isHome) {
-          SystemNavigator.pop();
-        } else {
-          // Use go() to switch back to home without adding to stack
-          context.go(homeRoute);
-        }
       },
       child: child,
     );

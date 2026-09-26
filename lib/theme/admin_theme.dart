@@ -14,16 +14,15 @@ import '../utils/app_navigation.dart';
 class AdminColors {
   AdminColors._();
 
-  static const navy = Color(0xFF1E326E); // Synchronized with other panels
-  static const primary = Color(0xFF1E326E);
-  static const amber = Color(0xFFF59E0B);
-  static const darkAmber = Color(0xFFD97706);
-  static const screenBg = Color(0xFFF8FAFC);
-  static const border = Color(0xFFE2E8F0);
-  static const textGrey = Color(0xFF64748B);
-  static const green = Color(0xFF10B981);
-  static const red = Color(0xFFEF4444);
-  static const purple = Color(0xFF8B5CF6);
+  static const navy = Color(0xFF1E326E);
+  static const amber = Color(0xFFFBB03C);
+  static const darkAmber = Color(0xFFB7791F);
+  static const screenBg = Color(0xFFF5F6FA);
+  static const border = Color(0xFFE2E5F0);
+  static const textGrey = Color(0xFF888888);
+  static const green = Color(0xFF1D9E75);
+  static const red = Color(0xFFE25730);
+  static const purple = Color(0xFF6B46C1);
 }
 
 class AdminTheme {
@@ -33,21 +32,21 @@ class AdminTheme {
 
   static BoxDecoration cardDecoration({Color? borderColor}) => BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: borderColor ?? AdminColors.border, width: 1),
+        borderRadius: BorderRadius.circular(12),
+        border: borderColor != null ? Border.all(color: borderColor) : null,
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF0F172A).withValues(alpha: 0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
           ),
         ],
       );
 
-  static TextStyle sectionHeaderStyle({double size = 11}) => _base.copyWith(
-        fontSize: size,
-        fontWeight: FontWeight.w700,
-        letterSpacing: 0.8,
+  static TextStyle sectionHeaderStyle() => _base.copyWith(
+        fontSize: 12,
+        fontWeight: FontWeight.w600,
+        letterSpacing: 0.5,
         color: AdminColors.textGrey,
       );
 
@@ -55,19 +54,16 @@ class AdminTheme {
         fontSize: size,
         fontWeight: FontWeight.w700,
         color: AdminColors.navy,
-        letterSpacing: -0.5,
       );
 
-  static TextStyle bodyStyle({Color? color, double? size, FontWeight? weight}) => _base.copyWith(
-        fontSize: size ?? 13,
+  static TextStyle bodyStyle({Color? color}) => _base.copyWith(
+        fontSize: 14,
         color: color ?? AdminColors.navy,
-        fontWeight: weight ?? FontWeight.w500,
       );
 
-  static TextStyle mutedStyle({double size = 12, FontWeight? weight}) => _base.copyWith(
+  static TextStyle mutedStyle({double size = 13}) => _base.copyWith(
         fontSize: size,
         color: AdminColors.textGrey,
-        fontWeight: weight ?? FontWeight.w500,
       );
 
   static ({Color bg, Color fg}) statusColors(String status) {
@@ -75,35 +71,39 @@ class AdminTheme {
     switch (s) {
       case 'pending':
         return (
-          bg: AdminColors.amber.withValues(alpha: 0.1),
+          bg: AdminColors.amber.withValues(alpha: 0.15),
           fg: AdminColors.darkAmber,
         );
       case 'active':
       case 'confirmed':
-      case 'approved':
         return (
-          bg: AdminColors.green.withValues(alpha: 0.1),
+          bg: AdminColors.green.withValues(alpha: 0.15),
           fg: AdminColors.green,
         );
       case 'settled':
         return (
-          bg: AdminColors.purple.withValues(alpha: 0.1),
+          bg: AdminColors.purple.withValues(alpha: 0.15),
           fg: AdminColors.purple,
         );
       case 'rejected':
       case 'failed':
         return (
-          bg: AdminColors.red.withValues(alpha: 0.1),
+          bg: AdminColors.red.withValues(alpha: 0.15),
           fg: AdminColors.red,
         );
       case 'suspended':
         return (
-          bg: AdminColors.textGrey.withValues(alpha: 0.1),
+          bg: AdminColors.textGrey.withValues(alpha: 0.15),
           fg: AdminColors.textGrey,
+        );
+      case 'approved':
+        return (
+          bg: AdminColors.navy.withValues(alpha: 0.15),
+          fg: AdminColors.navy,
         );
       default:
         return (
-          bg: AdminColors.textGrey.withValues(alpha: 0.1),
+          bg: AdminColors.textGrey.withValues(alpha: 0.15),
           fg: AdminColors.textGrey,
         );
     }
@@ -111,25 +111,25 @@ class AdminTheme {
 
   static InputDecorationThemeData get inputDecorationThemeData {
     final border = OutlineInputBorder(
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(10),
       borderSide: const BorderSide(color: AdminColors.border, width: 1),
     );
     return InputDecorationThemeData(
       filled: true,
-      fillColor: Colors.white,
-      isDense: true,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      fillColor: AdminColors.screenBg,
+      contentPadding:
+          const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       labelStyle: _base.copyWith(
-        fontSize: 12,
+        fontSize: 13,
         fontWeight: FontWeight.w600,
         color: AdminColors.navy,
       ),
-      hintStyle: _base.copyWith(fontSize: 13, color: AdminColors.textGrey),
+      hintStyle: _base.copyWith(fontSize: 14, color: AdminColors.textGrey),
       border: border,
       enabledBorder: border,
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: AdminColors.primary, width: 1.5),
+        borderRadius: BorderRadius.circular(10),
+        borderSide: const BorderSide(color: AdminColors.amber, width: 2),
       ),
     );
   }
@@ -139,10 +139,10 @@ class AdminTheme {
     String? hintText,
     Widget? prefixIcon,
     Widget? suffixIcon,
-    bool isDense = true,
+    bool isDense = false,
   }) {
     final border = OutlineInputBorder(
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(10),
       borderSide: const BorderSide(color: AdminColors.border, width: 1),
     );
     return InputDecoration(
@@ -152,52 +152,49 @@ class AdminTheme {
       suffixIcon: suffixIcon,
       isDense: isDense,
       filled: true,
-      fillColor: Colors.white,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      fillColor: AdminColors.screenBg,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       labelStyle: _base.copyWith(
-        fontSize: 12,
+        fontSize: 13,
         fontWeight: FontWeight.w600,
         color: AdminColors.navy,
       ),
-      hintStyle: _base.copyWith(fontSize: 13, color: AdminColors.textGrey),
+      hintStyle: _base.copyWith(fontSize: 14, color: AdminColors.textGrey),
       border: border,
       enabledBorder: border,
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: AdminColors.primary, width: 1.5),
+        borderRadius: BorderRadius.circular(10),
+        borderSide: const BorderSide(color: AdminColors.amber, width: 2),
       ),
     );
   }
 
-  static ButtonStyle primaryButtonStyle({double? width, double height = 40}) =>
+  static ButtonStyle primaryButtonStyle({double height = 48}) =>
       ElevatedButton.styleFrom(
-        backgroundColor: AdminColors.primary,
+        backgroundColor: AdminColors.amber,
         foregroundColor: Colors.white,
         elevation: 0,
-        minimumSize: Size(width ?? 64, height),
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        textStyle: _base.copyWith(fontSize: 13, fontWeight: FontWeight.w600),
+        minimumSize: Size(double.infinity, height),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        textStyle: _base.copyWith(fontSize: 15, fontWeight: FontWeight.w700),
       );
 
-  static ButtonStyle secondaryButtonStyle({double? width, double height = 40}) =>
+  static ButtonStyle secondaryButtonStyle({double height = 48}) =>
       OutlinedButton.styleFrom(
         foregroundColor: AdminColors.navy,
-        side: const BorderSide(color: AdminColors.border, width: 1.5),
-        minimumSize: Size(width ?? 64, height),
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        textStyle: _base.copyWith(fontSize: 13, fontWeight: FontWeight.w600),
+        side: const BorderSide(color: AdminColors.navy, width: 1.5),
+        minimumSize: Size(double.infinity, height),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        textStyle: _base.copyWith(fontSize: 14, fontWeight: FontWeight.w600),
       );
 
-  static ButtonStyle destructiveButtonStyle({double? width, double height = 40}) =>
+  static ButtonStyle destructiveButtonStyle({double height = 46}) =>
       OutlinedButton.styleFrom(
         foregroundColor: AdminColors.red,
-        side: const BorderSide(color: AdminColors.red, width: 1.2),
-        minimumSize: Size(width ?? 64, height),
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        textStyle: _base.copyWith(fontSize: 13, fontWeight: FontWeight.w600),
+        side: const BorderSide(color: AdminColors.red, width: 1.5),
+        minimumSize: Size(double.infinity, height),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        textStyle: _base.copyWith(fontSize: 14, fontWeight: FontWeight.w600),
       );
 
   static ThemeData get theme => ThemeData(
@@ -206,9 +203,9 @@ class AdminTheme {
         fontFamily: GoogleFonts.plusJakartaSans().fontFamily,
         scaffoldBackgroundColor: AdminColors.screenBg,
         splashColor: Colors.transparent,
-        highlightColor: AdminColors.primary.withValues(alpha: 0.05),
+        highlightColor: AdminColors.amber.withValues(alpha: 0.08),
         colorScheme: const ColorScheme.light(
-          primary: AdminColors.primary,
+          primary: AdminColors.navy,
           onPrimary: Colors.white,
           secondary: AdminColors.amber,
           onSecondary: Colors.white,
@@ -218,45 +215,43 @@ class AdminTheme {
           outline: AdminColors.border,
         ),
         appBarTheme: AppBarTheme(
-          backgroundColor: Colors.white,
-          foregroundColor: AdminColors.navy,
+          backgroundColor: AdminColors.navy,
+          foregroundColor: Colors.white,
           elevation: 0,
           scrolledUnderElevation: 0,
           surfaceTintColor: Colors.transparent,
           centerTitle: false,
-          systemOverlayStyle: SystemUiOverlayStyle.dark,
+          systemOverlayStyle: SystemUiOverlayStyle.light,
           titleTextStyle: GoogleFonts.plusJakartaSans(
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
-            color: AdminColors.navy,
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+            color: Colors.white,
           ),
-          iconTheme: const IconThemeData(color: AdminColors.navy),
-          actionsIconTheme: const IconThemeData(color: AdminColors.navy),
+          iconTheme: const IconThemeData(color: Colors.white),
+          actionsIconTheme: const IconThemeData(color: Colors.white),
         ),
         cardTheme: CardThemeData(
           color: Colors.white,
           elevation: 0,
           shadowColor: Colors.transparent,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-            side: const BorderSide(color: AdminColors.border, width: 1),
+            borderRadius: BorderRadius.circular(12),
           ),
         ),
         dividerTheme: const DividerThemeData(
           color: AdminColors.border,
           thickness: 1,
-          space: 1,
         ),
         elevatedButtonTheme: ElevatedButtonThemeData(
-          style: primaryButtonStyle(width: null),
+          style: primaryButtonStyle(),
         ),
-        filledButtonTheme: FilledButtonThemeData(style: primaryButtonStyle(width: null)),
+        filledButtonTheme: FilledButtonThemeData(style: primaryButtonStyle()),
         outlinedButtonTheme: OutlinedButtonThemeData(
-          style: secondaryButtonStyle(width: null),
+          style: secondaryButtonStyle(),
         ),
         textButtonTheme: TextButtonThemeData(
           style: TextButton.styleFrom(
-            foregroundColor: AdminColors.primary,
+            foregroundColor: AdminColors.amber,
             textStyle: GoogleFonts.plusJakartaSans(
               fontSize: 13,
               fontWeight: FontWeight.w600,
@@ -265,10 +260,9 @@ class AdminTheme {
         ),
         inputDecorationTheme: inputDecorationThemeData,
         tabBarTheme: TabBarThemeData(
-          labelColor: AdminColors.primary,
-          unselectedLabelColor: AdminColors.textGrey,
-          indicatorColor: AdminColors.primary,
-          indicatorSize: TabBarIndicatorSize.label,
+          labelColor: AdminColors.amber,
+          unselectedLabelColor: Colors.white70,
+          indicatorColor: AdminColors.amber,
           labelStyle: GoogleFonts.plusJakartaSans(
             fontSize: 13,
             fontWeight: FontWeight.w700,
@@ -279,16 +273,14 @@ class AdminTheme {
           ),
         ),
         progressIndicatorTheme: const ProgressIndicatorThemeData(
-          color: AdminColors.primary,
-          strokeWidth: 2.5,
+          color: AdminColors.amber,
         ),
         snackBarTheme: SnackBarThemeData(
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-          backgroundColor: AdminColors.navy,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ),
         dialogTheme: DialogThemeData(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           titleTextStyle: GoogleFonts.plusJakartaSans(
             fontSize: 18,
             fontWeight: FontWeight.w700,
@@ -297,24 +289,24 @@ class AdminTheme {
         ),
         bottomNavigationBarTheme: BottomNavigationBarThemeData(
           backgroundColor: Colors.white,
-          selectedItemColor: AdminColors.primary,
+          selectedItemColor: AdminColors.navy,
           unselectedItemColor: AdminColors.textGrey,
           type: BottomNavigationBarType.fixed,
-          elevation: 10,
+          elevation: 8,
           selectedLabelStyle: GoogleFonts.plusJakartaSans(
             fontSize: 11,
             fontWeight: FontWeight.w700,
           ),
-          unselectedLabelStyle: GoogleFonts.plusJakartaSans(fontSize: 11, fontWeight: FontWeight.w500),
+          unselectedLabelStyle: GoogleFonts.plusJakartaSans(fontSize: 11),
         ),
         textTheme: TextTheme(
-          headlineMedium: titleStyle(size: 24),
+          headlineMedium: titleStyle(size: 26),
           titleLarge: titleStyle(size: 18),
-          titleMedium: titleStyle(size: 15),
+          titleMedium: titleStyle(size: 16),
           bodyLarge: bodyStyle(),
           bodyMedium: bodyStyle(color: AdminColors.textGrey),
           labelLarge: _base.copyWith(
-            fontSize: 12,
+            fontSize: 13,
             fontWeight: FontWeight.w600,
             color: AdminColors.navy,
           ),
@@ -324,10 +316,9 @@ class AdminTheme {
   static Widget wrap(Widget child) => Theme(data: theme, child: child);
 }
 
-/// Professional AppBar with integrated progress loading.
+/// Navy AppBar — standard across admin screens. Includes notification icon by default.
 class AdminAppBar extends StatelessWidget implements PreferredSizeWidget {
   final String? title;
-  final Widget? titleWidget;
   final List<Widget>? actions;
   final PreferredSizeWidget? bottom;
   final bool automaticallyImplyLeading;
@@ -337,13 +328,12 @@ class AdminAppBar extends StatelessWidget implements PreferredSizeWidget {
   const AdminAppBar({
     super.key,
     this.title,
-    this.titleWidget,
     this.actions,
     this.bottom,
     this.automaticallyImplyLeading = true,
     this.showNotificationIcon = true,
     this.leading,
-  }) : assert(title != null || titleWidget != null);
+  });
 
   @override
   Size get preferredSize =>
@@ -361,22 +351,22 @@ class AdminAppBar extends StatelessWidget implements PreferredSizeWidget {
       allActions.add(
         NotificationBadgeIcon(
           unreadCount: notifVm.unreadCount,
-          iconColor: AdminColors.navy,
+          iconColor: Colors.white,
           onPressed: () => context.push(
             isAdmin ? RouteNames.adminNotifications : RouteNames.ceoNotifications,
           ),
         ),
       );
-      allActions.add(const SizedBox(width: 12));
+      allActions.add(const SizedBox(width: 8));
     }
 
     return AppBar(
       automaticallyImplyLeading: false,
       leading: leading ??
           (automaticallyImplyLeading
-              ? AppNavigation.leading(context, color: AdminColors.navy)
+              ? AppNavigation.leading(context)
               : null),
-      title: titleWidget ?? (title != null ? Text(title!) : null),
+      title: title != null ? Text(title!) : null,
       actions: allActions,
       bottom: bottom,
     );

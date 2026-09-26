@@ -39,7 +39,6 @@ class AuthViewModel extends ChangeNotifier {
   String? inviteError;
   String? registrationEmailError;
   bool isCheckingEmail = false;
-  bool _isRegistering = false;
 
   AuthViewModel(this._userRepo, this._authService, [this._notificationService]) {
     _initSession();
@@ -67,7 +66,6 @@ class AuthViewModel extends ChangeNotifier {
   String? get role => _user?.role;
 
   Future<void> _initSession() async {
-    if (_isRegistering) return;
     try {
       final firebaseUser = _authService.currentUser;
       if (firebaseUser != null) {
@@ -111,7 +109,6 @@ class AuthViewModel extends ChangeNotifier {
         notifyListeners();
       }
     } catch (e) {
-      if (_isRegistering) return;
       _status = AuthStatus.unauthenticated;
       _errorMessage = _mapAuthError(e);
       notifyListeners();
@@ -244,7 +241,6 @@ class AuthViewModel extends ChangeNotifier {
     Uint8List? registrationCertBytes,
     Uint8List? officePhotoBytes,
   }) async {
-    _isRegistering = true;
     _status = AuthStatus.loading;
     _errorMessage = null;
     isRegistered = false;
@@ -351,7 +347,7 @@ class AuthViewModel extends ChangeNotifier {
       
       // Notify Admins
       if (_notificationService != null) {
-        await _notificationService!.notifyAllAdminsOfNewRegistration(
+        await _notificationService.notifyAllAdminsOfNewRegistration(
           name: fullName.trim(),
           role: 'CEO',
           targetUid: uid,
@@ -370,7 +366,6 @@ class AuthViewModel extends ChangeNotifier {
       _status = AuthStatus.error;
       _errorMessage = _mapAuthError(e);
     } finally {
-      _isRegistering = false;
       notifyListeners();
     }
   }
@@ -395,7 +390,6 @@ class AuthViewModel extends ChangeNotifier {
     Uint8List? businessLicenseBytes,
     Uint8List? certificationBytes,
   }) async {
-    _isRegistering = true;
     _status = AuthStatus.loading;
     _errorMessage = null;
     isRegistered = false;
@@ -524,7 +518,7 @@ class AuthViewModel extends ChangeNotifier {
 
       // Notify Admins
       if (_notificationService != null) {
-        await _notificationService!.notifyAllAdminsOfNewRegistration(
+        await _notificationService.notifyAllAdminsOfNewRegistration(
           name: businessName.trim(),
           role: 'Supplier',
           targetUid: uid,
@@ -544,7 +538,6 @@ class AuthViewModel extends ChangeNotifier {
       _status = AuthStatus.error;
       _errorMessage = _mapAuthError(e);
     } finally {
-      _isRegistering = false;
       notifyListeners();
     }
   }
@@ -823,7 +816,6 @@ class AuthViewModel extends ChangeNotifier {
       _cancelUserSubscription();
       await _userRepo.logout();
       _user = null;
-      _errorMessage = null; // Clear error message on logout
       _status = AuthStatus.unauthenticated;
       isRegistered = false;
       pendingInviteCompanyId = null;
@@ -850,14 +842,6 @@ class AuthViewModel extends ChangeNotifier {
       _errorMessage = e.toString();
       notifyListeners();
     }
-  }
-
-  void setErrorMessage(String? message) {
-    _errorMessage = message;
-    if (message != null) {
-      _status = AuthStatus.error;
-    }
-    notifyListeners();
   }
 
   void clearError() {

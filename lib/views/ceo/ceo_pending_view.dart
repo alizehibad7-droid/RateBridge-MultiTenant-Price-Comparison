@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../viewmodels/auth_viewmodel.dart';
 import '../../viewmodels/ceo_viewmodel.dart';
 import '../../models/user_model.dart';
@@ -41,24 +40,13 @@ class _CeoPendingViewState extends State<CeoPendingView> {
 
         return Scaffold(
           backgroundColor: CeoColors.screenBg,
-          body: StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance.collection('appeals')
-                .where('uid', isEqualTo: user?.uid)
-                .where('status', isEqualTo: 'pending')
-                .limit(1)
-                .snapshots(),
-            builder: (context, appealSnap) {
-              final hasPendingAppeal = appealSnap.hasData && appealSnap.data!.docs.isNotEmpty;
-
-              return SafeArea(
-                child: Padding(
-                  padding: const EdgeInsets.all(32.0),
-                  child: user?.status == 'rejected'
-                      ? (hasPendingAppeal ? _buildAppealPendingState(context, authVM) : _buildRejectedState(context, authVM, user!))
-                      : _buildPendingState(context, authVM, user),
-                ),
-              );
-            }
+          body: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(32.0),
+              child: user?.status == 'rejected'
+                  ? _buildRejectedState(context, authVM, user!)
+                  : _buildPendingState(context, authVM, user),
+            ),
           ),
         );
       },
@@ -191,9 +179,11 @@ class _CeoPendingViewState extends State<CeoPendingView> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 'REASON:',
-                style: TextStyle(fontWeight: FontWeight.bold, color: CeoColors.red, fontSize: 12),
+                style: CeoTheme.sectionHeaderStyle().copyWith(
+                  color: CeoColors.red,
+                ),
               ),
               const SizedBox(height: 4),
               Text(
@@ -203,40 +193,6 @@ class _CeoPendingViewState extends State<CeoPendingView> {
               ),
             ],
           ),
-        ),
-        const SizedBox(height: 32),
-        ElevatedButton(
-          onPressed: () {
-            context.read<CeoViewModel>().clearAppealState();
-            context.push(RouteNames.ceoAppeal);
-          },
-          style: CeoTheme.primaryButtonStyle(height: 56),
-          child: const Text('SUBMIT APPEAL', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        ),
-        const Spacer(),
-        _signOutButton(context, authVM),
-        const SizedBox(height: 16),
-      ],
-    );
-  }
-
-  Widget _buildAppealPendingState(BuildContext context, AuthViewModel authVM) {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        const Spacer(),
-        const Icon(Icons.hourglass_top_rounded, size: 80, color: CeoColors.amber),
-        const SizedBox(height: 24),
-        Text(
-          'Appeal Under Review',
-          style: CeoTheme.titleStyle(size: 24),
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: 16),
-        Text(
-          'Your appeal has been submitted and is currently being reviewed by our administration. Please check back later.',
-          textAlign: TextAlign.center,
-          style: CeoTheme.mutedStyle(size: 15).copyWith(height: 1.6),
         ),
         const Spacer(),
         _signOutButton(context, authVM),

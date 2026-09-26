@@ -1,8 +1,5 @@
 // MVVM: ViewModel — business logic only
 import 'dart:async';
-import 'dart:io';
-import 'dart:developer' as developer;
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/user_model.dart';
@@ -18,8 +15,6 @@ import '../repositories/company_repository.dart';
 import '../repositories/invitation_repository.dart';
 import '../services/cloud_function_service.dart';
 import '../services/notification_service.dart';
-import '../services/storage_service.dart';
-import '../services/cloudinary_service.dart';
 import '../constants/app_constants.dart';
 import '../constants/firestore_paths.dart';
 import '../utils/app_exception.dart';
@@ -36,19 +31,12 @@ class CeoViewModel extends ChangeNotifier {
   final InvitationRepository _invitationRepo;
   final OrderRepository _orderRepo;
   final NotificationService _notificationService;
-  final StorageService _storageService = StorageService();
 
   bool _isLoading = false;
   String? _errorMessage;
   String? _successMessage;
   CompanyModel? _company;
-  List<SupplierModel> _allMarketplaceSuppliers = [];
   List<SupplierModel> _marketplaceSuppliers = [];
-  String _marketplaceSearchQuery = '';
-  String _marketplaceCity = 'All';
-  String _marketplaceCategory = 'All';
-  bool _marketplaceVerifiedOnly = false;
-  String _marketplaceSortBy = 'Rating';
 
   String? _partnershipWatchCompanyId;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>?
@@ -62,9 +50,6 @@ class CeoViewModel extends ChangeNotifier {
   List<PartnershipRequestModel> _receivedPartnershipRequests = [];
   List<PartnershipRequestModel> _sentPartnershipRequests = [];
   bool _partnershipRequestsReady = false;
-
-  bool _appealSubmitted = false;
-  bool get appealSubmitted => _appealSubmitted;
 
   CeoViewModel(
       this._uid,
@@ -104,94 +89,6 @@ class CeoViewModel extends ChangeNotifier {
       _sentPartnershipRequests
           .where((r) => r.status == 'pending')
           .toList(growable: false);
-
-  void clearAppealState() {
-    _appealSubmitted = false;
-    _errorMessage = null;
-    notifyListeners();
-  }
-
-  Future<void> submitAppeal(String message, File? file, String? phone, {Uint8List? webBytes}) async {
-    if (_uid == null) {
-      _errorMessage = 'User authentication error. Please log in again.';
-      notifyListeners();
-      return;
-    }
-
-    developer.log('[Appeal] CEO Submission Started for UID: $_uid');
-    _errorMessage = null;
-    _isLoading = true;
-    notifyListeners();
-
-    try {
-      // 1. Duplicate Check
-      developer.log('[Appeal] Step 1: Checking for existing pending appeals...');
-      final existing = await _db.collection('appeals')
-          .where('uid', isEqualTo: _uid)
-          .where('status', isEqualTo: 'pending')
-          .get()
-          .timeout(const Duration(seconds: 10), onTimeout: () => throw TimeoutException('Connection check timed out.'));
-
-      if (existing.docs.isNotEmpty) {
-        developer.log('[Appeal] Blocked: Existing pending appeal found.');
-        throw Exception('Your appeal is already under review.');
-      }
-
-      // 2. Cloudinary Upload
-      String? imageUrl;
-      if (webBytes != null || file != null) {
-        developer.log('[Appeal] Step 2: Uploading image to Cloudinary...');
-        if (webBytes != null) {
-          imageUrl = await CloudinaryService.uploadImageBytes(
-            bytes: webBytes,
-            folder: 'ratebridge/appeals',
-            filename: 'ceo_appeal_${_uid}_${DateTime.now().millisecondsSinceEpoch}.jpg',
-          ).timeout(const Duration(seconds: 45), onTimeout: () => throw TimeoutException('Image upload timed out.'));
-        } else if (file != null) {
-          imageUrl = await CloudinaryService.uploadImage(
-            filePath: file.path,
-            folder: 'ratebridge/appeals',
-          ).timeout(const Duration(seconds: 45), onTimeout: () => throw TimeoutException('Image upload timed out.'));
-        }
-
-        if (imageUrl == null) {
-          developer.log('[Appeal] Error: Cloudinary upload returned null.');
-          throw Exception('Failed to upload supporting document. Please try again.');
-        }
-        developer.log('[Appeal] Step 2: Image uploaded successfully: $imageUrl');
-      }
-
-      // 3. Prepare Data
-      developer.log('[Appeal] Step 3: Fetching user data...');
-      final userDoc = await _userRepo.getUserDoc(_uid!).timeout(const Duration(seconds: 10));
-      
-      // 4. Firestore Write
-      developer.log('[Appeal] Step 4: Writing appeal to Firestore...');
-      await _db.collection('appeals').add({
-        'uid': _uid,
-        'role': 'CEO',
-        'name': userDoc.name,
-        'companyId': _company?.id ?? userDoc.companyId,
-        'message': message,
-        'phone': phone,
-        'imageUrl': imageUrl,
-        'createdAt': FieldValue.serverTimestamp(),
-        'status': 'pending',
-        'rejectionReason': userDoc.rejectionReason ?? '',
-      }).timeout(const Duration(seconds: 15), onTimeout: () => throw TimeoutException('Firestore write timed out.'));
-
-      developer.log('[Appeal] Final Step: Submission complete.');
-      _appealSubmitted = true;
-    } catch (e) {
-      developer.log('[Appeal] Submission Failed: $e');
-      _errorMessage = e is TimeoutException 
-          ? 'Network timeout. Please check your internet connection and try again.' 
-          : e.toString().replaceAll('Exception: ', '');
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
-  }
 
   Future<void> _loadCompanyData() async {
     final uid = _uid;
@@ -419,8 +316,7 @@ class CeoViewModel extends ChangeNotifier {
       case 'pending':
         return 'Request Pending';
       case 'accepted':
-        // Stale accepted request without an active link is not a partner.
-        return 'Not Invited';
+        return 'Already Partners';
       case 'rejected':
         return 'Request Rejected';
       case 'removed':
@@ -428,115 +324,6 @@ class CeoViewModel extends ChangeNotifier {
       default:
         return 'Not Invited';
     }
-  }
-
-  /// Blocks duplicate email invites when the supplier is already linked or has
-  /// a pending partnership / invite. Uses [linkStatusFor] (same as Marketplace).
-  Future<String?> blockReasonForSupplierEmailInvite(String email) async {
-    final trimmed = email.trim();
-    if (trimmed.isEmpty) return 'Enter a supplier email address.';
-
-    final companyId = _company?.id ?? '';
-    if (companyId.isEmpty) {
-      return 'Company not ready. Please try again.';
-    }
-
-    ensurePartnershipStatusWatch(companyId);
-    await _waitForPartnershipStatusReady();
-
-    final supplier = await _findSupplierByEmail(trimmed);
-    if (supplier != null) {
-      await _ensureActivePartnerKnown(companyId, supplier.id);
-      switch (linkStatusFor(supplier.id)) {
-        case 'Already Partners':
-          return "You're already partnered with this supplier";
-        case 'Request Pending':
-          return 'A partnership request with this supplier is already pending';
-      }
-    }
-
-    // Also catch pending email invites (invitations collection) and any
-    // pending partnership rows that stored this email.
-    final lower = trimmed.toLowerCase();
-    final pendingByEmail = _latestPartnershipBySupplierId.values.any(
-      (req) =>
-          req.status == 'pending' &&
-          (req.supplierEmail?.trim().toLowerCase() ?? '') == lower,
-    );
-    if (pendingByEmail) {
-      return 'A partnership request with this supplier is already pending';
-    }
-
-    if (await _invitationRepo.hasPendingSupplierInvite(
-      companyId: companyId,
-      email: trimmed,
-    )) {
-      return 'An invite to this email is already pending';
-    }
-
-    return null;
-  }
-
-  Future<void> _waitForPartnershipStatusReady({
-    Duration timeout = const Duration(seconds: 5),
-  }) async {
-    if (_partnershipRequestsReady) return;
-    final end = DateTime.now().add(timeout);
-    while (!_partnershipRequestsReady && DateTime.now().isBefore(end)) {
-      await Future<void>.delayed(const Duration(milliseconds: 50));
-    }
-  }
-
-  /// One-shot fill for [supplierId] when the live watch has not caught up yet.
-  Future<void> _ensureActivePartnerKnown(
-    String companyId,
-    String supplierId,
-  ) async {
-    if (supplierId.isEmpty || _activePartnerSupplierIds.contains(supplierId)) {
-      return;
-    }
-    final linkSnap = await _db
-        .collection(FirestorePaths.companiesCol)
-        .doc(companyId)
-        .collection('suppliers')
-        .doc(supplierId)
-        .get();
-    if (!linkSnap.exists) return;
-    final status =
-        (linkSnap.data()?['status'] as String?)?.toLowerCase() ?? 'active';
-    if (status == 'active' || status == 'approved') {
-      _activePartnerSupplierIds.add(supplierId);
-    }
-  }
-
-  Future<SupplierModel?> _findSupplierByEmail(String email) async {
-    final trimmed = email.trim();
-    if (trimmed.isEmpty) return null;
-    final lower = trimmed.toLowerCase();
-
-    // Prefer already-loaded marketplace cache when available.
-    for (final supplier in _allMarketplaceSuppliers) {
-      if (supplier.email.trim().toLowerCase() == lower) return supplier;
-    }
-
-    Future<SupplierModel?> queryExact(String value) async {
-      final snap = await _db
-          .collection('suppliers')
-          .where('email', isEqualTo: value)
-          .limit(1)
-          .get();
-      if (snap.docs.isEmpty) return null;
-      final doc = snap.docs.first;
-      return SupplierModel.fromMap({...doc.data(), 'id': doc.id});
-    }
-
-    final exact = await queryExact(trimmed);
-    if (exact != null) return exact;
-    if (lower != trimmed) {
-      final byLower = await queryExact(lower);
-      if (byLower != null) return byLower;
-    }
-    return null;
   }
 
   // --- Real-time Streams ---
@@ -592,8 +379,6 @@ class CeoViewModel extends ChangeNotifier {
       return Stream.value(const []);
     }
 
-    final uid = _uid;
-
     Query<Map<String, dynamic>> buildQuery({required bool withOrderBy}) {
       Query<Map<String, dynamic>> query =
           _db.collection('orders').where('companyId', isEqualTo: companyId);
@@ -614,13 +399,10 @@ class CeoViewModel extends ChangeNotifier {
     return buildQuery(withOrderBy: true).snapshots().transform(
       StreamTransformer.fromHandlers(
         handleData: (snap, sink) {
-          var orders = snap.docs
+          final orders = snap.docs
               .map((doc) => OrderModel.fromMap(doc.id, doc.data()))
-              .toList();
-          if (uid != null) {
-            orders = orders.where((o) => !o.hiddenBy.contains(uid)).toList();
-          }
-          orders.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+              .toList()
+            ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
           sink.add(orders);
         },
         handleError: (error, stackTrace, sink) async {
@@ -628,14 +410,12 @@ class CeoViewModel extends ChangeNotifier {
               error.code == 'failed-precondition') {
             try {
               final snap = await buildQuery(withOrderBy: false).get();
-              var orders = snap.docs
-                  .map((doc) => OrderModel.fromMap(doc.id, doc.data()))
-                  .toList();
-              if (uid != null) {
-                orders = orders.where((o) => !o.hiddenBy.contains(uid)).toList();
-              }
-              orders.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-              sink.add(orders);
+              sink.add(
+                snap.docs
+                    .map((doc) => OrderModel.fromMap(doc.id, doc.data()))
+                    .toList()
+                  ..sort((a, b) => b.createdAt.compareTo(a.createdAt)),
+              );
               return;
             } catch (_) {}
           }
@@ -654,7 +434,6 @@ class CeoViewModel extends ChangeNotifier {
           AppConstants.statusAccepted,
           AppConstants.statusInProgress,
           AppConstants.statusDelivered,
-          AppConstants.statusCancellationRequested,
         ];
       case 'Confirmed':
         return [AppConstants.statusConfirmed];
@@ -677,47 +456,19 @@ class CeoViewModel extends ChangeNotifier {
       if (order.status != AppConstants.statusPendingApproval) {
         throw Exception('Only orders awaiting approval can be approved.');
       }
-
-      // Refresh from Firestore so we notify the real supplier uid on the doc.
-      final fresh = await _orderRepo.getOrderById(order.orderId) ?? order;
-      final supplierId = fresh.supplierId.trim().isNotEmpty
-          ? fresh.supplierId.trim()
-          : order.supplierId.trim();
-      if (supplierId.isEmpty) {
-        throw Exception(
-          'Cannot notify supplier: this order has no supplier id.',
-        );
-      }
-
       await _orderRepo.updateStatus(
-        fresh.orderId,
-        fresh.companyId.isNotEmpty ? fresh.companyId : order.companyId,
+        order.orderId,
+        order.companyId,
         AppConstants.statusPending,
       );
-
-      try {
-        await _notificationService.notifyOrderApprovedByCeo(
-          supplierId: supplierId,
-          orderId: fresh.orderId,
-          companyId:
-              fresh.companyId.isNotEmpty ? fresh.companyId : order.companyId,
-          materialName: fresh.materialName.isNotEmpty
-              ? fresh.materialName
-              : order.materialName,
-          fieldUserName: fresh.fieldUserName.isNotEmpty
-              ? fresh.fieldUserName
-              : order.fieldUserName,
-          companyName: _company?.name,
-        );
-      } catch (notifyError) {
-        // Status already updated — surface notify failure so it isn't silent.
-        _errorMessage =
-            'Order approved, but supplier notification failed: $notifyError';
-        notifyListeners();
-        return;
-      }
-
-      _successMessage = 'Order approved and supplier notified.';
+      await _notificationService.notifyNewOrder(
+        supplierId: order.supplierId,
+        orderId: order.orderId,
+        companyId: order.companyId,
+        materialName: order.materialName,
+        fieldUserName: order.fieldUserName,
+      );
+      _successMessage = 'Order approved and sent to supplier.';
     } catch (e) {
       _errorMessage = 'Failed to approve order: $e';
     }
@@ -737,7 +488,6 @@ class CeoViewModel extends ChangeNotifier {
         order.companyId,
         AppConstants.statusRejected,
         reason: reason.trim().isEmpty ? 'Rejected by CEO' : reason.trim(),
-        rejectedBy: 'ceo',
       );
       await _notificationService.notifyOrderRejected(
         fieldUserUid: order.fieldUserUid,
@@ -812,15 +562,13 @@ class CeoViewModel extends ChangeNotifier {
           .snapshots()
           .listen(
         (snap) {
-          _allMarketplaceSuppliers = _suppliersFromDocs(snap.docs);
-          _applyMarketplaceFilters();
+          _marketplaceSuppliers = _suppliersFromDocs(snap.docs);
           _isLoading = false;
           notifyListeners();
         },
         onError: (_) {
           _fetchMarketplaceSuppliers().then((suppliers) {
-            _allMarketplaceSuppliers = suppliers;
-            _applyMarketplaceFilters();
+            _marketplaceSuppliers = suppliers;
             _isLoading = false;
             notifyListeners();
           });
@@ -834,91 +582,88 @@ class CeoViewModel extends ChangeNotifier {
   }
 
   Future<void> searchSuppliers(String queryText) async {
-    _marketplaceSearchQuery = queryText.trim();
-    if (_allMarketplaceSuppliers.isEmpty && queryText.isEmpty) {
+    if (queryText.isEmpty) {
       return loadMarketplace();
     }
-    _applyMarketplaceFilters();
+    _isLoading = true;
     notifyListeners();
+    try {
+      final lowercaseQuery = queryText.toLowerCase().trim();
+      
+      Query query = _db.collection('suppliers').where('status', whereIn: _marketplaceStatuses);
+
+      // Support search by email directly if it looks like one
+      if (lowercaseQuery.contains('@')) {
+        query = query.where('email', isEqualTo: lowercaseQuery);
+      } else {
+        // Range filter on business name
+        query = query.where('businessName', isGreaterThanOrEqualTo: queryText)
+                     .where('businessName', isLessThanOrEqualTo: '$queryText\uf8ff');
+      }
+
+      final snap = await query.get();
+      _marketplaceSuppliers = _suppliersFromDocs(snap.docs);
+    } catch (_) {
+      try {
+        _marketplaceSuppliers = await _fetchMarketplaceSuppliers();
+      } catch (_) {
+        _errorMessage = 'Search failed. Note: Searching by name is case-sensitive.';
+      }
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
-  Future<void> applyFilters({
-    String? city,
-    String? category,
-    bool? verifiedOnly,
-  }) async {
-    if (city != null) _marketplaceCity = city;
-    if (category != null) _marketplaceCategory = category;
-    if (verifiedOnly != null) _marketplaceVerifiedOnly = verifiedOnly;
-
-    if (_allMarketplaceSuppliers.isEmpty) {
-      await loadMarketplace();
-      return;
-    }
-
-    _applyMarketplaceFilters();
+  Future<void> applyFilters({String? city, String? category, bool? verifiedOnly}) async {
+    _isLoading = true;
     notifyListeners();
+    try {
+      Query query = _db.collection('suppliers').where('status', whereIn: _marketplaceStatuses);
+
+      if (city != null && city != 'All') {
+        query = query.where('city', isEqualTo: city);
+      }
+      if (category != null && category != 'All') {
+        query = query.where('materialType', isEqualTo: category);
+      }
+      if (verifiedOnly == true) {
+        query = query.where('isVerified', isEqualTo: true);
+      }
+
+      final snap = await query.get();
+      _marketplaceSuppliers = _suppliersFromDocs(snap.docs);
+    } catch (_) {
+      try {
+        final all = await _fetchMarketplaceSuppliers();
+        _marketplaceSuppliers = all.where((supplier) {
+          if (city != null && city != 'All' && supplier.city != city) {
+            return false;
+          }
+          if (category != null &&
+              category != 'All' &&
+              supplier.materialType != category) {
+            return false;
+          }
+          if (verifiedOnly == true && !supplier.isVerified) return false;
+          return true;
+        }).toList();
+      } catch (_) {
+        _errorMessage = 'Failed to apply filters. Please try again.';
+      }
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
   Future<void> sortSuppliers(String criteria) async {
-    _marketplaceSortBy = criteria;
-    _applyMarketplaceFilters();
-    notifyListeners();
-  }
-
-  void _applyMarketplaceFilters() {
-    final query = _marketplaceSearchQuery.toLowerCase();
-    final city = _marketplaceCity;
-    final category = _marketplaceCategory;
-
-    var list = _allMarketplaceSuppliers.where((supplier) {
-      if (query.isNotEmpty) {
-        final haystacks = [
-          supplier.name,
-          supplier.email,
-          supplier.city,
-          supplier.materialType,
-          supplier.businessType,
-          supplier.ownerFullName,
-        ];
-        final matchesQuery = haystacks.any(
-          (value) => (value ?? '').toString().toLowerCase().contains(query),
-        );
-        if (!matchesQuery) return false;
-      }
-
-      if (city != 'All' &&
-          supplier.city.trim().toLowerCase() != city.trim().toLowerCase()) {
-        return false;
-      }
-
-      if (category != 'All') {
-        final material = supplier.materialType.trim().toLowerCase();
-        final businessType = (supplier.businessType ?? '').trim().toLowerCase();
-        final cats = supplier.categories
-            .map((c) => c.trim().toLowerCase())
-            .where((c) => c.isNotEmpty);
-        final target = category.trim().toLowerCase();
-        final matchesCategory = material == target ||
-            businessType == target ||
-            cats.contains(target);
-        if (!matchesCategory) return false;
-      }
-
-      if (_marketplaceVerifiedOnly && !supplier.isVerified) {
-        return false;
-      }
-
-      return true;
-    }).toList();
-
-    if (_marketplaceSortBy == 'Name') {
-      list.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
-    } else {
-      list.sort((a, b) => b.rating.compareTo(a.rating));
+    if (criteria == 'Rating') {
+      _marketplaceSuppliers.sort((a, b) => b.rating.compareTo(a.rating));
+    } else if (criteria == 'Name') {
+      _marketplaceSuppliers.sort((a, b) => a.name.compareTo(b.name));
     }
-
-    _marketplaceSuppliers = list;
+    notifyListeners();
   }
 
   Future<void> sendPartnershipRequest(
@@ -1084,87 +829,8 @@ class CeoViewModel extends ChangeNotifier {
   }
 
   Stream<List<Map<String, dynamic>>> watchMySuppliers(String companyId) {
-    if (companyId.isEmpty) return Stream.value(const []);
-
-    return _db
-        .collection('companies')
-        .doc(companyId)
-        .collection('suppliers')
-        .snapshots()
-        .asyncMap((snap) async {
-      if (snap.docs.isEmpty) return <Map<String, dynamic>>[];
-
-      final profiles = await Future.wait(
-        snap.docs.map(
-          (doc) => _db.collection('suppliers').doc(doc.id).get(),
-        ),
-      );
-
-      final results = <Map<String, dynamic>>[];
-      for (var i = 0; i < snap.docs.length; i++) {
-        final doc = snap.docs[i];
-        final link = Map<String, dynamic>.from(doc.data());
-        link['id'] = doc.id;
-
-        final profileSnap = profiles[i];
-        final profile = profileSnap.exists && profileSnap.data() != null
-            ? Map<String, dynamic>.from(profileSnap.data()!)
-            : const <String, dynamic>{};
-
-        // Link docs from some accept paths only store status/ids (or
-        // `supplierName`). Prefer link fields, then profile name/businessName.
-        final displayName = _firstNonEmpty([
-          link['name'],
-          link['supplierName'],
-          link['businessName'],
-          profile['name'],
-          profile['businessName'],
-        ]) ??
-            'Supplier';
-
-        link['name'] = displayName;
-        link['businessName'] = _firstNonEmpty([
-              link['businessName'],
-              profile['businessName'],
-              profile['name'],
-            ]) ??
-            displayName;
-        link['supplierName'] = _firstNonEmpty([
-              link['supplierName'],
-              displayName,
-            ]) ??
-            displayName;
-        link['city'] = _firstNonEmpty([
-              link['city'],
-              profile['city'],
-            ]) ??
-            '';
-        link['materialType'] = _firstNonEmpty([
-              link['materialType'],
-              profile['materialType'],
-              profile['businessType'],
-            ]) ??
-            'General';
-        link['email'] = _firstNonEmpty([
-              link['email'],
-              profile['email'],
-            ]) ??
-            '';
-        link['rating'] =
-            link['rating'] ?? profile['rating'] ?? profile['globalAvgRating'] ?? 0;
-
-        results.add(link);
-      }
-      return results;
-    });
-  }
-
-  String? _firstNonEmpty(List<dynamic> values) {
-    for (final value in values) {
-      final text = value?.toString().trim() ?? '';
-      if (text.isNotEmpty) return text;
-    }
-    return null;
+    return _db.collection('companies').doc(companyId).collection('suppliers')
+        .snapshots().map((snap) => snap.docs.map((doc) => {...doc.data(), 'id': doc.id}).toList());
   }
 
   Future<void> removeSupplier(String supplierId) async {
@@ -1243,106 +909,26 @@ class CeoViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Cancels a pending order, or requests cancel when supplier already accepted.
-  Future<void> cancelOrder(
-    String orderId,
-    String companyId, {
-    String? reason,
-    OrderModel? order,
-  }) async {
-    _errorMessage = null;
-    _successMessage = null;
-    notifyListeners();
+  /// Cancels a pending or accepted order.
+  Future<void> cancelOrder(String orderId, String companyId) async {
     try {
-      final resolvedCompanyId =
-          companyId.isNotEmpty ? companyId : (_company?.id ?? '');
-      if (resolvedCompanyId.isEmpty) {
-        throw Exception('Company not ready.');
-      }
+      await _db
+          .collection('companies')
+          .doc(companyId)
+          .collection('orders')
+          .doc(orderId)
+          .update({'status': 'cancelled'});
 
-      OrderModel? current = order;
-      if (current == null || current.orderId != orderId) {
-        final doc = await _db.collection('orders').doc(orderId).get();
-        if (!doc.exists || doc.data() == null) {
-          throw Exception('Order not found.');
-        }
-        current = OrderModel.fromMap(orderId, doc.data()!);
-      }
+      // Mirror on root orders collection if you use one
+      await _db
+          .collection('orders')
+          .doc(orderId)
+          .update({'status': 'cancelled'}).catchError((_) {});
 
-      final status = current.status.toLowerCase();
-      final canDirect = status == AppConstants.statusPending ||
-          status == AppConstants.statusPendingApproval;
-      final needsRequest = status == AppConstants.statusAccepted ||
-          status == AppConstants.statusInProgress.toLowerCase() ||
-          status.replaceAll('_', '') == 'inprogress';
-
-      if (canDirect) {
-        await _orderRepo.cancelOrderDirect(
-          orderId: orderId,
-          companyId: resolvedCompanyId,
-        );
-        await _notificationService.notifyOrderCancelled(
-          supplierId: current.supplierId,
-          orderId: orderId,
-          companyId: resolvedCompanyId,
-          materialName: current.materialName,
-          fieldUserName: _company?.name ?? 'Company',
-        );
-        _successMessage = 'Order cancelled.';
-      } else if (needsRequest) {
-        final trimmed = reason?.trim() ?? '';
-        if (trimmed.isEmpty) {
-          throw Exception('Please enter a cancellation reason.');
-        }
-        await _orderRepo.requestOrderCancellation(
-          orderId: orderId,
-          companyId: resolvedCompanyId,
-          reason: trimmed,
-        );
-        await _notificationService.notifyCancellationRequested(
-          supplierId: current.supplierId,
-          orderId: orderId,
-          companyId: resolvedCompanyId,
-          materialName: current.materialName,
-          companyName: _company?.name ?? 'Company',
-          reason: trimmed,
-        );
-        _successMessage =
-            'Cancellation requested. Waiting for supplier response.';
-      } else {
-        throw Exception('This order cannot be cancelled in its current status.');
-      }
+      _successMessage = 'Order cancelled.';
     } catch (e) {
       _errorMessage = 'Failed to cancel order: $e';
     }
     notifyListeners();
-  }
-
-  /// Soft-deletes a single order from history.
-  Future<void> hideOrder(String orderId) async {
-    final uid = _uid;
-    if (uid == null) return;
-    try {
-      await _orderRepo.hideOrderForUser(orderId, uid);
-      _successMessage = 'Order removed from history.';
-      notifyListeners();
-    } catch (e) {
-      _errorMessage = e.toString();
-      notifyListeners();
-    }
-  }
-
-  /// Bulk soft-deletes orders.
-  Future<void> hideOrders(List<String> orderIds) async {
-    final uid = _uid;
-    if (uid == null) return;
-    try {
-      await _orderRepo.hideOrdersForUser(orderIds, uid);
-      _successMessage = 'Orders removed from history.';
-      notifyListeners();
-    } catch (e) {
-      _errorMessage = e.toString();
-      notifyListeners();
-    }
   }
 }

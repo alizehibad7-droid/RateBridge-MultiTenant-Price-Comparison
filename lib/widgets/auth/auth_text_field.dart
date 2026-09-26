@@ -16,7 +16,6 @@ class AuthTextField extends StatefulWidget {
   final String? Function(String?)? validator;
   final ValueChanged<String>? onChanged;
   final ValueChanged<String>? onUnfocus;
-  final ValueChanged<String>? onFieldSubmitted;
   final Widget? suffix;
   final bool enabled;
   final int maxLines;
@@ -36,7 +35,6 @@ class AuthTextField extends StatefulWidget {
     this.validator,
     this.onChanged,
     this.onUnfocus,
-    this.onFieldSubmitted,
     this.suffix,
     this.enabled = true,
     this.maxLines = 1,
@@ -120,11 +118,10 @@ class _AuthTextFieldState extends State<AuthTextField> {
             }
             widget.onChanged?.call(value);
           },
-          onFieldSubmitted: (value) {
+          onFieldSubmitted: (_) {
             setState(() => _showErrors = true);
             _fieldKey.currentState?.validate();
             widget.onUnfocus?.call(widget.controller.text);
-            widget.onFieldSubmitted?.call(value);
           },
           maxLines: widget.maxLines,
           inputFormatters: widget.inputFormatters,

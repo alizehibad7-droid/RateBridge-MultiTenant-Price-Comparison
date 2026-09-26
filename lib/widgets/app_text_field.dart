@@ -11,9 +11,6 @@ class AppTextField extends StatelessWidget {
   final TextInputType keyboardType;
   final int maxLines;
   final String? hint;
-  final TextInputAction? textInputAction;
-  final ValueChanged<String>? onFieldSubmitted;
-  final FocusNode? focusNode;
 
   const AppTextField({
     super.key,
@@ -24,9 +21,6 @@ class AppTextField extends StatelessWidget {
     this.keyboardType = TextInputType.text,
     this.maxLines = 1,
     this.hint,
-    this.textInputAction,
-    this.onFieldSubmitted,
-    this.focusNode,
   });
 
   @override
@@ -49,9 +43,6 @@ class AppTextField extends StatelessWidget {
           readOnly: readOnly,
           keyboardType: keyboardType,
           maxLines: maxLines,
-          textInputAction: textInputAction ?? (maxLines > 1 ? TextInputAction.newline : TextInputAction.next),
-          onFieldSubmitted: onFieldSubmitted,
-          focusNode: focusNode,
           style: GoogleFonts.plusJakartaSans(
             fontSize: 15,
             color: AppColors.navy,

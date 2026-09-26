@@ -10,8 +10,7 @@ import '../../models/subscription_model.dart';
 import '../../viewmodels/auth_viewmodel.dart';
 import '../../viewmodels/subscription_viewmodel.dart';
 import '../../widgets/ceo/ceo_widgets.dart';
-import '../payment/payment_method_view.dart';
-import '../../models/payment_proof_model.dart';
+import '../../services/stripe_service.dart';
 
 class CeoSubscriptionView extends StatefulWidget {
   const CeoSubscriptionView({super.key});
@@ -40,11 +39,11 @@ class _CeoSubscriptionViewState extends State<CeoSubscriptionView> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Row(
+        title: const Row(
           children: [
-            const Icon(Icons.warning_rounded, color: CeoColors.red),
-            const SizedBox(width: 10),
-            const Text('Cancel Subscription?'),
+            Icon(Icons.warning_rounded, color: CeoColors.red),
+            SizedBox(width: 10),
+            Text('Cancel Subscription?'),
           ],
         ),
         content: const Text('Your plan will be downgraded to FREE immediately. You will lose access to premium features.'),
@@ -83,7 +82,6 @@ class _CeoSubscriptionViewState extends State<CeoSubscriptionView> {
 
           final sub = viewModel.currentSubscription;
           final planDef = sub?.planDef ?? kPlans.first;
-          final isPending = viewModel.isWaitingVerification;
 
           return ListView(
             padding: const EdgeInsets.all(24),
@@ -101,19 +99,16 @@ class _CeoSubscriptionViewState extends State<CeoSubscriptionView> {
                   color: CeoColors.green
                 ),
               
-              if (isPending) 
-                _buildPendingVerificationCard(viewModel.pendingPayment),
-              
               _buildCurrentPlanCard(sub, planDef),
               const SizedBox(height: 24),
               _buildAiStatusCard(planDef.aiUnlocked && (sub?.isActive ?? false)),
               const SizedBox(height: 32),
               
-              Row(
+              const Row(
                 children: [
-                  const Icon(Icons.star_rounded, color: CeoColors.amber, size: 22),
-                  const SizedBox(width: 8),
-                  const CeoSectionLabel('Available Plans'),
+                  Icon(Icons.star_rounded, color: CeoColors.amber, size: 22),
+                  SizedBox(width: 8),
+                  CeoSectionLabel('Available Plans'),
                 ],
               ),
               const SizedBox(height: 16),
@@ -123,29 +118,65 @@ class _CeoSubscriptionViewState extends State<CeoSubscriptionView> {
                 child: Row(
                   children: kPlans.map((plan) => Padding(
                     padding: const EdgeInsets.only(right: 16),
-                    child: _buildPlanOption(plan, sub?.plan == plan.planKey, isPending, () {
+                    child: _buildPlanOption(plan, sub?.plan == plan.planKey, () async {
                       if (plan.id != PlanId.free) {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => PaymentMethodView(
-                              amount: plan.priceRs.toDouble(),
-                              type: PaymentType.subscription,
-                              planKey: plan.planKey,
-                            ),
-                          ),
-                        ).then((_) => _bootstrap());
+                        final messenger = ScaffoldMessenger.of(context);
+                        final subVm = context.read<SubscriptionViewModel>();
+                        final authVm = context.read<AuthViewModel>();
+                        final companyId = authVm.user?.companyId ?? '';
+
+                        try {
+                          final stripe = context.read<StripeService>();
+                          
+                          await stripe.payWithStripe(
+                            type: 'subscription',
+                            plan: plan.planKey,
+                            amountPKR: plan.priceRs,
+                          );
+
+                          if (companyId.isNotEmpty) {
+                            await subVm.activateSubscription(
+                              companyId: companyId,
+                              plan: plan,
+                              adminGranted: false,
+                              amountPaid: plan.priceRs,
+                            );
+                          }
+                          
+                          if (mounted) {
+                            messenger.showSnackBar(
+                              SnackBar(
+                                content: Text('${plan.name} plan activated successfully!'),
+                                backgroundColor: CeoColors.green,
+                              ),
+                            );
+                            if (Navigator.canPop(context)) {
+                              Navigator.pop(context);
+                            } else {
+                              _bootstrap();
+                            }
+                          }
+                        } catch (e) {
+                          if (mounted) {
+                            messenger.showSnackBar(
+                              SnackBar(
+                                content: Text('Payment failed: $e'),
+                                backgroundColor: CeoColors.red,
+                              ),
+                            );
+                          }
+                        }
                       }
                     }),
                   )).toList(),
                 ),
               ),
               const SizedBox(height: 36),
-              Row(
+              const Row(
                 children: [
-                  const Icon(Icons.history_rounded, color: CeoColors.navy, size: 22),
-                  const SizedBox(width: 8),
-                  const CeoSectionLabel('Billing History'),
+                  Icon(Icons.history_rounded, color: CeoColors.navy, size: 22),
+                  SizedBox(width: 8),
+                  CeoSectionLabel('Billing History'),
                 ],
               ),
               const SizedBox(height: 12),
@@ -172,47 +203,7 @@ class _CeoSubscriptionViewState extends State<CeoSubscriptionView> {
     );
   }
 
-  Widget _buildPendingVerificationCard(PaymentProofModel? payment) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 24),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: CeoColors.amber.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: CeoColors.amber.withValues(alpha: 0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: const BoxDecoration(
-                  color: CeoColors.amber,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.hourglass_top_rounded, color: Colors.white, size: 20),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text('Payment Verification Pending', 
-                  style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, color: CeoColors.navy)),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'Your payment for the ${payment?.planName ?? "selected"} plan is currently under review. Premium features will be unlocked immediately once confirmed by the admin.',
-            style: CeoTheme.mutedStyle(size: 13).copyWith(color: CeoColors.darkAmber, fontWeight: FontWeight.w500),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildCurrentPlanCard(SubscriptionModel? sub, PlanDefinition planDef) {
-    final textTheme = Theme.of(context).textTheme;
     final isFree = sub?.plan == 'free';
     final isActive = sub?.isActive ?? false;
 
@@ -339,7 +330,7 @@ class _CeoSubscriptionViewState extends State<CeoSubscriptionView> {
     );
   }
 
-  Widget _buildPlanOption(PlanDefinition plan, bool isCurrent, bool isPending, VoidCallback? onSelect) {
+  Widget _buildPlanOption(PlanDefinition plan, bool isCurrent, VoidCallback? onSelect) {
     return Container(
       width: 240, padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -362,7 +353,7 @@ class _CeoSubscriptionViewState extends State<CeoSubscriptionView> {
             ],
           ),
           const SizedBox(height: 4),
-          Text(plan.priceRs == 0 ? 'Free' : 'Rs. ${plan.priceRs}/mo', 
+          Text(plan.priceDisplay,
             style: GoogleFonts.plusJakartaSans(color: CeoColors.amber, fontWeight: FontWeight.w900, fontSize: 16)),
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 16),
@@ -384,9 +375,9 @@ class _CeoSubscriptionViewState extends State<CeoSubscriptionView> {
             )
           else if (plan.id != PlanId.free) 
             ElevatedButton.icon(
-              onPressed: isPending ? null : onSelect, 
-              icon: Icon(isPending ? Icons.hourglass_top_rounded : Icons.bolt_rounded),
-              label: Text(isPending ? 'PENDING' : 'SELECT PLAN'),
+              onPressed: onSelect, 
+              icon: const Icon(Icons.bolt_rounded),
+              label: const Text('SELECT PLAN'),
               style: CeoTheme.primaryButtonStyle(height: 48),
             ),
         ],

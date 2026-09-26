@@ -7,6 +7,7 @@ enum PlanId { free, basic, premium }
 class PlanDefinition {
   final PlanId id;
   final String name;
+  final String priceDisplay;
   final int priceRs;
   final int durationDays;
   final List<String> features;
@@ -19,6 +20,7 @@ class PlanDefinition {
   const PlanDefinition({
     required this.id,
     required this.name,
+    required this.priceDisplay,
     required this.priceRs,
     required this.durationDays,
     required this.features,
@@ -36,6 +38,7 @@ const kPlans = <PlanDefinition>[
   PlanDefinition(
     id: PlanId.free,
     name: 'Free',
+    priceDisplay: 'Free',
     priceRs: 0,
     durationDays: 0,
     maxActiveOrders: 5,
@@ -55,6 +58,7 @@ const kPlans = <PlanDefinition>[
   PlanDefinition(
     id: PlanId.basic,
     name: 'Basic',
+    priceDisplay: 'PKR 1,000/mo',
     priceRs: 1000,
     durationDays: 30,
     maxActiveOrders: -1,
@@ -75,6 +79,7 @@ const kPlans = <PlanDefinition>[
   PlanDefinition(
     id: PlanId.premium,
     name: 'Premium',
+    priceDisplay: 'PKR 5,000/mo',
     priceRs: 5000,
     durationDays: 30,
     maxActiveOrders: -1,

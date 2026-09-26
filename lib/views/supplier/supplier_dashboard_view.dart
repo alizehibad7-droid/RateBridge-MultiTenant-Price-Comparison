@@ -10,7 +10,6 @@ import '../../models/material_model.dart';
 import '../../models/order_model.dart';
 import '../../models/rating_model.dart';
 import '../../theme/supplier_theme.dart';
-import '../../utils/app_navigation.dart';
 import '../../utils/app_theme.dart';
 import '../../utils/currency_formatter.dart';
 import '../../viewmodels/auth_viewmodel.dart';
@@ -265,10 +264,7 @@ class _SupplierDashboardViewState extends State<SupplierDashboardView> {
         viewModel.companies.isEmpty;
     final waitingForCompanies = !viewModel.companiesLoaded;
 
-    return RootTabPopScope(
-      isHome: true,
-      homeRoute: RouteNames.supplierDashboard,
-      child: Scaffold(
+    return Scaffold(
       backgroundColor: FieldColors.screenBackground,
       bottomNavigationBar: const SupplierNavBar(currentIndex: 0),
       body: RefreshIndicator(
@@ -517,7 +513,6 @@ class _SupplierDashboardViewState extends State<SupplierDashboardView> {
                     ),
                   ),
                 ),
-      ),
     );
   }
 }
@@ -1398,19 +1393,6 @@ class _MaterialsCarousel extends StatelessWidget {
     return FieldColors.statusSuccess;
   }
 
-  /// One secondary line: grade → brand → category → short description.
-  String? _secondaryDetail(MaterialModel m) {
-    final grade = m.qualityGrade.trim();
-    if (grade.isNotEmpty) return grade;
-    final brand = m.brand?.trim();
-    if (brand != null && brand.isNotEmpty) return brand;
-    final category = m.category.trim();
-    if (category.isNotEmpty) return category;
-    final description = m.description?.trim();
-    if (description != null && description.isNotEmpty) return description;
-    return null;
-  }
-
   @override
   Widget build(BuildContext context) {
     return SizedBox(
@@ -1422,7 +1404,6 @@ class _MaterialsCarousel extends StatelessWidget {
         itemBuilder: (context, index) {
           final m = materials[index];
           final imageUrl = m.profileImageUrl;
-          final detail = _secondaryDetail(m);
           return Material(
             color: FieldColors.surfaceWhite,
             elevation: 0,
@@ -1441,22 +1422,16 @@ class _MaterialsCarousel extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Theme(
-                      data: ThemeData(),
-                      child: ColoredBox(
-                        color: FieldColors.primaryNavy.withValues(alpha: 0.06),
-                        child: SizedBox(
-                          height: 80,
-                          width: double.infinity,
-                          child: AppNetworkImage(
-                            url: imageUrl,
-                            fit: BoxFit.contain,
-                            width: 150,
-                            height: 80,
-                            debugLabel: 'dashboard:${m.id}',
-                            fallback: _categoryFallback(m),
-                          ),
-                        ),
+                    SizedBox(
+                      height: 80,
+                      width: double.infinity,
+                      child: AppNetworkImage(
+                        url: imageUrl,
+                        fit: BoxFit.cover,
+                        width: 150,
+                        height: 80,
+                        debugLabel: 'dashboard:${m.id}',
+                        fallback: _categoryFallback(m),
                       ),
                     ),
                     Expanded(
@@ -1475,18 +1450,6 @@ class _MaterialsCarousel extends StatelessWidget {
                                 color: FieldColors.primaryNavy,
                               ),
                             ),
-                            if (detail != null) ...[
-                              const SizedBox(height: 4),
-                              Text(
-                                detail,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: AppTextStyles.caption.copyWith(
-                                  fontSize: 11,
-                                  color: FieldColors.textMuted,
-                                ),
-                              ),
-                            ],
                             const Spacer(),
                             Text(
                               CurrencyFormatter.formatPKR(m.pricePerUnit),
@@ -1553,10 +1516,7 @@ class _AddFirstMaterialCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return RootTabPopScope(
-      isHome: true,
-      homeRoute: RouteNames.supplierDashboard,
-      child: Material(
+    return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
@@ -1598,7 +1558,6 @@ class _AddFirstMaterialCard extends StatelessWidget {
           ),
         ),
       ),
-    ),
     );
   }
 }

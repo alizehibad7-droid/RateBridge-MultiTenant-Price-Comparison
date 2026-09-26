@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 class OrderModel {
   final String orderId;
   final String companyId;
+  final String? companyName;
   final String fieldUserUid;
   final String supplierId;
   final String materialId;
@@ -19,14 +20,8 @@ class OrderModel {
   final String deliveryAddress;
   final String? siteLocation; 
   final String? notes;
-  final String status; // pending|accepted|delivered|confirmed|rejected|cancelled|cancellation_requested
+  final String status; // pending|accepted|delivered|confirmed|rejected|cancelled
   final String? rejectionReason;
-  /// Who rejected the order: `ceo` | `supplier` (null on legacy docs).
-  final String? rejectedBy;
-  /// CEO reason when requesting cancel after supplier accepted.
-  final String? cancellationReason;
-  /// Status to restore if supplier declines a cancellation request.
-  final String? statusBeforeCancellation;
   final DateTime createdAt;
   final DateTime updatedAt;
   final DateTime? requiredDate; 
@@ -36,11 +31,11 @@ class OrderModel {
   final String? chatMetaId;
   final String? paymentProofUrl;
   final String? paymentStatus;
-  final List<String> deletedBy;
 
   const OrderModel({
     required this.orderId,
     required this.companyId,
+    this.companyName,
     required this.fieldUserUid,
     required this.supplierId,
     required this.materialId,
@@ -59,9 +54,6 @@ class OrderModel {
     this.notes,
     required this.status,
     this.rejectionReason,
-    this.rejectedBy,
-    this.cancellationReason,
-    this.statusBeforeCancellation,
     required this.createdAt,
     required this.updatedAt,
     this.requiredDate,
@@ -71,32 +63,16 @@ class OrderModel {
     this.chatMetaId,
     this.paymentProofUrl,
     this.paymentStatus,
-    this.deletedBy = const [],
   });
 
   String get id => orderId;
-  List<String> get hiddenBy => deletedBy;
-
-  /// Resolves who rejected for UI (uses [rejectedBy], with legacy reason fallback).
-  String? get resolvedRejectedBy {
-    final explicit = rejectedBy?.trim().toLowerCase();
-    if (explicit == 'ceo' || explicit == 'supplier') return explicit;
-
-    final reason = (rejectionReason ?? '').toLowerCase();
-    if (reason.contains('ceo') ||
-        reason.contains('company approval') ||
-        reason.contains('rejected by company')) {
-      return 'ceo';
-    }
-    if (reason.contains('supplier')) return 'supplier';
-    return null;
-  }
 
   factory OrderModel.fromMap(String id, Map<String, dynamic> map) => OrderModel(
     orderId: id,
-    companyId: map['companyId'] ?? map['companyID'] ?? map['company_id'] ?? '',
-    fieldUserUid: map['fieldUserUid'] ?? map['fieldUserUID'] ?? map['field_user_uid'] ?? map['field_user_id'] ?? '',
-    supplierId: map['supplierId'] ?? map['supplierUid'] ?? map['supplierID'] ?? map['supplierUID'] ?? map['supplier_id'] ?? map['supplier_uid'] ?? '',
+    companyId: map['companyId'] ?? '',
+    companyName: map['companyName'],
+    fieldUserUid: map['fieldUserUid'] ?? '',
+    supplierId: map['supplierId'] ?? map['supplierUid'] ?? '',
     materialId: map['materialId'] ?? '',
     materialName: map['materialName'] ?? '',
     supplierName: map['supplierName'] ?? '',
@@ -113,9 +89,6 @@ class OrderModel {
     notes: map['notes'],
     status: map['status'] ?? 'pending',
     rejectionReason: map['rejectionReason'],
-    rejectedBy: map['rejectedBy'] as String?,
-    cancellationReason: map['cancellationReason'] as String?,
-    statusBeforeCancellation: map['statusBeforeCancellation'] as String?,
     createdAt: map['createdAt'] is Timestamp 
         ? (map['createdAt'] as Timestamp).toDate() 
         : DateTime.tryParse(map['createdAt']?.toString() ?? '') ?? DateTime.now(),
@@ -129,11 +102,11 @@ class OrderModel {
     chatMetaId: map['chatMetaId'],
     paymentProofUrl: map['paymentProofUrl'],
     paymentStatus: map['paymentStatus'],
-    deletedBy: List<String>.from(map['deletedBy'] ?? map['hiddenBy'] ?? []),
   );
 
   Map<String, dynamic> toMap() => {
     'companyId': companyId,
+    if (companyName != null) 'companyName': companyName,
     'fieldUserUid': fieldUserUid,
     'supplierId': supplierId,
     'materialId': materialId,
@@ -152,10 +125,6 @@ class OrderModel {
     'notes': notes,
     'status': status,
     'rejectionReason': rejectionReason,
-    if (rejectedBy != null) 'rejectedBy': rejectedBy,
-    if (cancellationReason != null) 'cancellationReason': cancellationReason,
-    if (statusBeforeCancellation != null)
-      'statusBeforeCancellation': statusBeforeCancellation,
     'createdAt': Timestamp.fromDate(createdAt),
     'updatedAt': Timestamp.fromDate(updatedAt),
     'requiredDate': requiredDate != null ? Timestamp.fromDate(requiredDate!) : null,
@@ -165,12 +134,12 @@ class OrderModel {
     'chatMetaId': chatMetaId,
     if (paymentProofUrl != null) 'paymentProofUrl': paymentProofUrl,
     if (paymentStatus != null) 'paymentStatus': paymentStatus,
-    'deletedBy': deletedBy,
   };
 
   OrderModel copyWith({
     String? orderId,
     String? companyId,
+    String? companyName,
     String? fieldUserUid,
     String? supplierId,
     String? materialId,
@@ -189,9 +158,6 @@ class OrderModel {
     String? notes,
     String? status,
     String? rejectionReason,
-    String? rejectedBy,
-    String? cancellationReason,
-    String? statusBeforeCancellation,
     DateTime? createdAt,
     DateTime? updatedAt,
     DateTime? requiredDate,
@@ -201,11 +167,11 @@ class OrderModel {
     String? chatMetaId,
     String? paymentProofUrl,
     String? paymentStatus,
-    List<String>? deletedBy,
   }) {
     return OrderModel(
       orderId: orderId ?? this.orderId,
       companyId: companyId ?? this.companyId,
+      companyName: companyName ?? this.companyName,
       fieldUserUid: fieldUserUid ?? this.fieldUserUid,
       supplierId: supplierId ?? this.supplierId,
       materialId: materialId ?? this.materialId,
@@ -224,10 +190,6 @@ class OrderModel {
       notes: notes ?? this.notes,
       status: status ?? this.status,
       rejectionReason: rejectionReason ?? this.rejectionReason,
-      rejectedBy: rejectedBy ?? this.rejectedBy,
-      cancellationReason: cancellationReason ?? this.cancellationReason,
-      statusBeforeCancellation:
-          statusBeforeCancellation ?? this.statusBeforeCancellation,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       requiredDate: requiredDate ?? this.requiredDate,
@@ -237,7 +199,6 @@ class OrderModel {
       chatMetaId: chatMetaId ?? this.chatMetaId,
       paymentProofUrl: paymentProofUrl ?? this.paymentProofUrl,
       paymentStatus: paymentStatus ?? this.paymentStatus,
-      deletedBy: deletedBy ?? this.deletedBy,
     );
   }
 }

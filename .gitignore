@@ -12,5 +12,3 @@ pubsub-debug.log
 database-debug.log
 functions/firebase-debug.log
 *.log
-
-dart_defines.json

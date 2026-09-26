@@ -16,7 +16,6 @@ class RouteNames {
   static const String pendingApproval = '/account/pending';
   static const String suspended = '/account/suspended';
   static const String rejected = '/account/rejected';
-  static const String platformBlocked = '/account/platform-blocked';
 
   // Admin
   static const String adminDashboard = '/admin/dashboard';
@@ -27,12 +26,10 @@ class RouteNames {
   static const String adminDisputes = '/admin/disputes';
   static const String adminAuditLogs = '/admin/audit-logs';
   static const String adminNotifications = '/admin/notifications';
-  static const String adminAppeals = '/admin/appeals';
 
   // CEO
   static const String ceoDashboard = '/ceo/dashboard';
   static const String ceoPending = '/ceo/pending';
-  static const String ceoAppeal = '/ceo/appeal';
   static const String ceoMarketplace = '/ceo/marketplace';
   static const String ceoJoinRequests = '/ceo/join-requests';
   static const String ceoInvite = '/ceo/invite';
@@ -112,39 +109,10 @@ class RouteNames {
   }
 
   static String pathParam(String? raw, [Object? extra]) {
-    if (extra is Map) {
-      final name = extra['name'] ?? extra['materialName'];
-      if (name is String && name.trim().isNotEmpty) return name.trim();
-    }
     if (extra is String && extra.trim().isNotEmpty) return extra;
     return decodeParam(raw ?? '');
   }
 
-  static String? compareExtraString(Object? extra, String key) {
-    if (extra is! Map) return null;
-    final value = extra[key];
-    if (value is! String) return null;
-    final trimmed = value.trim();
-    return trimmed.isEmpty ? null : trimmed;
-  }
-
   static String fieldCompareOf(String materialName) =>
       fieldCompare.replaceFirst(':materialId', encodeParam(materialName));
-
-  /// Shared navigation payload for Field Compare (name + category context).
-  static Map<String, String> fieldCompareExtra({
-    required String name,
-    String? category,
-    String? qualityGrade,
-    String? unit,
-  }) {
-    return {
-      'name': name,
-      if (category != null && category.trim().isNotEmpty)
-        'category': category.trim(),
-      if (qualityGrade != null && qualityGrade.trim().isNotEmpty)
-        'qualityGrade': qualityGrade.trim(),
-      if (unit != null && unit.trim().isNotEmpty) 'unit': unit.trim(),
-    };
-  }
 }

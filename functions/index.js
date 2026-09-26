@@ -14,11 +14,10 @@ const {
   onAdminNotificationCreated,
   onMessageSent, 
   onUserRegistration, 
-  onPaymentProofCreated, 
-  onDisputeCreated, 
+  onDisputeCreated,
   onAppealCreated 
 } = require('./notifications');
-const { verifyPaymentScreenshot } = require('./payment_verification');
+
 const {
   createRfq,
   submitRfqBid,
@@ -38,6 +37,11 @@ const {
 } = require('./disputes');
 const { generateAiText, onAiJobCreated } = require('./ai_assistant');
 
+const stripeFunctions = require("./stripe");
+exports.createSubscriptionPaymentIntent = stripeFunctions.createSubscriptionPaymentIntent;
+exports.createCommissionPaymentIntent = stripeFunctions.createCommissionPaymentIntent;
+exports.stripeWebhook = stripeFunctions.stripeWebhook;
+
 exports.onOrderConfirmed = onOrderConfirmed;
 exports.onCommissionEnsureJobCreated = onCommissionEnsureJobCreated;
 exports.scheduledCommissionOverdueCheck = scheduledCommissionOverdueCheck;
@@ -51,11 +55,10 @@ exports.onAdminNotificationCreated = onAdminNotificationCreated;
 
 // Admin Triggers
 exports.onUserRegistration = onUserRegistration;
-exports.onPaymentProofCreated = onPaymentProofCreated;
 exports.onDisputeCreated = onDisputeCreated;
 exports.onAppealCreated = onAppealCreated;
 
-exports.verifyPaymentScreenshot = verifyPaymentScreenshot;
+
 exports.createRfq = createRfq;
 exports.submitRfqBid = submitRfqBid;
 exports.awardRfq = awardRfq;

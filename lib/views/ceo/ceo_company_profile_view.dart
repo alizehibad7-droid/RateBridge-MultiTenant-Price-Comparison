@@ -104,12 +104,12 @@ class _CeoCompanyProfileViewState extends State<CeoCompanyProfileView> {
             onPressed: () => Navigator.pop(context, false),
             child: const Text('Cancel'),
           ),
-          TextButton(
+          FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(
-              foregroundColor: FieldColors.statusDanger,
+            style: FilledButton.styleFrom(
+              backgroundColor: FieldColors.statusDanger,
             ),
-            child: const Text('Log out', style: TextStyle(fontWeight: FontWeight.bold)),
+            child: const Text('Log out'),
           ),
         ],
       ),
@@ -225,10 +225,7 @@ class _CeoCompanyProfileViewState extends State<CeoCompanyProfileView> {
         ? user!.profileImageUrl
         : company.logoUrl;
 
-    return RootTabPopScope(
-      isHome: false,
-      homeRoute: RouteNames.ceoDashboard,
-      child: Scaffold(
+    return Scaffold(
       backgroundColor: FieldColors.screenBackground,
       extendBodyBehindAppBar: true,
       appBar: AppBar(
@@ -382,7 +379,6 @@ class _CeoCompanyProfileViewState extends State<CeoCompanyProfileView> {
         },
       ),
       bottomNavigationBar: const CeoNavBar(currentIndex: 5),
-    ),
     );
   }
 }

@@ -17,6 +17,7 @@ import '../../viewmodels/auth_viewmodel.dart';
 import '../../viewmodels/supplier_viewmodel.dart';
 import '../../widgets/app_network_image.dart';
 import '../../widgets/supplier_nav_bar.dart';
+import 'supplier_change_password_sheet.dart';
 import 'supplier_notification_prefs_sheet.dart';
 
 const _businessTypes = [
@@ -214,6 +215,16 @@ class _SupplierProfileViewState extends State<SupplierProfileView> {
     await showSupplierNotificationPrefsSheet(context);
   }
 
+  Future<void> _openChangePassword(String email) async {
+    if (email.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No email found on this account')),
+      );
+      return;
+    }
+    await showSupplierChangePasswordSheet(context, email: email);
+  }
+
   Future<void> _confirmSignOut(AuthViewModel authVM) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -227,10 +238,9 @@ class _SupplierProfileViewState extends State<SupplierProfileView> {
             onPressed: () => Navigator.pop(context, false),
             child: const Text('Cancel'),
           ),
-          TextButton(
+          FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: FieldColors.statusDanger),
-            child: const Text('Sign Out', style: TextStyle(fontWeight: FontWeight.bold)),
+            child: const Text('Sign Out'),
           ),
         ],
       ),
@@ -270,16 +280,12 @@ class _SupplierProfileViewState extends State<SupplierProfileView> {
     final imageUrl = profile?.profileImageUrl;
 
     if (!_profileLoaded && viewModel.isLoading) {
-      return RootTabPopScope(
-        isHome: false,
-        homeRoute: RouteNames.supplierDashboard,
-        child: Scaffold(
-          backgroundColor: FieldColors.screenBackground,
-          extendBodyBehindAppBar: true,
-          appBar: _buildAppBar(profile, viewModel),
-          bottomNavigationBar: const SupplierNavBar(currentIndex: 5),
-          body: const Center(child: CircularProgressIndicator()),
-        ),
+      return Scaffold(
+        backgroundColor: FieldColors.screenBackground,
+        extendBodyBehindAppBar: true,
+        appBar: _buildAppBar(profile, viewModel),
+        bottomNavigationBar: const SupplierNavBar(currentIndex: 5),
+        body: const Center(child: CircularProgressIndicator()),
       );
     }
 
@@ -290,101 +296,100 @@ class _SupplierProfileViewState extends State<SupplierProfileView> {
     final materialsCount = viewModel.totalMaterialsCount;
     final ordersDone = _completedOrdersCount(viewModel);
 
-    return RootTabPopScope(
-      isHome: false,
-      homeRoute: RouteNames.supplierDashboard,
-      child: Scaffold(
-        backgroundColor: FieldColors.screenBackground,
-        extendBodyBehindAppBar: true,
-        appBar: _buildAppBar(profile, viewModel),
-        bottomNavigationBar: const SupplierNavBar(currentIndex: 5),
-        body: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _ProfileHeader(
-                imageUrl: imageUrl,
-                initials: _initials(profile?.name),
-                businessName: profile?.name ?? 'Business Name',
-                city: profile?.city ?? '—',
-                joinedYear: joinedYear,
-                isUploadingImage: _isUploadingImage,
-                onPickImage: _pickProfileImage,
+    return Scaffold(
+      backgroundColor: FieldColors.screenBackground,
+      extendBodyBehindAppBar: true,
+      appBar: _buildAppBar(profile, viewModel),
+      bottomNavigationBar: const SupplierNavBar(currentIndex: 5),
+      body: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _ProfileHeader(
+              imageUrl: imageUrl,
+              initials: _initials(profile?.name),
+              businessName: profile?.name ?? 'Business Name',
+              city: profile?.city ?? '—',
+              joinedYear: joinedYear,
+              isUploadingImage: _isUploadingImage,
+              onPickImage: _pickProfileImage,
+            ),
+            const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: _SellerStatsRow(
+                materialsCount: materialsCount,
+                avgRating: avgRating,
+                ordersDone: ordersDone,
+                onMaterialsTap: () => context.push(RouteNames.supplierMaterials),
+                onOrdersTap: () => context.push(RouteNames.supplierOrders),
               ),
-              const SizedBox(height: 16),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: _SellerStatsRow(
-                  materialsCount: materialsCount,
-                  avgRating: avgRating,
-                  ordersDone: ordersDone,
-                  onMaterialsTap: () => context.push(RouteNames.supplierMaterials),
-                  onOrdersTap: () => context.push(RouteNames.supplierOrders),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Form(
-                  key: _formKey,
-                  child: _BusinessInfoCard(
-                    isEditing: _isEditing,
-                    onToggleEdit: () => _toggleEditMode(profile),
-                    onCancel: () => _cancelEdit(profile),
-                    onSave: viewModel.isLoading
-                        ? null
-                        : () => _saveProfile(viewModel, profile),
-                    isSaving: viewModel.isLoading,
-                    nameController: _nameController,
-                    phoneController: _phoneController,
-                    cityController: _cityController,
-                    businessType: _businessType,
-                    onBusinessTypeChanged: (v) {
-                      if (v != null) setState(() => _businessType = v);
-                    },
-                    viewName: _nameController.text.isNotEmpty
+            ),
+            const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Form(
+                key: _formKey,
+                child: _BusinessInfoCard(
+                  isEditing: _isEditing,
+                  onToggleEdit: () => _toggleEditMode(profile),
+                  onCancel: () => _cancelEdit(profile),
+                  onSave: viewModel.isLoading
+                      ? null
+                      : () => _saveProfile(viewModel, profile),
+                  isSaving: viewModel.isLoading,
+                  nameController: _nameController,
+                  phoneController: _phoneController,
+                  cityController: _cityController,
+                  businessType: _businessType,
+                  onBusinessTypeChanged: (v) {
+                    if (v != null) setState(() => _businessType = v);
+                  },
+                  viewName: _nameController.text.isNotEmpty
                       ? _nameController.text
                       : (profile?.name ?? '—'),
-                    viewCity: _cityController.text.isNotEmpty
+                  viewCity: _cityController.text.isNotEmpty
                       ? _cityController.text
                       : (profile?.city ?? '—'),
-                    viewPhone: _phoneController.text.isNotEmpty
+                  viewPhone: _phoneController.text.isNotEmpty
                       ? _phoneController.text
                       : (profile?.phone ?? '—'),
-                    viewCnic: _maskedCnic(profile?.cnic ?? _cnicController.text),
-                    viewBusinessType: _businessType,
-                  ),
+                  viewCnic: _maskedCnic(profile?.cnic ?? _cnicController.text),
+                  viewBusinessType: _businessType,
                 ),
               ),
-              const SizedBox(height: 16),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: _AccountSettingsCard(
-                  email: profile?.email ?? authVM.user?.email ?? '',
-                  onNotifications: _openNotificationPrefs,
-                  onTerms: _showTermsDialog,
-                  onRatings: () => context.push(RouteNames.supplierRatings),
-                  onDisputes: () => context.push(RouteNames.supplierMyDisputes),
-                  onEarnings: () => context.push(RouteNames.supplierEarnings),
-                  onPartnerships: () =>
-                      context.push(RouteNames.supplierMyCompanies),
-                  onFindCompanies: () =>
-                      context.push(RouteNames.supplierCompanyDirectory),
+            ),
+            const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: _AccountSettingsCard(
+                email: profile?.email ?? authVM.user?.email ?? '',
+                onNotifications: _openNotificationPrefs,
+                onChangePassword: () => _openChangePassword(
+                  profile?.email ?? authVM.user?.email ?? '',
                 ),
+                onTerms: _showTermsDialog,
+                onRatings: () => context.push(RouteNames.supplierRatings),
+                onDisputes: () => context.push(RouteNames.supplierMyDisputes),
+                onEarnings: () => context.push(RouteNames.supplierEarnings),
+                onPartnerships: () =>
+                    context.push(RouteNames.supplierMyCompanies),
+                onFindCompanies: () =>
+                    context.push(RouteNames.supplierCompanyDirectory),
               ),
-              const SizedBox(height: 16),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: _DangerZoneCard(
-                  onSignOut: () => _confirmSignOut(authVM),
-                ),
+            ),
+            const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: _DangerZoneCard(
+                onSignOut: () => _confirmSignOut(authVM),
               ),
-              const SizedBox(height: 24),
-              const _AppVersionFooter(),
-              const SizedBox(height: 24),
-            ],
-          ),
+            ),
+            const SizedBox(height: 24),
+            const _AppVersionFooter(),
+            const SizedBox(height: 24),
+          ],
         ),
       ),
     );
@@ -982,6 +987,7 @@ class _InfoRow extends StatelessWidget {
 class _AccountSettingsCard extends StatelessWidget {
   final String email;
   final VoidCallback onNotifications;
+  final VoidCallback onChangePassword;
   final VoidCallback onTerms;
   final VoidCallback onRatings;
   final VoidCallback onDisputes;
@@ -992,6 +998,7 @@ class _AccountSettingsCard extends StatelessWidget {
   const _AccountSettingsCard({
     required this.email,
     required this.onNotifications,
+    required this.onChangePassword,
     required this.onTerms,
     required this.onRatings,
     required this.onDisputes,
@@ -1020,6 +1027,11 @@ class _AccountSettingsCard extends StatelessWidget {
             icon: Icons.notifications_outlined,
             title: 'Notification Preferences',
             onTap: onNotifications,
+          ),
+          _SettingsRow(
+            icon: Icons.lock_outline,
+            title: 'Change Password',
+            onTap: onChangePassword,
           ),
           _SettingsRow(
             icon: Icons.description_outlined,

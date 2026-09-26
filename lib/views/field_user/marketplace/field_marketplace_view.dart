@@ -92,12 +92,7 @@ class _FieldMarketplaceViewState extends State<FieldMarketplaceView> {
     context.read<RecentlyViewedService>().persistView(material.id);
     context.push(
       RouteNames.fieldCompareOf(material.name),
-      extra: RouteNames.fieldCompareExtra(
-        name: material.name,
-        category: material.category,
-        qualityGrade: material.qualityGrade,
-        unit: material.unit,
-      ),
+      extra: material.name,
     );
   }
 

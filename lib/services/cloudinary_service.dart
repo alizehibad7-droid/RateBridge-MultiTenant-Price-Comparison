@@ -3,12 +3,10 @@
 // Never put API secret here.
 
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:http/http.dart' as http;
-import 'package:image_picker/image_picker.dart';
 
 /// Direct multipart uploads to Cloudinary (unsigned preset).
 class CloudinaryService {
@@ -18,7 +16,6 @@ class CloudinaryService {
   static const _uploadUrl =
       'https://api.cloudinary.com/v1_1/duv7nuuud/image/upload';
 
-  /// Standard upload method used across the app.
   static Future<String?> uploadImage({
     required String filePath,
     required String folder,
@@ -26,8 +23,7 @@ class CloudinaryService {
     try {
       final bytes = await XFile(filePath).readAsBytes();
       return uploadImageBytes(bytes: bytes, folder: folder);
-    } catch (e) {
-      debugPrint('CloudinaryService.uploadImage Error: $e');
+    } catch (_) {
       return null;
     }
   }
@@ -52,9 +48,7 @@ class CloudinaryService {
           if (compressed.isNotEmpty) {
             uploadBytes = compressed;
           }
-        } catch (e) {
-          debugPrint('Compression Error: $e');
-        }
+        } catch (_) {}
       }
 
       final request = http.MultipartRequest('POST', Uri.parse(_uploadUrl));
@@ -68,20 +62,15 @@ class CloudinaryService {
         ),
       );
 
-      final response = await request.send().timeout(const Duration(seconds: 60));
+      final response = await request.send();
       final body = await response.stream.bytesToString();
-      
-      if (response.statusCode != 200) {
-        debugPrint('Cloudinary Error: Status ${response.statusCode} - $body');
-        return null;
-      }
+      if (response.statusCode != 200) return null;
 
       final json = jsonDecode(body) as Map<String, dynamic>;
       final url = json['secure_url'];
       if (url is String && url.isNotEmpty) return url;
       return null;
-    } catch (e) {
-      debugPrint('CloudinaryService.uploadImageBytes Exception: $e');
+    } catch (_) {
       return null;
     }
   }

@@ -4,10 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
-import '../../constants/app_constants.dart';
-import '../../constants/route_names.dart';
 import '../../theme/ceo_theme.dart';
-import '../../utils/app_navigation.dart';
 import '../../utils/formatters.dart';
 import '../../viewmodels/ceo_viewmodel.dart';
 import '../../viewmodels/auth_viewmodel.dart';
@@ -34,8 +31,6 @@ class CeoOrdersView extends StatefulWidget {
 class _CeoOrdersViewState extends State<CeoOrdersView>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
-  bool _isSelectionMode = false;
-  final Set<String> _selectedOrderIds = {};
 
   @override
   void initState() {
@@ -46,7 +41,6 @@ class _CeoOrdersViewState extends State<CeoOrdersView>
       vsync: this,
       initialIndex: initial,
     );
-    _tabController.addListener(_handleTabChange);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final vm = context.read<CeoViewModel>();
       if (vm.company == null) {
@@ -55,50 +49,10 @@ class _CeoOrdersViewState extends State<CeoOrdersView>
     });
   }
 
-  void _handleTabChange() {
-    if (_tabController.indexIsChanging && _isSelectionMode) {
-      setState(() {
-        _isSelectionMode = false;
-        _selectedOrderIds.clear();
-      });
-    }
-  }
-
   @override
   void dispose() {
-    _tabController.removeListener(_handleTabChange);
     _tabController.dispose();
     super.dispose();
-  }
-
-  Future<void> _confirmAndDeleteSelected(CeoViewModel vm) async {
-    if (_selectedOrderIds.isEmpty) return;
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Remove ${_selectedOrderIds.length} orders?'),
-        content: const Text('This will remove these orders from your view. The records will remain for other users and audit purposes.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Remove', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true) {
-      await vm.hideOrders(_selectedOrderIds.toList());
-      setState(() {
-        _selectedOrderIds.clear();
-        _isSelectionMode = false;
-      });
-    }
   }
 
   @override
@@ -107,32 +61,10 @@ class _CeoOrdersViewState extends State<CeoOrdersView>
     final vm = context.watch<CeoViewModel>();
     final companyId = vm.company?.id ?? authVm.companyId ?? '';
 
-    return RootTabPopScope(
-      isHome: false,
-      homeRoute: RouteNames.ceoDashboard,
-      child: Scaffold(
+    return Scaffold(
       backgroundColor: CeoColors.screenBg,
       appBar: CeoAppBar(
-        leading: _isSelectionMode
-            ? IconButton(
-                icon: const Icon(Icons.close_rounded),
-                onPressed: () => setState(() {
-                  _isSelectionMode = false;
-                  _selectedOrderIds.clear();
-                }),
-              )
-            : null,
-        title: _isSelectionMode
-            ? '${_selectedOrderIds.length} selected'
-            : 'Company Orders',
-        actions: _isSelectionMode
-            ? [
-                IconButton(
-                  icon: const Icon(Icons.delete_outline_rounded),
-                  onPressed: () => _confirmAndDeleteSelected(vm),
-                ),
-              ]
-            : null,
+        title: 'Company Orders',
         bottom: TabBar(
           controller: _tabController,
           isScrollable: false,
@@ -208,80 +140,30 @@ class _CeoOrdersViewState extends State<CeoOrdersView>
                 padding: const EdgeInsets.all(16),
                 itemCount: orders.length,
                 separatorBuilder: (_, __) => const SizedBox(height: 12),
-                itemBuilder: (context, i) {
-                  final order = orders[i];
-                  final isSelected = _selectedOrderIds.contains(order.orderId);
-                  return _orderCard(context, vm, order, isSelected);
-                },
+                itemBuilder: (context, i) =>
+                    _orderCard(context, vm, orders[i]),
               );
             },
           );
         }).toList(),
       ),
       bottomNavigationBar: const CeoNavBar(currentIndex: 4),
-    ),
     );
   }
 
   Widget _orderCard(
-      BuildContext context, CeoViewModel vm, OrderModel order, bool isSelected) {
-    final status = order.status.toLowerCase();
-    final canDirectCancel = status == 'pending' || status == 'pending_approval';
-    final canRequestCancel = status == 'accepted' ||
-        status == 'inprogress' ||
-        status == AppConstants.statusInProgress.toLowerCase();
-    final canCancel = canDirectCancel || canRequestCancel;
+      BuildContext context, CeoViewModel vm, OrderModel order) {
+    final canCancel = order.status == 'pending' || order.status == 'accepted';
     final awaitingApproval = isCeoAwaitingApproval(order.status);
 
     return GestureDetector(
-      onLongPress: () {
-        setState(() {
-          _isSelectionMode = true;
-          _selectedOrderIds.add(order.orderId);
-        });
-      },
-      onTap: () {
-        if (_isSelectionMode) {
-          setState(() {
-            if (_selectedOrderIds.contains(order.orderId)) {
-              _selectedOrderIds.remove(order.orderId);
-              if (_selectedOrderIds.isEmpty) _isSelectionMode = false;
-            } else {
-              _selectedOrderIds.add(order.orderId);
-            }
-          });
-        } else {
-          _showOrderDetail(context, order);
-        }
-      },
+      onTap: () => _showOrderDetail(context, order),
       child: AdminCard(
-        color: isSelected ? CeoColors.amber.withValues(alpha: 0.1) : Colors.white,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Row(
               children: [
-                if (_isSelectionMode) ...[
-                  SizedBox(
-                    height: 24,
-                    width: 24,
-                    child: Checkbox(
-                      value: isSelected,
-                      onChanged: (val) {
-                        setState(() {
-                          if (val == true) {
-                            _selectedOrderIds.add(order.orderId);
-                          } else {
-                            _selectedOrderIds.remove(order.orderId);
-                            if (_selectedOrderIds.isEmpty) _isSelectionMode = false;
-                          }
-                        });
-                      },
-                      activeColor: CeoColors.amber,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                ],
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
@@ -301,7 +183,7 @@ class _CeoOrdersViewState extends State<CeoOrdersView>
                     ),
                   ),
                 ),
-                if (!_isSelectionMode) CeoStatusBadge(status: order.status),
+                CeoStatusBadge(status: order.status),
               ],
             ),
             const SizedBox(height: 12),
@@ -348,63 +230,50 @@ class _CeoOrdersViewState extends State<CeoOrdersView>
                 ),
               ],
             ),
-            if (!_isSelectionMode) ...[
-              if (awaitingApproval) ...[
-                const SizedBox(height: 16),
-                const Divider(height: 1),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () => _confirmReject(context, vm, order),
-                        icon: const Icon(Icons.close_rounded, size: 18),
-                        label: const Text('Reject'),
-                        style: CeoTheme.destructiveButtonStyle(height: 44),
-                      ),
+            if (awaitingApproval) ...[
+              const SizedBox(height: 16),
+              const Divider(height: 1),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => _confirmReject(context, vm, order),
+                      icon: const Icon(Icons.close_rounded, size: 18),
+                      label: const Text('Reject'),
+                      style: CeoTheme.destructiveButtonStyle(height: 44),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: () async {
-                          await vm.approveOrder(order);
-                          if (!context.mounted) return;
-                          final msg = vm.errorMessage ?? vm.successMessage;
-                          if (msg != null && msg.isNotEmpty) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text(msg)),
-                            );
-                          }
-                        },
-                        icon: const Icon(Icons.check_rounded, size: 18),
-                        label: const Text('Approve'),
-                        style: CeoTheme.primaryButtonStyle(height: 44),
-                      ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () => vm.approveOrder(order),
+                      icon: const Icon(Icons.check_rounded, size: 18),
+                      label: const Text('Approve'),
+                      style: CeoTheme.primaryButtonStyle(height: 44),
                     ),
-                  ],
-                ),
-              ],
-              if (canCancel) ...[
-                const SizedBox(height: 12),
-                const Divider(height: 1),
-                const SizedBox(height: 8),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton.icon(
-                    onPressed: () => canRequestCancel
-                        ? _confirmCancelRequest(context, vm, order)
-                        : _confirmCancel(context, vm, order),
-                    icon: const Icon(Icons.cancel_outlined, size: 16, color: CeoColors.red),
-                    label: Text(
-                      canRequestCancel ? 'Request Cancellation' : 'Cancel Order',
-                      style: GoogleFonts.plusJakartaSans(
-                        color: CeoColors.red,
-                        fontWeight: FontWeight.w700,
-                      ),
+                  ),
+                ],
+              ),
+            ],
+            if (canCancel) ...[
+              const SizedBox(height: 12),
+              const Divider(height: 1),
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  onPressed: () => _confirmCancel(context, vm, order),
+                  icon: const Icon(Icons.cancel_outlined, size: 16, color: CeoColors.red),
+                  label: Text(
+                    'Cancel Order',
+                    style: GoogleFonts.plusJakartaSans(
+                      color: CeoColors.red,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 ),
-              ],
+              ),
             ],
           ],
         ),
@@ -483,109 +352,20 @@ class _CeoOrdersViewState extends State<CeoOrdersView>
         ),
         content: Text(
             'Are you sure you want to cancel order #${order.id}? '
-            'The supplier has not accepted it yet.'),
+            'This action cannot be undone.'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx),
               child: const Text('No, keep it')),
           OutlinedButton.icon(
             style: CeoTheme.destructiveButtonStyle(height: 40),
-            onPressed: () async {
+            onPressed: () {
               Navigator.pop(ctx);
-              final companyId = vm.company?.id ??
-                  context.read<AuthViewModel>().companyId ??
-                  order.companyId;
-              await vm.cancelOrder(
-                order.id,
-                companyId,
-                order: order,
-              );
-              if (!context.mounted) return;
-              final msg = vm.errorMessage ?? vm.successMessage;
-              if (msg != null && msg.isNotEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(msg)),
-                );
-              }
+              vm.cancelOrder(order.id,
+                  context.read<AuthViewModel>().companyId ?? '');
             },
             icon: const Icon(Icons.check_rounded, size: 18),
             label: const Text('Yes, cancel'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _confirmCancelRequest(
-      BuildContext context, CeoViewModel vm, OrderModel order) {
-    final reasonController = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Row(
-          children: [
-            const Icon(Icons.warning_rounded, color: CeoColors.amber),
-            const SizedBox(width: 10),
-            const Expanded(child: Text('Request cancellation?')),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              'The supplier has already accepted this order. '
-              'Enter a reason — they must approve the cancellation.',
-              style: CeoTheme.mutedStyle(size: 13),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: reasonController,
-              decoration: CeoTheme.inputDecoration(
-                labelText: 'Cancellation reason (required)',
-                hintText: 'e.g. Project delayed, wrong quantity...',
-              ),
-              maxLines: 3,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Keep order'),
-          ),
-          OutlinedButton.icon(
-            style: CeoTheme.destructiveButtonStyle(height: 40),
-            onPressed: () async {
-              final reason = reasonController.text.trim();
-              if (reason.isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Please enter a cancellation reason.'),
-                  ),
-                );
-                return;
-              }
-              Navigator.pop(ctx);
-              final companyId = vm.company?.id ??
-                  context.read<AuthViewModel>().companyId ??
-                  order.companyId;
-              await vm.cancelOrder(
-                order.id,
-                companyId,
-                reason: reason,
-                order: order,
-              );
-              if (!context.mounted) return;
-              final msg = vm.errorMessage ?? vm.successMessage;
-              if (msg != null && msg.isNotEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(msg)),
-                );
-              }
-            },
-            icon: const Icon(Icons.send_rounded, size: 18),
-            label: const Text('Send request'),
           ),
         ],
       ),

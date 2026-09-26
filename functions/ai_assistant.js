@@ -55,7 +55,7 @@ async function generateWithVertex(prompt, model) {
 async function generateWithApiKey(prompt, apiKey) {
   const genAI = new GoogleGenerativeAI(apiKey);
   const model = genAI.getGenerativeModel({
-    model: 'gemini-3.6-flash',
+    model: 'gemini-1.5-flash',
     generationConfig: {
       maxOutputTokens: 500,
       temperature: 0.3,
@@ -69,7 +69,7 @@ async function generateWithGroq(prompt, apiKey) {
   const res = await axios.post(
     'https://api.groq.com/openai/v1/chat/completions',
     {
-      model: 'groq/compound-mini',
+      model: 'llama3-70b-8192',
       max_tokens: 500,
       temperature: 0.3,
       messages: [{ role: 'user', content: prompt }],
@@ -108,7 +108,10 @@ async function generateText(prompt) {
       }
       console.warn('Groq returned an empty response');
     } catch (error) {
-      console.warn('Groq path failed:', error.message || error);
+      console.error('[AI Provider Error] Groq failed:', {
+        message: error.message,
+        details: error.response?.data || 'N/A'
+      });
     }
   }
 
@@ -121,7 +124,10 @@ async function generateText(prompt) {
       }
       console.warn('Gemini API key path returned an empty response');
     } catch (error) {
-      console.warn('Gemini API key path failed, trying Vertex:', error.message || error);
+      console.error('[AI Provider Error] Gemini API Key failed:', {
+        message: error.message,
+        stack: error.stack
+      });
     }
   }
 
@@ -136,7 +142,10 @@ async function generateText(prompt) {
       console.warn(`Vertex model ${model} returned an empty response`);
     } catch (error) {
       lastError = error;
-      console.warn(`Vertex model ${model} failed:`, error.message || error);
+      console.error(`[AI Provider Error] Vertex model ${model} failed:`, {
+        message: error.message,
+        stack: error.stack
+      });
     }
   }
   throw lastError || new Error('AI returned an empty response.');
@@ -151,37 +160,36 @@ function publicAiError(error) {
     lower.includes('401') ||
     lower.includes('permission')
   ) {
-    return 'AI provider authentication failed. Set GROQ_API_KEY or GEMINI_KEY for the Cloud Function.';
+    return 'AI provider authentication failed. Check your API keys and project permissions.';
   }
   if (lower.includes('429') || lower.includes('rate limit') || lower.includes('resource exhausted')) {
-    return 'AI provider rate limit reached. Try again shortly.';
+    return 'The AI service is currently busy. Please try again in a moment.';
   }
   if (lower.includes('timeout') || lower.includes('etimedout') || lower.includes('deadline')) {
-    return 'The AI provider timed out. Please try again.';
+    return 'The request timed out. Please try a shorter prompt.';
   }
-  if (lower.includes('empty response')) {
-    return 'The assistant returned an empty response.';
-  }
-  return raw.slice(0, 280);
+  return 'The AI assistant encountered an error. Please try again.';
 }
 
 // Firestore trigger — no public HTTP/IAM. Flutter writes ai_jobs/{id} and
 // listens for the response. This avoids the 403 on generateAiText.
 exports.onAiJobCreated = functions
   .region('us-central1')
-  .runWith({ timeoutSeconds: 60, memory: '256MB' })
+  .runWith({ timeoutSeconds: 60, memory: '512MB' })
   .firestore.document('ai_jobs/{jobId}')
-  .onCreate(async (snap) => {
+  .onCreate(async (snap, context) => {
+    const jobId = context.params.jobId;
     const data = snap.data() || {};
     const prompt = typeof data.prompt === 'string' ? data.prompt.trim() : '';
+
     if (!prompt) {
+      console.error(`[onAiJobCreated] Job ${jobId} missing prompt`);
       await snap.ref.update({ status: 'error', error: 'Missing prompt.' });
       return;
     }
-    if (prompt.length > 12000) {
-      await snap.ref.update({ status: 'error', error: 'Prompt too long.' });
-      return;
-    }
+
+    console.log(`[onAiJobCreated] Starting AI Job: ${jobId}`);
+
     try {
       const text = await generateText(prompt);
       await snap.ref.update({
@@ -189,8 +197,12 @@ exports.onAiJobCreated = functions
         text: text || '',
         completedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
+      console.log(`[onAiJobCreated] Job ${jobId} completed successfully`);
     } catch (error) {
-      console.error('onAiJobCreated error:', error);
+      console.error(`[onAiJobCreated] Job ${jobId} failed:`, {
+        message: error.message,
+        stack: error.stack
+      });
       await snap.ref.update({
         status: 'error',
         error: publicAiError(error),
@@ -204,22 +216,36 @@ exports.generateAiText = onCall(
     cors: true,
     invoker: 'public',
     timeoutSeconds: 60,
-    memory: '256MiB',
+    memory: '512MiB',
+    secrets: ["GEMINI_KEY", "GROQ_API_KEY"],
   },
   async (request) => {
     if (!request.auth) {
-      throw new HttpsError('unauthenticated', 'Auth required.');
+      console.error('[generateAiText] Unauthenticated request');
+      throw new HttpsError('unauthenticated', 'You must be signed in to use the AI assistant.');
     }
-    const prompt =
-      typeof request.data?.prompt === 'string' ? request.data.prompt.trim() : '';
+
+    const uid = request.auth.uid;
+    const prompt = typeof request.data?.prompt === 'string' ? request.data.prompt.trim() : '';
+
     if (!prompt) {
-      throw new HttpsError('invalid-argument', 'Missing prompt.');
+      console.error(`[generateAiText] Missing prompt from user: ${uid}`);
+      throw new HttpsError('invalid-argument', 'Please provide a prompt.');
     }
+
+    console.log(`[generateAiText] Request from UID: ${uid}. Length: ${prompt.length}`);
+
     try {
       const text = await generateText(prompt);
+      console.log(`[generateAiText] Success for UID: ${uid}`);
       return { text };
     } catch (error) {
-      console.error('generateAiText error:', error);
+      console.error(`[generateAiText] Execution failed for UID: ${uid}:`, {
+        message: error.message,
+        stack: error.stack,
+        promptPreview: prompt.slice(0, 100) + (prompt.length > 100 ? '...' : '')
+      });
+
       throw new HttpsError('internal', publicAiError(error));
     }
   },

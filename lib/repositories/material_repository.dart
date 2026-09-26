@@ -73,52 +73,21 @@ class MaterialRepository {
   /// Materials from company-linked suppliers matching [name] (case-insensitive).
   Future<List<MaterialModel>> getMaterialsByNameForCompany(
     String companyId,
-    String name, {
-    String? category,
-    String? qualityGrade,
-    String? unit,
-  }) async {
-    return _firestoreService.getMaterialsByNameForCompany(
-      companyId,
-      name,
-      category: category,
-      qualityGrade: qualityGrade,
-      unit: unit,
-    );
+    String name,
+  ) async {
+    return _firestoreService.getMaterialsByNameForCompany(companyId, name);
   }
 
   /// Enriched compare rows for the field-user comparison screen.
-  ///
-  /// Groups by **category only** so every linked supplier listing in that
-  /// category appears (grade/brand/name stay on each card for display).
   Future<List<MaterialListing>> getCompareListingsForMaterial(
     String companyId,
-    String materialName, {
-    String? category,
-    String? qualityGrade,
-    String? unit,
-  }) async {
+    String materialName,
+  ) async {
     final trimmedName = materialName.trim();
-    if (trimmedName.isEmpty && (category == null || category.trim().isEmpty)) {
-      return [];
-    }
+    if (trimmedName.isEmpty) return [];
 
-    var compareCategory = category?.trim() ?? '';
-    if (compareCategory.isEmpty && trimmedName.isNotEmpty) {
-      final named = await getMaterialsByNameForCompany(companyId, trimmedName);
-      if (named.isNotEmpty) {
-        compareCategory = named.first.category.trim();
-      }
-    }
-
-    final materials = compareCategory.isNotEmpty
-        ? await getMaterialsByNameForCompany(
-            companyId,
-            trimmedName.isEmpty ? compareCategory : trimmedName,
-            category: compareCategory,
-          )
-        : await getMaterialsByNameForCompany(companyId, trimmedName);
-
+    final materials =
+        await getMaterialsByNameForCompany(companyId, trimmedName);
     if (materials.isEmpty) return [];
 
     final supplierCache = <String, SupplierModel?>{};
