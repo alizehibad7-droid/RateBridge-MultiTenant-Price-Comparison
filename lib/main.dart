@@ -46,8 +46,10 @@ import 'services/ai_context_service.dart';
 import 'services/recently_viewed_service.dart';
 import 'services/fcm_service.dart';
 import 'services/notification_service.dart';
+import 'services/stripe_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter_stripe/flutter_stripe.dart';
 import 'firebase_options.dart';
 
 /// Call once after [Firebase.initializeApp], before any Firestore reads.
@@ -73,6 +75,14 @@ void main() async {
       configureFirestoreForPlatform();
       prefs = await SharedPreferences.getInstance();
 
+      // Stripe Payment Sheet (test publishable key from Eman Stripe integration).
+      // Swap for pk_live_... when going to production.
+      Stripe.publishableKey =
+          'pk_test_51UDAH2BiKPUcGjilfFduv9mdleNH3LaKO1parFKh1T2G40UbWobY9gzC6tlzcF2JThgFB4sA1j6HwD6Rt1gso0oJ00jt47cZei';
+      if (!kIsWeb) {
+        await Stripe.instance.applySettings();
+      }
+
       // Initialize FCM only on mobile platforms
       if (!kIsWeb) {
         await FCMService().initialize();
@@ -95,6 +105,7 @@ void main() async {
           Provider<FirestoreService>(create: (_) => FirestoreService()),
           Provider<StorageService>(create: (_) => StorageService()),
           Provider<CloudFunctionService>(create: (_) => CloudFunctionService()),
+          Provider<StripeService>(create: (_) => StripeService()),
           Provider<DynamicLinkService>(create: (_) => DynamicLinkService()),
           ChangeNotifierProvider<AiContextService>(
             create: (_) => AiContextService(),

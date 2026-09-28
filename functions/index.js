@@ -37,6 +37,7 @@ const {
   onDisputeWithdrawJobCreated,
 } = require('./disputes');
 const { generateAiText, onAiJobCreated } = require('./ai_assistant');
+const stripeFunctions = require('./stripe');
 
 exports.onOrderConfirmed = onOrderConfirmed;
 exports.onCommissionEnsureJobCreated = onCommissionEnsureJobCreated;
@@ -71,3 +72,9 @@ exports.onDisputeUpdateJobCreated = onDisputeUpdateJobCreated;
 exports.onDisputeWithdrawJobCreated = onDisputeWithdrawJobCreated;
 exports.generateAiText = generateAiText;
 exports.onAiJobCreated = onAiJobCreated;
+
+exports.createSubscriptionPaymentIntent =
+  stripeFunctions.createSubscriptionPaymentIntent;
+exports.createCommissionPaymentIntent =
+  stripeFunctions.createCommissionPaymentIntent;
+exports.stripeWebhook = stripeFunctions.stripeWebhook;

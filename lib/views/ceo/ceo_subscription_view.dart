@@ -10,8 +10,9 @@ import '../../models/subscription_model.dart';
 import '../../viewmodels/auth_viewmodel.dart';
 import '../../viewmodels/subscription_viewmodel.dart';
 import '../../widgets/ceo/ceo_widgets.dart';
-import '../payment/payment_method_view.dart';
+import '../../services/stripe_service.dart';
 import '../../models/payment_proof_model.dart';
+import '../../utils/app_exception.dart';
 
 class CeoSubscriptionView extends StatefulWidget {
   const CeoSubscriptionView({super.key});
@@ -123,18 +124,41 @@ class _CeoSubscriptionViewState extends State<CeoSubscriptionView> {
                 child: Row(
                   children: kPlans.map((plan) => Padding(
                     padding: const EdgeInsets.only(right: 16),
-                    child: _buildPlanOption(plan, sub?.plan == plan.planKey, isPending, () {
-                      if (plan.id != PlanId.free) {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => PaymentMethodView(
-                              amount: plan.priceRs.toDouble(),
-                              type: PaymentType.subscription,
-                              planKey: plan.planKey,
-                            ),
+                    child: _buildPlanOption(plan, sub?.plan == plan.planKey, isPending, () async {
+                      if (plan.id == PlanId.free) return;
+                      final subVm = context.read<SubscriptionViewModel>();
+                      final authVm = context.read<AuthViewModel>();
+                      final companyId = authVm.user?.companyId ?? '';
+                      try {
+                        final stripe = context.read<StripeService>();
+                        await stripe.payWithStripe(
+                          type: 'subscription',
+                          plan: plan.planKey,
+                          amountPKR: plan.priceRs,
+                        );
+                        if (companyId.isNotEmpty) {
+                          await subVm.activateSubscription(
+                            companyId: companyId,
+                            plan: plan,
+                            adminGranted: false,
+                            amountPaid: plan.priceRs,
+                          );
+                        }
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Payment successful. Plan activated.'),
                           ),
-                        ).then((_) => _bootstrap());
+                        );
+                        _bootstrap();
+                      } catch (e) {
+                        if (!mounted) return;
+                        final msg = e is AppException
+                            ? e.message
+                            : e.toString();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(msg)),
+                        );
                       }
                     }),
                   )).toList(),

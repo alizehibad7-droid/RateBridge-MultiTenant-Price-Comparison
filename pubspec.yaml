@@ -33,6 +33,9 @@ dependencies:
   # AI
   http: ^1.2.2
 
+  # Payments
+  flutter_stripe: ^11.1.0
+
   # Charts
   fl_chart: ^0.69.0
 

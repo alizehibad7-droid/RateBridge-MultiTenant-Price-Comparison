@@ -193,6 +193,16 @@ class SupplierViewModel extends ChangeNotifier {
     if (owed <= 0) return 0;
     return CurrencyFormatter.roundToRupee(owed);
   }
+
+  List<String> get unsettledTransactionIds => _allCommissions
+      .where((tx) {
+        final status = tx.status.toLowerCase().trim();
+        return status == 'unsettled' || status == 'pending';
+      })
+      .map((tx) => tx.txId)
+      .where((id) => id.isNotEmpty)
+      .toList();
+
   double get pendingCommissionApproval => CurrencyFormatter.roundToRupee(
         _pendingCommissionPayments.fold<double>(
           0.0,
