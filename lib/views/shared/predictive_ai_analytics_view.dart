@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../viewmodels/ai_viewmodel.dart';
 import '../../constants/app_colors.dart';
+import '../../models/subscription_model.dart';
 import '../../utils/app_navigation.dart';
+import '../../widgets/subscription_gate_widget.dart';
 
 class PredictiveAiAnalyticsView extends StatefulWidget {
   const PredictiveAiAnalyticsView({super.key});
@@ -39,11 +41,14 @@ class _PredictiveAiAnalyticsViewState extends State<PredictiveAiAnalyticsView> {
         leading: AppNavigation.leading(context),
         title: const Text('Gemini Analytics'),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+      body: SubscriptionGateWidget(
+        featureName: 'AI Market Insights Locked',
+        requiredPlan: PlanId.basic,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
             // Skyline Headline - Tight tracked & Bold
             Text(
               "Predictive AI Sourcing",
@@ -345,6 +350,7 @@ class _PredictiveAiAnalyticsViewState extends State<PredictiveAiAnalyticsView> {
             const SizedBox(height: 40),
           ],
         ),
+      ),
       ),
     );
   }

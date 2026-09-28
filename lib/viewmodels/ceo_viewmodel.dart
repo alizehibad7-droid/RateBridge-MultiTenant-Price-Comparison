@@ -44,6 +44,9 @@ class CeoViewModel extends ChangeNotifier {
   CompanyModel? _company;
   List<SupplierModel> _allMarketplaceSuppliers = [];
   List<SupplierModel> _marketplaceSuppliers = [];
+  /// Linked partners whose platform status is not Active (e.g. Suspended) so
+  /// they still appear in the Partner Directory with a clear badge.
+  List<SupplierModel> _inactiveLinkedPartners = [];
   String _marketplaceSearchQuery = '';
   String _marketplaceCity = 'All';
   String _marketplaceCategory = 'All';
@@ -89,6 +92,25 @@ class CeoViewModel extends ChangeNotifier {
   String? get successMessage => _successMessage;
   CompanyModel? get company => _company;
   List<SupplierModel> get marketplaceSuppliers => _marketplaceSuppliers;
+
+  /// Marketplace list plus inactive/suspended linked partners for the directory.
+  List<SupplierModel> get partnerDirectorySuppliers {
+    if (_inactiveLinkedPartners.isEmpty) return _marketplaceSuppliers;
+    final byId = <String, SupplierModel>{
+      for (final s in _marketplaceSuppliers) s.id: s,
+    };
+    for (final s in _inactiveLinkedPartners) {
+      byId.putIfAbsent(s.id, () => s);
+    }
+    final list = byId.values.toList();
+    if (_marketplaceSortBy == 'Name') {
+      list.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    } else {
+      list.sort((a, b) => b.rating.compareTo(a.rating));
+    }
+    return list;
+  }
+
   bool get partnershipRequestsReady => _partnershipRequestsReady;
   List<PartnershipRequestModel> get receivedPartnershipRequests =>
       List<PartnershipRequestModel>.unmodifiable(_receivedPartnershipRequests);
@@ -369,6 +391,7 @@ class CeoViewModel extends ChangeNotifier {
               return status == 'active' || status == 'approved';
             }).map((doc) => doc.id),
           );
+        _syncInactiveLinkedPartners();
         notifyListeners();
       },
       onError: (_) {
@@ -385,6 +408,7 @@ class CeoViewModel extends ChangeNotifier {
     _partnershipWatchCompanyId = null;
     _latestPartnershipBySupplierId.clear();
     _activePartnerSupplierIds.clear();
+    _inactiveLinkedPartners = [];
     _receivedPartnershipRequests = [];
     _sentPartnershipRequests = [];
     _partnershipRequestsReady = false;
@@ -814,6 +838,7 @@ class CeoViewModel extends ChangeNotifier {
         (snap) {
           _allMarketplaceSuppliers = _suppliersFromDocs(snap.docs);
           _applyMarketplaceFilters();
+          _syncInactiveLinkedPartners();
           _isLoading = false;
           notifyListeners();
         },
@@ -821,6 +846,7 @@ class CeoViewModel extends ChangeNotifier {
           _fetchMarketplaceSuppliers().then((suppliers) {
             _allMarketplaceSuppliers = suppliers;
             _applyMarketplaceFilters();
+            _syncInactiveLinkedPartners();
             _isLoading = false;
             notifyListeners();
           });
@@ -921,6 +947,44 @@ class CeoViewModel extends ChangeNotifier {
     _marketplaceSuppliers = list;
   }
 
+  /// Fetches linked partners missing from the Active marketplace feed (e.g.
+  /// Suspended) so the Partner Directory can show them with a clear badge.
+  Future<void> _syncInactiveLinkedPartners() async {
+    final marketplaceIds = _allMarketplaceSuppliers.map((s) => s.id).toSet();
+    final missingIds = _activePartnerSupplierIds
+        .where((id) => id.isNotEmpty && !marketplaceIds.contains(id))
+        .toList();
+
+    if (missingIds.isEmpty) {
+      if (_inactiveLinkedPartners.isNotEmpty) {
+        _inactiveLinkedPartners = [];
+        notifyListeners();
+      }
+      return;
+    }
+
+    final fetched = <SupplierModel>[];
+    for (final id in missingIds) {
+      try {
+        final doc = await _db.collection('suppliers').doc(id).get();
+        if (!doc.exists) continue;
+        final raw = doc.data();
+        if (raw is! Map) continue;
+        final data = Map<String, dynamic>.from(raw);
+        data['id'] = doc.id;
+        final supplier = SupplierModel.fromMap(data);
+        // Keep commission-restricted partners visible too (materials already
+        // filtered); only platform-inactive ones need this extra list.
+        if (!_isActiveMarketplaceSupplier(supplier.status)) {
+          fetched.add(supplier);
+        }
+      } catch (_) {}
+    }
+
+    _inactiveLinkedPartners = fetched;
+    notifyListeners();
+  }
+
   Future<void> sendPartnershipRequest(
     String supplierId, {
     String? message,
@@ -943,6 +1007,20 @@ class CeoViewModel extends ChangeNotifier {
           await _db.collection('suppliers').doc(supplierId).get();
       if (!supplierDoc.exists) return;
       final supplierData = supplierDoc.data()!;
+      final supplierStatus =
+          (supplierData['status'] as String?)?.trim().toLowerCase() ?? '';
+      if (supplierStatus != 'active') {
+        _errorMessage =
+            'This supplier is currently unavailable for partnerships.';
+        notifyListeners();
+        return;
+      }
+      if (supplierData['commissionRestricted'] == true) {
+        _errorMessage =
+            'This supplier is temporarily unavailable for partnerships.';
+        notifyListeners();
+        return;
+      }
 
       final requestId = await _partnershipRepo.createRequest(
         companyId: company.id,

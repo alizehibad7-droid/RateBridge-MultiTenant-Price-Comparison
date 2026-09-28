@@ -7,6 +7,7 @@ import '../repositories/order_repository.dart';
 import '../repositories/transaction_repository.dart';
 import '../services/cloud_function_service.dart';
 import '../constants/app_constants.dart';
+import '../utils/currency_formatter.dart';
 import 'auth_viewmodel.dart';
 
 class OrderViewModel extends ChangeNotifier {
@@ -71,8 +72,8 @@ class OrderViewModel extends ChangeNotifier {
 
       // 2. Generate Commission Record (2%)
       // This uses a deterministic ID internally to prevent duplicates
-      final commissionAmount = order.totalAmount * AppConstants.commissionRate;
-      final supplierEarning = order.totalAmount - commissionAmount;
+      final commissionAmount = CurrencyFormatter.commissionOn(order.totalAmount);
+      final supplierEarning = CurrencyFormatter.supplierEarningOn(order.totalAmount);
 
       await _transactionRepo.createUnsettledCommissionTransaction(
         orderId: orderId,

@@ -121,7 +121,8 @@ class _SplashViewState extends State<SplashView>
         isAllowed = true;
       }
     } else if (role == 'ceo' || role == 'supplier' || role == 'fielduser') {
-      if (isAndroid) {
+      // TEMP: web testing access enabled for CEO/Supplier/Field User — remove before production
+      if (isAndroid || isWeb) {
         isAllowed = true;
       }
     } else {

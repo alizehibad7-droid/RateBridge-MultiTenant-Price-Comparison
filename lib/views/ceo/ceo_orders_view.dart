@@ -642,7 +642,61 @@ class _CeoOrdersViewState extends State<CeoOrdersView>
             Center(child: CeoStatusBadge(status: order.status)),
             const SizedBox(height: 24),
             _detailSection(Icons.category_rounded, 'Material', order.materialName),
-            _detailSection(Icons.inventory_rounded, 'Quantity', '${order.quantity} ${order.unit}'),
+            _detailSection(
+              Icons.inventory_rounded,
+              'Ordered quantity',
+              order.formattedOrderedQuantity,
+            ),
+            if (order.hasWeightReport) ...[
+              _detailSection(
+                Icons.scale_rounded,
+                'Actual received',
+                order.formattedActualWeight!,
+              ),
+              if (order.weightReportRemarks != null &&
+                  order.weightReportRemarks!.trim().isNotEmpty)
+                _detailSection(
+                  Icons.notes_rounded,
+                  'Weight remarks',
+                  order.weightReportRemarks!.trim(),
+                ),
+              if (order.hasWeightDiscrepancy) ...[
+                const SizedBox(height: 8),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: CeoColors.amber.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: CeoColors.amber.withValues(alpha: 0.4),
+                    ),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(
+                        Icons.warning_amber_rounded,
+                        size: 18,
+                        color: CeoColors.darkAmber,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Quantity discrepancy: ${order.formattedActualWeight} received vs ${order.formattedOrderedQuantity} ordered.',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: CeoColors.navy,
+                            height: 1.35,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
             _detailSection(Icons.store_rounded, 'Supplier', order.supplierName),
             _detailSection(Icons.person_rounded, 'Field User', order.fieldUserName),
             _detailSection(Icons.location_on_rounded, 'Delivery Address', order.deliveryAddress),

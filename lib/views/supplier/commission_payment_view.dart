@@ -26,17 +26,20 @@ class _CommissionPaymentViewState extends State<CommissionPaymentView> {
   }
 
   void _proceedToPayment(double totalOwed) {
-    final input = double.tryParse(_amountController.text.trim());
+    final owed = CurrencyFormatter.roundToRupee(totalOwed);
+    final input = CurrencyFormatter.roundToRupee(
+      double.tryParse(_amountController.text.trim()) ?? 0,
+    );
 
-    if (input == null || input <= 0) {
+    if (input <= 0) {
       setState(() => _error = 'Please enter a valid amount');
       return;
     }
 
-    if (input > totalOwed + 0.01) {
+    if (input > owed) {
       setState(
         () => _error =
-            'Amount cannot exceed ${CurrencyFormatter.formatPKR(totalOwed)}',
+            'Amount cannot exceed ${CurrencyFormatter.formatPKR(owed)}',
       );
       return;
     }
@@ -140,7 +143,8 @@ class _CommissionPaymentViewState extends State<CommissionPaymentView> {
                   _QuickAmountChip(
                     label: 'Pay full',
                     onTap: () => setState(
-                      () => _amountController.text = owed.toStringAsFixed(0),
+                      () => _amountController.text =
+                          CurrencyFormatter.roundToRupee(owed).toStringAsFixed(0),
                     ),
                   ),
                   if (owed > 5000)

@@ -37,6 +37,12 @@ class OrderModel {
   final String? paymentProofUrl;
   final String? paymentStatus;
   final List<String> deletedBy;
+  /// Actual quantity/weight reported by the field user on delivery.
+  final double? actualWeight;
+  final String? weightReportRemarks;
+
+  /// Relative difference above this ratio (vs ordered qty) is a "meaningful" discrepancy.
+  static const double weightDiscrepancyTolerance = 0.02; // 2%
 
   const OrderModel({
     required this.orderId,
@@ -72,10 +78,38 @@ class OrderModel {
     this.paymentProofUrl,
     this.paymentStatus,
     this.deletedBy = const [],
+    this.actualWeight,
+    this.weightReportRemarks,
   });
 
   String get id => orderId;
   List<String> get hiddenBy => deletedBy;
+
+  bool get hasWeightReport => actualWeight != null;
+
+  /// True when reported weight differs from ordered qty by more than [weightDiscrepancyTolerance].
+  bool get hasWeightDiscrepancy {
+    final actual = actualWeight;
+    if (actual == null) return false;
+    final diff = (actual - quantity).abs();
+    if (diff < 0.001) return false;
+    if (quantity <= 0) return diff > 0;
+    return (diff / quantity) > weightDiscrepancyTolerance;
+  }
+
+  String formatQuantityValue(double value) {
+    if (value == value.roundToDouble()) return value.toInt().toString();
+    return value.toStringAsFixed(1);
+  }
+
+  String get formattedOrderedQuantity =>
+      '${formatQuantityValue(quantity)} $unit';
+
+  String? get formattedActualWeight {
+    final actual = actualWeight;
+    if (actual == null) return null;
+    return '${formatQuantityValue(actual)} $unit';
+  }
 
   /// Resolves who rejected for UI (uses [rejectedBy], with legacy reason fallback).
   String? get resolvedRejectedBy {
@@ -130,6 +164,8 @@ class OrderModel {
     paymentProofUrl: map['paymentProofUrl'],
     paymentStatus: map['paymentStatus'],
     deletedBy: List<String>.from(map['deletedBy'] ?? map['hiddenBy'] ?? []),
+    actualWeight: (map['actualWeight'] as num?)?.toDouble(),
+    weightReportRemarks: map['weightReportRemarks'] as String?,
   );
 
   Map<String, dynamic> toMap() => {
@@ -166,6 +202,9 @@ class OrderModel {
     if (paymentProofUrl != null) 'paymentProofUrl': paymentProofUrl,
     if (paymentStatus != null) 'paymentStatus': paymentStatus,
     'deletedBy': deletedBy,
+    if (actualWeight != null) 'actualWeight': actualWeight,
+    if (weightReportRemarks != null && weightReportRemarks!.isNotEmpty)
+      'weightReportRemarks': weightReportRemarks,
   };
 
   OrderModel copyWith({
@@ -202,6 +241,8 @@ class OrderModel {
     String? paymentProofUrl,
     String? paymentStatus,
     List<String>? deletedBy,
+    double? actualWeight,
+    String? weightReportRemarks,
   }) {
     return OrderModel(
       orderId: orderId ?? this.orderId,
@@ -238,6 +279,8 @@ class OrderModel {
       paymentProofUrl: paymentProofUrl ?? this.paymentProofUrl,
       paymentStatus: paymentStatus ?? this.paymentStatus,
       deletedBy: deletedBy ?? this.deletedBy,
+      actualWeight: actualWeight ?? this.actualWeight,
+      weightReportRemarks: weightReportRemarks ?? this.weightReportRemarks,
     );
   }
 }

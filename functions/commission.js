@@ -81,8 +81,8 @@ async function ensureCommissionForConfirmedOrder(orderId, orderRef, liveOrder) {
     return null;
   }
 
-  const commissionAmount = parseFloat((totalAmount * COMMISSION_RATE).toFixed(2));
-  const supplierEarning = parseFloat((totalAmount - commissionAmount).toFixed(2));
+  const commissionAmount = Math.round(totalAmount * COMMISSION_RATE);
+  const supplierEarning = Math.round(totalAmount - commissionAmount);
   const txId = `comm_${orderId}`;
   const txRef = db.collection('transactions').doc(txId);
 

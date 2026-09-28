@@ -9,6 +9,7 @@ import '../../../constants/app_constants.dart';
 import '../../../constants/route_names.dart';
 import '../../../models/order_model.dart';
 import '../../../theme/field_theme.dart';
+import '../../../utils/currency_formatter.dart';
 import '../../../viewmodels/field_user/field_orders_viewmodel.dart';
 import '../../../widgets/dispute_report_sheet.dart';
 import '../../../widgets/order_status_stepper_widget.dart';
@@ -276,10 +277,12 @@ class _FieldOrderDetailViewState extends State<FieldOrderDetailView> {
     final total = order.totalAmount;
     final commission =
         order.commissionAmount > 0
-            ? order.commissionAmount
-            : total * AppConstants.commissionRate;
+            ? CurrencyFormatter.roundToRupee(order.commissionAmount)
+            : CurrencyFormatter.commissionOn(total);
     final supplierReceives =
-        order.supplierEarning > 0 ? order.supplierEarning : total - commission;
+        order.supplierEarning > 0
+            ? CurrencyFormatter.roundToRupee(order.supplierEarning)
+            : CurrencyFormatter.supplierEarningOn(total);
     return (
       total: total,
       commission: commission,
@@ -341,10 +344,25 @@ class _FieldOrderDetailViewState extends State<FieldOrderDetailView> {
               const SizedBox(height: FieldSpacing.md),
               _SummaryRow(label: 'Material', value: order.materialName),
               _SummaryRow(
-                label: 'Quantity',
-                value:
-                    '${order.quantity.toStringAsFixed(order.quantity.truncateToDouble() == order.quantity ? 0 : 1)} ${order.unit}',
+                label: 'Ordered quantity',
+                value: order.formattedOrderedQuantity,
               ),
+              if (order.hasWeightReport) ...[
+                _SummaryRow(
+                  label: 'Actual received',
+                  value: order.formattedActualWeight!,
+                ),
+                if (order.weightReportRemarks != null &&
+                    order.weightReportRemarks!.trim().isNotEmpty)
+                  _SummaryRow(
+                    label: 'Weight remarks',
+                    value: order.weightReportRemarks!.trim(),
+                  ),
+                if (order.hasWeightDiscrepancy) ...[
+                  const SizedBox(height: FieldSpacing.sm),
+                  _WeightDiscrepancyBanner(order: order),
+                ],
+              ],
               _SummaryRow(
                 label: 'Unit price',
                 value: 'Rs ${order.unitPrice.toStringAsFixed(0)}',
@@ -628,6 +646,60 @@ class _SummaryRow extends StatelessWidget {
             child: Text(label, style: FieldTypography.bodyMedium),
           ),
           Expanded(child: Text(value, style: FieldTypography.bodyLarge)),
+        ],
+      ),
+    );
+  }
+}
+
+class _WeightDiscrepancyBanner extends StatelessWidget {
+  final OrderModel order;
+
+  const _WeightDiscrepancyBanner({required this.order});
+
+  @override
+  Widget build(BuildContext context) {
+    final actual = order.actualWeight!;
+    final diff = actual - order.quantity;
+    final pct = order.quantity > 0
+        ? ((diff.abs() / order.quantity) * 100).toStringAsFixed(0)
+        : '—';
+    final direction = diff > 0 ? 'more' : 'less';
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: FieldSpacing.sm),
+      padding: const EdgeInsets.all(FieldSpacing.sm),
+      decoration: BoxDecoration(
+        color: FieldColors.statusWarning.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: FieldColors.statusWarning.withValues(alpha: 0.35),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.warning_amber_rounded,
+            size: 18,
+            color: FieldColors.statusWarning,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Reported quantity differs from ordered: '
+              '${order.formattedActualWeight} received vs '
+              '${order.formattedOrderedQuantity} ordered '
+              '($pct% $direction). Review before confirming payment.',
+              style: FieldTypography.bodyMedium.copyWith(
+                color: FieldColors.primaryNavy,
+                fontSize: 12,
+                height: 1.35,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
         ],
       ),
     );

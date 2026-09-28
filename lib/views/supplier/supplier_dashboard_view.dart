@@ -167,8 +167,8 @@ class _SupplierDashboardViewState extends State<SupplierDashboardView> {
   }
 
   void _showOrderDetail(SupplierViewModel viewModel, OrderModel order) {
-    final commission = order.totalAmount * AppConstants.commissionRate;
-    final netPayout = order.totalAmount * (1 - AppConstants.commissionRate);
+    final commission = CurrencyFormatter.commissionOn(order.totalAmount);
+    final netPayout = CurrencyFormatter.supplierEarningOn(order.totalAmount);
 
     showModalBottomSheet(
       context: context,

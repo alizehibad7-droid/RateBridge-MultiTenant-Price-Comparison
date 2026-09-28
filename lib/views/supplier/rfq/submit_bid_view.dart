@@ -67,6 +67,19 @@ class _SubmitBidViewState extends State<SubmitBidView> {
     if (!_formKey.currentState!.validate()) return;
 
     final vm = context.read<SupplierViewModel>();
+    if (vm.isCommissionRestricted) {
+      final message = (vm.commissionRestrictionReason?.trim().isNotEmpty == true)
+          ? vm.commissionRestrictionReason!.trim()
+          : 'You cannot submit new bulk-quote bids until outstanding commission is settled.';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: FieldColors.statusDanger,
+        ),
+      );
+      return;
+    }
+
     await vm.submitRfqBid(
       rfqId: widget.rfqId,
       bidPrice: double.parse(_priceController.text.trim()),
@@ -141,6 +154,11 @@ class _SubmitBidViewState extends State<SubmitBidView> {
 
     final supplierVM = context.watch<SupplierViewModel>();
     final isOpen = _rfq!.status == 'open';
+    final isRestricted = supplierVM.isCommissionRestricted;
+    final restrictionMessage =
+        (supplierVM.commissionRestrictionReason?.trim().isNotEmpty == true)
+            ? supplierVM.commissionRestrictionReason!.trim()
+            : 'You cannot submit new bulk-quote bids until outstanding commission is settled.';
 
     return Scaffold(
       backgroundColor: FieldColors.screenBackground,
@@ -170,6 +188,46 @@ class _SubmitBidViewState extends State<SubmitBidView> {
                 ),
               ),
             ],
+            if (isRestricted) ...[
+              const SizedBox(height: 16),
+              Card(
+                color: FieldColors.statusDanger.withValues(alpha: 0.06),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(
+                        Icons.block_rounded,
+                        color: FieldColors.statusDanger,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Account restricted — commission overdue',
+                              style: FieldTypography.titleMedium.copyWith(
+                                color: FieldColors.statusDanger,
+                                fontSize: 14,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              restrictionMessage,
+                              style: FieldTypography.bodyMedium.copyWith(
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 24),
             Container(
               padding: const EdgeInsets.all(20),
@@ -182,6 +240,7 @@ class _SubmitBidViewState extends State<SubmitBidView> {
                   TextFormField(
                     controller: _priceController,
                     keyboardType: TextInputType.number,
+                    enabled: isOpen && !isRestricted,
                     decoration: SupplierTheme.fieldDecoration(
                       labelText: 'Unit Price (PKR)',
                       hintText: 'e.g. 1200',
@@ -196,6 +255,7 @@ class _SubmitBidViewState extends State<SubmitBidView> {
                   const SizedBox(height: 16),
                   TextFormField(
                     controller: _deliveryController,
+                    enabled: isOpen && !isRestricted,
                     decoration: SupplierTheme.fieldDecoration(
                       labelText: 'Estimated Delivery Time',
                       hintText: 'e.g. 24-48 hours',
@@ -206,6 +266,7 @@ class _SubmitBidViewState extends State<SubmitBidView> {
                   TextFormField(
                     controller: _noteController,
                     maxLines: 3,
+                    enabled: isOpen && !isRestricted,
                     decoration: SupplierTheme.fieldDecoration(
                       labelText: 'Notes to Buyer (Optional)',
                       hintText: 'Any specific terms or quality notes...',
@@ -216,7 +277,9 @@ class _SubmitBidViewState extends State<SubmitBidView> {
             ),
             const SizedBox(height: 32),
             ElevatedButton(
-              onPressed: supplierVM.isLoading || !isOpen ? null : _submit,
+              onPressed: supplierVM.isLoading || !isOpen || isRestricted
+                  ? null
+                  : _submit,
               child:
                   supplierVM.isLoading
                       ? const CircularProgressIndicator(color: Colors.white)

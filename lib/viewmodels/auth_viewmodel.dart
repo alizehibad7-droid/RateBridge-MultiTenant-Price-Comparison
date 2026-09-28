@@ -15,6 +15,7 @@ import '../utils/app_exception.dart';
 import '../utils/field_user_invite_code.dart';
 import '../utils/invite_code_generator.dart';
 import '../utils/pakistan_validators.dart';
+import '../constants/app_constants.dart';
 
 enum AuthStatus { loading, authenticated, unauthenticated, error }
 
@@ -330,6 +331,7 @@ class AuthViewModel extends ChangeNotifier {
         'plan': 'free',
         'aiEnabled': false,
         'fieldUserCount': 0,
+        'autoApprovalThreshold': AppConstants.defaultAutoApprovalThreshold,
       });
 
       final userData = UserModel(

@@ -15,6 +15,7 @@ import '../../repositories/material_repository.dart';
 import '../../services/notification_service.dart';
 import '../../services/plan_limit_service.dart';
 import '../../utils/app_exception.dart';
+import '../../utils/currency_formatter.dart';
 import '../../views/field_user/orders/field_order_status.dart';
 
 /// Order placement, listing, detail, and weight reporting for field users.
@@ -234,19 +235,28 @@ class FieldOrdersViewModel extends ChangeNotifier {
     _errorMessage = null;
     notifyListeners();
     try {
-      final totalAmount = quantity * material.pricePerUnit;
-      final commissionAmount = totalAmount * AppConstants.commissionRate;
-      final supplierEarning = totalAmount - commissionAmount;
+      // Fetch supplier to ensure they are still active (same check as reorder)
+      final supplier = await _orderRepo.getSupplierById(material.supplierId);
+      if (supplier == null || supplier.status.toLowerCase() != 'active') {
+        throw AppException('The supplier is no longer active on the platform.');
+      }
 
-      // 1. Check auto-approval threshold
+      final totalAmount = quantity * material.pricePerUnit;
+      final commissionAmount = CurrencyFormatter.commissionOn(totalAmount);
+      final supplierEarning = CurrencyFormatter.supplierEarningOn(totalAmount);
+
+      // 1. Check auto-approval threshold (default Rs. 100,000 for new companies)
       final company = await _companyRepo.getCompanyById(companyId);
-      final threshold = company?.autoApprovalThreshold ?? 0.0;
+      final threshold = company?.autoApprovalThreshold ??
+          AppConstants.defaultAutoApprovalThreshold;
 
       // Count every non-terminal order across the whole company, not only
       // accepted orders belonging to the current field user.
       await _ensureActiveOrderCapacity(companyId);
 
-      final isAutoApproved = threshold > 0 && totalAmount <= threshold;
+      // Orders strictly below the threshold auto-approve; equal/above need CEO.
+      // Threshold of 0 means every order requires manual approval.
+      final isAutoApproved = threshold > 0 && totalAmount < threshold;
 
       final initialStatus =
           isAutoApproved
@@ -357,8 +367,8 @@ class FieldOrdersViewModel extends ChangeNotifier {
       }
 
       final totalAmount = order.totalAmount;
-      final commissionAmount = totalAmount * AppConstants.commissionRate;
-      final supplierEarning = totalAmount - commissionAmount;
+      final commissionAmount = CurrencyFormatter.commissionOn(totalAmount);
+      final supplierEarning = CurrencyFormatter.supplierEarningOn(totalAmount);
 
       await _orderRepo.updateStatus(
         orderId,

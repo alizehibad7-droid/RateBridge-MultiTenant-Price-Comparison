@@ -296,6 +296,13 @@ class _DirectoryActionButton extends StatelessWidget {
           filled: false,
           color: FieldColors.accentAmber,
         );
+      case 'Try Again Later':
+        return _pillButton(
+          label: action,
+          enabled: false,
+          filled: false,
+          color: FieldColors.textMuted,
+        );
       case 'Respond':
         return _pillButton(
           label: action,

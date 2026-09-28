@@ -328,7 +328,7 @@ class _SupplierOrdersViewState extends State<SupplierOrdersView>
     String tab,
     bool isSelected,
   ) {
-    final netPayout = order.totalAmount * (1 - AppConstants.commissionRate);
+    final netPayout = CurrencyFormatter.supplierEarningOn(order.totalAmount);
     final isRemovableTab = tab == 'Confirmed' || tab == 'Rejected';
 
     return GestureDetector(
@@ -575,8 +575,8 @@ class _SupplierOrdersViewState extends State<SupplierOrdersView>
   }
 
   void _showOrderDetail(SupplierViewModel viewModel, OrderModel order) {
-    final commission = order.totalAmount * AppConstants.commissionRate;
-    final netPayout = order.totalAmount * (1 - AppConstants.commissionRate);
+    final commission = CurrencyFormatter.commissionOn(order.totalAmount);
+    final netPayout = CurrencyFormatter.supplierEarningOn(order.totalAmount);
     final commissionPercent = (AppConstants.commissionRate * 100)
         .toStringAsFixed(0);
 
@@ -625,10 +625,47 @@ class _SupplierOrdersViewState extends State<SupplierOrdersView>
                         Icons.inventory_2_outlined,
                       ),
                       _detailItem(
-                        'Quantity',
-                        '${order.quantity} ${order.unit}',
+                        'Ordered quantity',
+                        order.formattedOrderedQuantity,
                         Icons.straighten_outlined,
                       ),
+                      if (order.hasWeightReport) ...[
+                        _detailItem(
+                          'Actual received',
+                          order.formattedActualWeight!,
+                          Icons.scale_outlined,
+                        ),
+                        if (order.weightReportRemarks != null &&
+                            order.weightReportRemarks!.trim().isNotEmpty)
+                          _detailItem(
+                            'Weight remarks',
+                            order.weightReportRemarks!.trim(),
+                            Icons.notes_outlined,
+                          ),
+                        if (order.hasWeightDiscrepancy)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 16),
+                            child: Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.orange.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: Colors.orange.withValues(alpha: 0.35),
+                                ),
+                              ),
+                              child: Text(
+                                'Quantity discrepancy: ${order.formattedActualWeight} received vs ${order.formattedOrderedQuantity} ordered.',
+                                style: AppTextStyles.body.copyWith(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.orange.shade900,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
                       _detailItem(
                         'Unit Price',
                         CurrencyFormatter.formatPKR(order.unitPrice),
@@ -805,6 +842,27 @@ class _SupplierOrdersViewState extends State<SupplierOrdersView>
     );
   }
 
+  void _showActionResult(
+    SupplierViewModel viewModel, {
+    required bool success,
+    required String successMessage,
+    required String failureFallback,
+  }) {
+    if (!mounted) return;
+    final message = success
+        ? successMessage
+        : (viewModel.error?.trim().isNotEmpty == true
+            ? viewModel.error!
+            : failureFallback);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor:
+            success ? FieldColors.statusSuccess : FieldColors.statusDanger,
+      ),
+    );
+  }
+
   void _confirmAccept(SupplierViewModel viewModel, OrderModel order) {
     showDialog(
       context: context,
@@ -822,7 +880,17 @@ class _SupplierOrdersViewState extends State<SupplierOrdersView>
               ElevatedButton(
                 onPressed: () async {
                   Navigator.pop(context);
-                  await viewModel.acceptOrder(order.orderId, order.companyId);
+                  final success = await viewModel.acceptOrder(
+                    order.orderId,
+                    order.companyId,
+                  );
+                  _showActionResult(
+                    viewModel,
+                    success: success,
+                    successMessage: 'Order accepted.',
+                    failureFallback:
+                        'Could not accept this order. Please try again.',
+                  );
                 },
                 child: const Text('CONFIRM'),
               ),
@@ -854,10 +922,17 @@ class _SupplierOrdersViewState extends State<SupplierOrdersView>
                 onPressed: () async {
                   if (controller.text.isEmpty) return;
                   Navigator.pop(context);
-                  await viewModel.rejectOrder(
+                  final success = await viewModel.rejectOrder(
                     order.orderId,
                     order.companyId,
                     controller.text,
+                  );
+                  _showActionResult(
+                    viewModel,
+                    success: success,
+                    successMessage: 'Order rejected.',
+                    failureFallback:
+                        'Could not reject this order. Please try again.',
                   );
                 },
                 style: ElevatedButton.styleFrom(
@@ -885,7 +960,17 @@ class _SupplierOrdersViewState extends State<SupplierOrdersView>
               ElevatedButton(
                 onPressed: () async {
                   Navigator.pop(context);
-                  await viewModel.markDelivered(order.orderId, order.companyId);
+                  final success = await viewModel.markDelivered(
+                    order.orderId,
+                    order.companyId,
+                  );
+                  _showActionResult(
+                    viewModel,
+                    success: success,
+                    successMessage: 'Order marked as delivered.',
+                    failureFallback:
+                        'Could not mark this order as delivered. Please try again.',
+                  );
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: FieldColors.statusSuccess,

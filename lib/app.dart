@@ -766,7 +766,8 @@ class _RateBridgeAppState extends State<RateBridgeApp> {
         if (role == 'admin' || role == 'administrator') {
           if (!isWeb && !isWindows) platformBlocked = true;
         } else if (role == 'ceo' || role == 'supplier' || role == 'fielduser') {
-          if (!isAndroid) platformBlocked = true;
+          // TEMP: web testing access enabled for CEO/Supplier/Field User — remove before production
+          if (!isAndroid && !isWeb) platformBlocked = true;
         }
 
         if (platformBlocked) {

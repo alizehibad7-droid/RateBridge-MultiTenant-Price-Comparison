@@ -211,7 +211,9 @@ class FirestoreService {
     String companyId, {
     int limit = 4,
   }) async {
-    final supplierIds = await getCompanyLinkedSupplierIds(companyId);
+    final supplierIds = await filterUnrestrictedSupplierIds(
+      await getCompanyLinkedSupplierIds(companyId),
+    );
     if (supplierIds.isEmpty) return [];
 
     final allMaterials = await _materialsForSupplierIds(supplierIds);
@@ -495,6 +497,16 @@ class FirestoreService {
   bool _isCommissionRestricted(Map<String, dynamic>? data) =>
       data?['commissionRestricted'] == true;
 
+  /// Platform account must be Active (case-insensitive). Suspended/rejected/etc. fail.
+  bool _isPlatformActiveSupplier(Map<String, dynamic>? data) {
+    final status = (data?['status'] as String?)?.trim().toLowerCase() ?? '';
+    return status == 'active';
+  }
+
+  /// Hidden from marketplace/materials when commission-restricted OR not platform-active.
+  bool _isSupplierHiddenFromOrdering(Map<String, dynamic>? data) =>
+      _isCommissionRestricted(data) || !_isPlatformActiveSupplier(data);
+
   Future<List<String>> filterUnrestrictedSupplierIds(
     List<String> supplierIds,
   ) async {
@@ -502,36 +514,37 @@ class FirestoreService {
     final visible = <String>[];
     for (final id in supplierIds) {
       final doc = await _db.collection('suppliers').doc(id).get();
-      if (!_isCommissionRestricted(doc.data() as Map<String, dynamic>?)) {
+      if (!_isSupplierHiddenFromOrdering(doc.data() as Map<String, dynamic>?)) {
         visible.add(id);
       }
     }
     return visible;
   }
 
-  /// Re-emits whenever any linked supplier's commission restriction flag changes.
+  /// Re-emits whenever any linked supplier's commission restriction or
+  /// platform account status changes.
   Stream<List<String>> watchUnrestrictedSupplierIds(List<String> supplierIds) {
     if (supplierIds.isEmpty) return Stream.value(const []);
 
     late StreamController<List<String>> controller;
     final subscriptions =
         <StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>>[];
-    final restricted = <String, bool>{};
+    final hidden = <String, bool>{};
 
     void emitVisible() {
       if (controller.isClosed) return;
       controller.add(
-        supplierIds.where((id) => restricted[id] != true).toList(),
+        supplierIds.where((id) => hidden[id] != true).toList(),
       );
     }
 
     controller = StreamController<List<String>>.broadcast(
       onListen: () {
         for (final id in supplierIds) {
-          restricted[id] = false;
+          hidden[id] = false;
           subscriptions.add(
             _db.collection('suppliers').doc(id).snapshots().listen((snap) {
-              restricted[id] = _isCommissionRestricted(snap.data());
+              hidden[id] = _isSupplierHiddenFromOrdering(snap.data());
               emitVisible();
             }),
           );
@@ -660,7 +673,11 @@ class FirestoreService {
     if (linkData == null || !_isActiveSupplierLink(linkData as Map<String, dynamic>)) return [];
 
     final supplierDoc = await _db.collection('suppliers').doc(supplierId).get();
-    if (_isCommissionRestricted(supplierDoc.data() as Map<String, dynamic>?)) return [];
+    if (_isSupplierHiddenFromOrdering(
+      supplierDoc.data() as Map<String, dynamic>?,
+    )) {
+      return [];
+    }
 
     final snap =
         await _db

@@ -76,6 +76,14 @@ class _CeoCompanyProfileViewState extends State<CeoCompanyProfileView> {
     super.dispose();
   }
 
+  /// Threshold of 0 (or empty) means every order needs manual CEO approval.
+  bool get _isThresholdDisabled {
+    final raw = _thresholdController.text.trim();
+    if (raw.isEmpty) return true;
+    final value = double.tryParse(raw);
+    return value == null || value <= 0;
+  }
+
   String _maskCnic(String? cnic) {
     if (cnic == null || cnic.isEmpty) return 'N/A';
     String digits = cnic.replaceAll(RegExp(r'\D'), '');
@@ -310,12 +318,53 @@ class _CeoCompanyProfileViewState extends State<CeoCompanyProfileView> {
                         TextField(
                           controller: _thresholdController,
                           keyboardType: TextInputType.number,
+                          onChanged: (_) => setState(() {}),
                           decoration: const InputDecoration(
                             labelText: 'Auto-approval threshold (Rs)',
                             helperText:
-                                'Orders at or below this amount skip CEO approval',
+                                'Orders below this amount are auto-approved. '
+                                'This amount and above require your approval. '
+                                'Default for new companies is Rs. 100,000.',
                           ),
                         ),
+                        if (_isThresholdDisabled) ...[
+                          const SizedBox(height: 8),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: CeoColors.amber.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: CeoColors.amber.withValues(alpha: 0.4),
+                              ),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Icon(
+                                  Icons.info_outline_rounded,
+                                  size: 18,
+                                  color: CeoColors.darkAmber,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'No auto-approval threshold is set (0). '
+                                    'Every order currently requires your manual approval. '
+                                    'Set a threshold (e.g. 100000) to auto-approve smaller orders.',
+                                    style: GoogleFonts.plusJakartaSans(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: CeoColors.navy,
+                                      height: 1.35,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                         ProfileDetailRow(
                           icon: Icons.app_registration_rounded,
                           label: 'Registration #',

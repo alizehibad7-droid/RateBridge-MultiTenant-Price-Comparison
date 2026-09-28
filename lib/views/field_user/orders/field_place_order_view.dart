@@ -66,14 +66,21 @@ class _FieldPlaceOrderViewState extends State<FieldPlaceOrderView> {
 
   double get _quantity => double.tryParse(_quantityController.text.trim()) ?? 0;
 
+  /// Effective floor for quantity: supplier min when set, otherwise 1.
+  double get _minQuantity {
+    final min = widget.material.minOrderQuantity;
+    if (min != null && min > 0) return min;
+    return 1;
+  }
+
   double get _total => _quantity * widget.material.pricePerUnit;
 
-  double get _commission => _total * AppConstants.commissionRate;
+  double get _commission => CurrencyFormatter.commissionOn(_total);
 
-  double get _supplierReceives => _total - _commission;
+  double get _supplierReceives => CurrencyFormatter.supplierEarningOn(_total);
 
   bool get _isFormValid =>
-      _quantity >= 1 &&
+      _quantity >= _minQuantity &&
       _addressController.text.trim().isNotEmpty &&
       _requiredDate != null;
 
@@ -93,7 +100,7 @@ class _FieldPlaceOrderViewState extends State<FieldPlaceOrderView> {
   }
 
   void _decrementQuantity() {
-    if (_quantity <= 1) return;
+    if (_quantity <= _minQuantity) return;
     _quantityController.text = _formatQuantity(_quantity - 1);
   }
 
@@ -276,6 +283,8 @@ class _FieldPlaceOrderViewState extends State<FieldPlaceOrderView> {
                     const SizedBox(height: 12),
                     _OrderDetailsCard(
                       unit: material.unit,
+                      minOrderQuantity: material.minOrderQuantity,
+                      minOrderLabel: material.minOrderLabel,
                       quantityController: _quantityController,
                       onDecrement: _decrementQuantity,
                       onIncrement: _incrementQuantity,
@@ -660,6 +669,8 @@ class _OrderSummaryCard extends StatelessWidget {
 
 class _OrderDetailsCard extends StatelessWidget {
   final String unit;
+  final double? minOrderQuantity;
+  final String? minOrderLabel;
   final TextEditingController quantityController;
   final VoidCallback onDecrement;
   final VoidCallback onIncrement;
@@ -671,6 +682,8 @@ class _OrderDetailsCard extends StatelessWidget {
 
   const _OrderDetailsCard({
     required this.unit,
+    this.minOrderQuantity,
+    this.minOrderLabel,
     required this.quantityController,
     required this.onDecrement,
     required this.onIncrement,
@@ -707,6 +720,17 @@ class _OrderDetailsCard extends StatelessWidget {
               ),
             ],
           ),
+          if (minOrderLabel != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              minOrderLabel!,
+              style: FieldTypography.bodyMedium.copyWith(
+                fontSize: 12,
+                color: FieldColors.textSecondary,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
           const SizedBox(height: 10),
           Row(
             children: [
@@ -737,6 +761,13 @@ class _OrderDetailsCard extends StatelessWidget {
                     final qty = double.tryParse(value?.trim() ?? '');
                     if (qty == null || qty < 1) {
                       return 'Enter a quantity of at least 1';
+                    }
+                    final min = minOrderQuantity;
+                    if (min != null && min > 0 && qty < min) {
+                      final minText = min == min.roundToDouble()
+                          ? min.toInt().toString()
+                          : min.toStringAsFixed(2);
+                      return 'Minimum order quantity is $minText $unit';
                     }
                     return null;
                   },

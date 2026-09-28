@@ -16,10 +16,24 @@ class OrderRepository {
 
   Future<void> createOrder(OrderModel order) async {
     try {
+      final supplier = await getSupplierById(order.supplierId);
+      final status = supplier?.status.trim().toLowerCase() ?? '';
+      if (supplier == null || status != 'active') {
+        throw AppException(
+          'This supplier is currently unavailable for new orders.',
+        );
+      }
+      if (supplier.commissionRestricted) {
+        throw AppException(
+          'This supplier is temporarily unavailable for new orders.',
+        );
+      }
       await _db
           .collection('orders')
           .doc(order.orderId)
           .set(order.toMap());
+    } on AppException {
+      rethrow;
     } on FirebaseException catch (e) {
       throw AppException('Failed to create order: ${e.message}');
     }

@@ -107,7 +107,7 @@ service cloud.firestore {
     }
 
     match /companies/{companyId} {
-      allow read: if signedIn();
+      allow read: if signedIn() || resource.data.status == 'active';
       allow create: if signedIn();
       allow update: if isAdmin()
         || (signedIn() && 'ceoUid' in resource.data && resource.data.ceoUid == request.auth.uid)

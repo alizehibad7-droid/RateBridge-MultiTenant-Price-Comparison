@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../constants/app_constants.dart';
+
 // Pure Dart Model with Firestore-safe parsing
 class CompanyModel {
   final String id;
@@ -57,7 +59,7 @@ class CompanyModel {
     this.registrationCertUrl,
     this.officePhotoUrl,
     this.rejectionReason,
-    this.autoApprovalThreshold = 0.0,
+    this.autoApprovalThreshold = AppConstants.defaultAutoApprovalThreshold,
   });
 
   CompanyModel copyWith({
@@ -202,7 +204,8 @@ class CompanyModel {
       officePhotoUrl: map['officePhotoUrl'] as String?,
       rejectionReason: map['rejectionReason'] as String?,
       autoApprovalThreshold:
-          (map['autoApprovalThreshold'] as num?)?.toDouble() ?? 0.0,
+          (map['autoApprovalThreshold'] as num?)?.toDouble() ??
+              AppConstants.defaultAutoApprovalThreshold,
     );
   }
 }

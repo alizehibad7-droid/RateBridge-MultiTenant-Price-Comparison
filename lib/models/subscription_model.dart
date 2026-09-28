@@ -48,7 +48,6 @@ const kPlans = <PlanDefinition>[
       'Up to 5 active orders',
       'Max 3 field users',
       '30-day price trends',
-      'Email support',
     ],
     aiUnlocked: false,
   ),
@@ -68,7 +67,6 @@ const kPlans = <PlanDefinition>[
       'Max 15 field users',
       'Full price trend history',
       'AI price recommendations',
-      'Chat with suppliers',
     ],
     aiUnlocked: true,
   ),
@@ -85,7 +83,6 @@ const kPlans = <PlanDefinition>[
       'Everything in Basic',
       'Unlimited linked suppliers',
       'Unlimited field users',
-      'Priority supplier matching',
       'Advanced AI analytics',
     ],
     aiUnlocked: true,
@@ -151,7 +148,6 @@ class SubscriptionModel {
   }
 
   // Feature specific getters for convenience
-  bool get canCreateRfq => hasAccess(PlanId.premium);
   bool get aiInsightsEnabled => effectivePlanDef.aiUnlocked;
 
   factory SubscriptionModel.fromMap(

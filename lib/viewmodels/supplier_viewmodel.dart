@@ -30,6 +30,7 @@ import '../models/partnership_request_model.dart';
 import '../repositories/partnership_request_repository.dart';
 import '../services/cloudinary_service.dart';
 import '../utils/app_exception.dart';
+import '../utils/currency_formatter.dart';
 import '../services/storage_service.dart';
 import '../services/cloud_function_service.dart';
 import '../services/notification_service.dart';
@@ -174,14 +175,30 @@ class SupplierViewModel extends ChangeNotifier {
   List<PaymentProofModel> get paymentHistory => [..._confirmedCommissionPayments, ..._pendingCommissionPayments]..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   List<MonthlyEarning> get monthlyEarnings => _monthlyEarnings;
 
-  // --- Commission Ledger Getters ---
-  double get totalCommissionGenerated => _allCommissions.fold(0.0, (acc, tx) => acc + tx.commissionAmount);
-  double get totalCommissionPaid => _confirmedCommissionPayments.fold(0.0, (acc, p) => acc + p.amount);
+  // --- Commission Ledger Getters (whole rupees) ---
+  double get totalCommissionGenerated => CurrencyFormatter.roundToRupee(
+        _allCommissions.fold<double>(
+          0.0,
+          (acc, tx) => acc + tx.commissionAmount,
+        ),
+      );
+  double get totalCommissionPaid => CurrencyFormatter.roundToRupee(
+        _confirmedCommissionPayments.fold<double>(
+          0.0,
+          (acc, p) => acc + p.amount,
+        ),
+      );
   double get commissionOwed {
     final owed = totalCommissionGenerated - totalCommissionPaid;
-    return owed < 0.01 ? 0 : owed;
+    if (owed <= 0) return 0;
+    return CurrencyFormatter.roundToRupee(owed);
   }
-  double get pendingCommissionApproval => _pendingCommissionPayments.fold(0.0, (acc, p) => acc + p.amount);
+  double get pendingCommissionApproval => CurrencyFormatter.roundToRupee(
+        _pendingCommissionPayments.fold<double>(
+          0.0,
+          (acc, p) => acc + p.amount,
+        ),
+      );
 
   // --- Stats and Aggregates ---
   double get totalEarnings => _orders.where((o) => o.status == 'confirmed').fold(0.0, (acc, o) => acc + o.totalAmount);
@@ -356,14 +373,14 @@ class SupplierViewModel extends ChangeNotifier {
         if (status != 'confirmed') continue;
         final totalAmount = (data['totalAmount'] as num?)?.toDouble() ?? 0;
         if (totalAmount <= 0) continue;
-        final commissionAmount = totalAmount * AppConstants.commissionRate;
+        final commissionAmount = CurrencyFormatter.commissionOn(totalAmount);
         await _transactionRepo.createUnsettledCommissionTransaction(
           orderId: doc.id,
           companyId: (data['companyId'] ?? '').toString(),
           supplierUid: uid,
           totalAmount: totalAmount,
           commissionAmount: commissionAmount,
-          supplierEarning: totalAmount - commissionAmount,
+          supplierEarning: CurrencyFormatter.supplierEarningOn(totalAmount),
         );
       }
     } catch (e) {
@@ -698,6 +715,7 @@ class SupplierViewModel extends ChangeNotifier {
         'delivered',
         'inprogress',
         'in_progress',
+        'cancellation_requested',
       };
       final activeCount = related.where((doc) {
         final status = (doc.data()['status'] ?? '').toString().trim().toLowerCase();
@@ -752,23 +770,41 @@ class SupplierViewModel extends ChangeNotifier {
       });
   }
 
-  Future<void> acceptOrder(String orderId, String companyId) async {
-    _isLoading = true; notifyListeners();
+  Future<bool> acceptOrder(String orderId, String companyId) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
     try {
       await _orderRepo.updateStatus(orderId, companyId, 'accepted');
       final order = _orders.firstWhere((o) => o.orderId == orderId);
       await _notificationService.notifyOrderAccepted(fieldUserUid: order.fieldUserUid, orderId: orderId, companyId: companyId, materialName: order.materialName, supplierName: order.supplierName);
-    } catch (_) {} finally { _isLoading = false; notifyListeners(); }
+      return true;
+    } catch (e) {
+      _error = e is AppException ? e.message : e.toString();
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
-  Future<void> rejectOrder(String orderId, String companyId, String reason) async {
-    _isLoading = true; notifyListeners();
+  Future<bool> rejectOrder(String orderId, String companyId, String reason) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
     try {
       await _orderRepo.updateStatus(orderId, companyId, 'rejected',
           reason: reason, rejectedBy: 'supplier');
       final order = _orders.firstWhere((o) => o.orderId == orderId);
       await _notificationService.notifyOrderRejected(fieldUserUid: order.fieldUserUid, orderId: orderId, companyId: companyId, materialName: order.materialName, supplierName: order.supplierName, reason: reason);
-    } catch (_) {} finally { _isLoading = false; notifyListeners(); }
+      return true;
+    } catch (e) {
+      _error = e is AppException ? e.message : e.toString();
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
   Future<void> acceptCancellationRequest(OrderModel order) async {
@@ -826,13 +862,22 @@ class SupplierViewModel extends ChangeNotifier {
     }
   }
 
-  Future<void> markDelivered(String orderId, String companyId) async {
-    _isLoading = true; notifyListeners();
+  Future<bool> markDelivered(String orderId, String companyId) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
     try {
       await _orderRepo.updateStatus(orderId, companyId, 'delivered', deliveredAt: DateTime.now());
       final order = _orders.firstWhere((o) => o.orderId == orderId);
       await _notificationService.notifyOrderDelivered(fieldUserUid: order.fieldUserUid, orderId: orderId, companyId: companyId, materialName: order.materialName, supplierName: order.supplierName);
-    } catch (_) {} finally { _isLoading = false; notifyListeners(); }
+      return true;
+    } catch (e) {
+      _error = e is AppException ? e.message : e.toString();
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
   Future<void> loadEarnings(String month) async {
@@ -1047,7 +1092,13 @@ class SupplierViewModel extends ChangeNotifier {
 
   Future<bool> submitCommissionPayment({required double amount, required String method, required XFile screenshotFile}) async {
     if (_supplierUid == null) return false;
-    if (amount <= 0 || amount > commissionOwed + 0.01) { _error = "Invalid amount"; notifyListeners(); return false; }
+    final owed = commissionOwed;
+    final payAmount = CurrencyFormatter.roundToRupee(amount);
+    if (payAmount <= 0 || payAmount > owed) {
+      _error = 'Invalid amount';
+      notifyListeners();
+      return false;
+    }
     _isLoading = true; notifyListeners();
     try {
       final url = await _uploadImageBytes(bytes: await screenshotFile.readAsBytes(), folder: 'commission_proofs/$_supplierUid', filename: 'comm_${DateTime.now().millisecondsSinceEpoch}.jpg');
@@ -1064,7 +1115,7 @@ class SupplierViewModel extends ChangeNotifier {
         companyId: '', 
         payerName: _profile?.name ?? 'Supplier', 
         payerRole: 'Supplier', 
-        amount: amount, 
+        amount: payAmount, 
         method: method, 
         screenshotUrl: url, 
         status: 'pending', 
@@ -1098,6 +1149,13 @@ class SupplierViewModel extends ChangeNotifier {
     _error = null;
     notifyListeners();
     try {
+      if (_commissionRestricted) {
+        throw AppException(
+          (_commissionRestrictionReason?.trim().isNotEmpty == true)
+              ? _commissionRestrictionReason!.trim()
+              : 'You cannot submit new bulk-quote bids until outstanding commission is settled.',
+        );
+      }
       final ref = _db.collection('rfq_bid_jobs').doc();
       await ref.set({
         'uid': uid,
@@ -1264,7 +1322,7 @@ class SupplierViewModel extends ChangeNotifier {
     }
 
     if (request.status == 'rejected' || request.status == 'removed') {
-      return canReapplyToCompany(companyId) ? 'Request Again' : 'Pending';
+      return canReapplyToCompany(companyId) ? 'Request Again' : 'Try Again Later';
     }
 
     return 'Send Request';

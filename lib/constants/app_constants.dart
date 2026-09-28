@@ -5,6 +5,10 @@ class AppConstants {
   static const double defaultMaxOutstandingCommission = 50000;
   static const int defaultMaxUnsettledAgeDays = 30;
 
+  /// Default company auto-approval threshold (Rs). Orders below this amount
+  /// skip CEO approval; this amount and above require approval.
+  static const double defaultAutoApprovalThreshold = 100000;
+
   // Commission
   static const double commissionRate = 0.02;
 

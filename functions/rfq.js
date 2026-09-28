@@ -618,10 +618,34 @@ async function performAwardRfq({ uid, user, payload }) {
     }
     const company = companyDoc.data();
 
+    const supplierRef = db.collection('suppliers').doc(bid.supplierId);
+    const supplierDoc = await transaction.get(supplierRef);
+    if (!supplierDoc.exists) {
+      throw new functions.https.HttpsError(
+        'failed-precondition',
+        'This supplier is currently unavailable for new orders.',
+      );
+    }
+    const supplier = supplierDoc.data() || {};
+    const supplierStatus = String(supplier.status || '').trim().toLowerCase();
+    if (supplierStatus !== 'active') {
+      throw new functions.https.HttpsError(
+        'failed-precondition',
+        'This supplier is currently unavailable for new orders.',
+      );
+    }
+    if (supplier.commissionRestricted === true) {
+      throw new functions.https.HttpsError(
+        'failed-precondition',
+        'This supplier is temporarily unavailable for new orders.',
+      );
+    }
+
     const totalAmount = Number(rfq.quantity) * Number(bid.bidPrice);
-    const commissionAmount = totalAmount * 0.02;
-    const threshold = Number(company.autoApprovalThreshold || 0);
-    const autoApproved = threshold > 0 && totalAmount <= threshold;
+    const commissionAmount = Math.round(totalAmount * 0.02);
+    const rawThreshold = company.autoApprovalThreshold;
+    const threshold = Number(rawThreshold == null ? 100000 : rawThreshold);
+    const autoApproved = threshold > 0 && totalAmount < threshold;
     const orderStatus = autoApproved ? 'pending' : 'pending_approval';
     const requesterUid = rfq.createdByUid || uid;
     const requesterName =
@@ -641,7 +665,7 @@ async function performAwardRfq({ uid, user, payload }) {
       unitPrice: Number(bid.bidPrice),
       totalAmount,
       commissionAmount,
-      supplierEarning: totalAmount - commissionAmount,
+      supplierEarning: Math.round(totalAmount - commissionAmount),
       deliveryAddress: rfq.city,
       siteLocation: rfq.city,
       notes: bid.note || null,

@@ -168,7 +168,7 @@ class _CeoMySuppliersViewState extends State<CeoMySuppliersView>
             Expanded(
               child: Consumer<CeoViewModel>(
                 builder: (context, vm, _) {
-                  if (vm.isLoading && vm.marketplaceSuppliers.isEmpty) {
+                  if (vm.isLoading && vm.partnerDirectorySuppliers.isEmpty) {
                     return const Center(child: CircularProgressIndicator());
                   }
 
@@ -176,7 +176,7 @@ class _CeoMySuppliersViewState extends State<CeoMySuppliersView>
                     controller: _cityTabController,
                     children: _citiesAll.map((city) {
                       final suppliers =
-                          _filterSuppliers(vm.marketplaceSuppliers, city);
+                          _filterSuppliers(vm.partnerDirectorySuppliers, city);
                       if (suppliers.isEmpty) {
                         return _EmptyDirectoryState(
                           hasSearch: _searchQuery.trim().isNotEmpty,
@@ -278,6 +278,8 @@ class _DirectorySupplierCard extends StatelessWidget {
     final status = vm.linkStatusFor(supplier.id);
     final isPartner = status == 'Already Partners';
     final isVerified = supplier.isVerified;
+    final isSuspended =
+        supplier.status.trim().toLowerCase() == 'suspended';
 
     return AdminCard(
       padding: const EdgeInsets.all(16),
@@ -383,13 +385,57 @@ class _DirectorySupplierCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              _RelationshipBadge(status: status),
+              if (isSuspended)
+                const _SuspendedBadge()
+              else
+                _RelationshipBadge(status: status),
             ],
           ),
           const SizedBox(height: 16),
           const Divider(height: 1),
           const SizedBox(height: 16),
-          if (isPartner)
+          if (isSuspended) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+              decoration: BoxDecoration(
+                color: CeoColors.red.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: CeoColors.red.withValues(alpha: 0.3),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.block_rounded,
+                    size: 18,
+                    color: CeoColors.red,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'This supplier is suspended by RateBridge. Their materials are hidden and new orders cannot be placed. Existing orders are unaffected.',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: CeoColors.red,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                        height: 1.35,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (isPartner) ...[
+              const SizedBox(height: 12),
+              _PartnerActions(
+                supplier: supplier,
+                companyId: companyId,
+                suspended: true,
+              ),
+            ],
+          ] else if (isPartner)
             _PartnerActions(
               supplier: supplier,
               companyId: companyId,
@@ -399,6 +445,37 @@ class _DirectorySupplierCard extends StatelessWidget {
               supplier: supplier,
               status: status,
             ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SuspendedBadge extends StatelessWidget {
+  const _SuspendedBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: CeoColors.red.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: CeoColors.red.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.block_rounded, size: 14, color: CeoColors.red),
+          const SizedBox(width: 4),
+          Text(
+            'Suspended',
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: CeoColors.red,
+            ),
+          ),
         ],
       ),
     );
@@ -638,10 +715,12 @@ class _RelationshipActions extends StatelessWidget {
 class _PartnerActions extends StatelessWidget {
   final SupplierModel supplier;
   final String companyId;
+  final bool suspended;
 
   const _PartnerActions({
     required this.supplier,
     required this.companyId,
+    this.suspended = false,
   });
 
   @override
@@ -652,26 +731,28 @@ class _PartnerActions extends StatelessWidget {
       spacing: 8,
       runSpacing: 8,
       children: [
-        _actionButton(
-          onPressed: () => _confirmToggle(
-            context,
-            vm,
-            supplier.id,
-            companyId,
-            activate: false,
+        if (!suspended)
+          _actionButton(
+            onPressed: () => _confirmToggle(
+              context,
+              vm,
+              supplier.id,
+              companyId,
+              activate: false,
+            ),
+            icon: Icons.block_rounded,
+            label: 'Deactivate',
+            color: CeoColors.darkAmber,
+            isOutlined: true,
           ),
-          icon: Icons.block_rounded,
-          label: 'Deactivate',
-          color: CeoColors.darkAmber,
-          isOutlined: true,
-        ),
-        _actionButton(
-          onPressed: () => _showProfileSheet(context, supplier, companyId),
-          icon: Icons.analytics_outlined,
-          label: 'Performance',
-          color: CeoColors.navy,
-          isOutlined: true,
-        ),
+        if (!suspended)
+          _actionButton(
+            onPressed: () => _showProfileSheet(context, supplier, companyId),
+            icon: Icons.analytics_outlined,
+            label: 'Performance',
+            color: CeoColors.navy,
+            isOutlined: true,
+          ),
         _actionButton(
           onPressed: () =>
               _confirmRemove(context, vm, supplier.id, supplier.name),

@@ -200,7 +200,30 @@ class _AdminOrdersViewState extends State<AdminOrdersView> {
                 _detailItem('Field User', order.fieldUserName),
                 _detailItem('Supplier', order.supplierName),
                 _detailItem('Material', order.materialName),
-                _detailItem('Quantity', '${order.quantity} ${order.unit}'),
+                _detailItem('Ordered quantity', order.formattedOrderedQuantity),
+                if (order.hasWeightReport) ...[
+                  _detailItem(
+                    'Actual received',
+                    order.formattedActualWeight!,
+                  ),
+                  if (order.weightReportRemarks != null &&
+                      order.weightReportRemarks!.trim().isNotEmpty)
+                    _detailItem(
+                      'Weight remarks',
+                      order.weightReportRemarks!.trim(),
+                    ),
+                  if (order.hasWeightDiscrepancy)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Text(
+                        '⚠ Quantity discrepancy: ${order.formattedActualWeight} received vs ${order.formattedOrderedQuantity} ordered.',
+                        style: AdminTheme.bodyStyle().copyWith(
+                          color: Colors.orange.shade800,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                ],
                 _detailItem('Unit Price', 'Rs ${order.unitPrice}'),
                 _detailItem('Total Amount', 'Rs ${order.totalAmount}'),
                 _detailItem('Status', order.status.toUpperCase()),
