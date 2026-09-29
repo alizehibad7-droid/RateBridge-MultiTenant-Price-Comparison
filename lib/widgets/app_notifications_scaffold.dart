@@ -83,15 +83,21 @@ class _AppNotificationsScaffoldState extends State<AppNotificationsScaffold> {
     }
 
     final vm = context.read<NotificationViewModel>();
-    final uid = vm.uid;
-    if (uid == null) return;
+    final authUid = context.read<AuthViewModel>().user?.uid;
+    final uid = vm.uid ?? authUid;
+    if (uid == null) {
+      // Still navigate even if auth uid is momentarily unavailable.
+      if (!context.mounted) return;
+      widget.onNotificationTap(context, notification);
+      return;
+    }
 
-    if (!notification.isRead) {
+    if (!notification.isRead && notification.notifId.isNotEmpty) {
       await vm.markAsRead(notification.notifId, uid);
     }
     if (!context.mounted) return;
 
-    // 1. Present Notification Detail safely in a beautiful, scrollable modal view to ensure zero overflow or layout crash.
+    // Present Notification Detail, then navigate to the linked screen.
     await showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -338,18 +344,7 @@ class _AppNotificationsScaffoldState extends State<AppNotificationsScaffold> {
                   : (widget.embedded ? null : AppNavigation.leading(context)),
               title: _isSelectionMode
                   ? Text('${_selectedNotifIds.length} selected')
-                  : Row(
-                      children: [
-                        const Icon(Icons.notifications_active_rounded, size: 22),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            widget.title,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
+                  : Text(widget.title, overflow: TextOverflow.ellipsis),
               actions: _isSelectionMode
                   ? [
                       IconButton(
@@ -375,52 +370,12 @@ class _AppNotificationsScaffoldState extends State<AppNotificationsScaffold> {
                           onPressed: () => _confirmAndClearAll(context),
                         ),
                       if (vm.unreadCount > 0)
-                        TextButton.icon(
+                        IconButton(
+                          icon: const Icon(Icons.done_all_rounded),
+                          tooltip: 'Mark all read',
                           onPressed: () => _markAllRead(context),
-                          icon: const Icon(Icons.done_all_rounded, size: 16),
-                          label: const Text('Mark all read'),
                         ),
-                      const SizedBox(width: 8),
-                      Consumer<AuthViewModel>(
-                        builder: (context, authVm, _) {
-                          final user = authVm.user;
-                          final role = user?.role?.toLowerCase() ?? '';
-                          final name = user?.name ?? '';
-                          String initials = 'P';
-                          if (name.isNotEmpty) {
-                            final parts = name.trim().split(RegExp(r'\s+'));
-                            if (parts.isNotEmpty && parts.first.isNotEmpty) {
-                              initials = parts.first[0].toUpperCase();
-                            }
-                          }
-                          return GestureDetector(
-                            onTap: () {
-                              if (role == 'ceo') {
-                                context.push(RouteNames.ceoProfile);
-                              } else if (role == 'supplier') {
-                                context.push(RouteNames.supplierProfile);
-                              } else if (role == 'field_user') {
-                                context.push(RouteNames.fieldProfile);
-                              } else {
-                                context.push(RouteNames.adminDashboard);
-                              }
-                            },
-                            child: CircleAvatar(
-                              radius: 16,
-                              backgroundColor: const Color(0xFF1E326E),
-                              child: Text(
-                                initials,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                      const SizedBox(width: 16),
+                      const SizedBox(width: 4),
                     ],
             )
           : null,

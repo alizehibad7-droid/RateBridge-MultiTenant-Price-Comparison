@@ -106,12 +106,14 @@ class _CeoMySuppliersViewState extends State<CeoMySuppliersView>
         backgroundColor: CeoColors.screenBg,
         appBar: CeoAppBar(
           title: 'Partner Directory',
+          automaticallyImplyLeading: false,
+          showNotificationIcon: false,
           bottom: TabBar(
             controller: _cityTabController,
             isScrollable: true,
             indicatorColor: CeoColors.amber,
             indicatorWeight: 3,
-            labelColor: Colors.white,
+            labelColor: CeoColors.navy,
             unselectedLabelColor: CeoColors.textGrey,
             labelStyle: GoogleFonts.plusJakartaSans(
               fontWeight: FontWeight.w700,

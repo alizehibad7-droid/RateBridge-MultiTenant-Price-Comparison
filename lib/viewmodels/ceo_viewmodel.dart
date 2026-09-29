@@ -969,7 +969,7 @@ class CeoViewModel extends ChangeNotifier {
         final doc = await _db.collection('suppliers').doc(id).get();
         if (!doc.exists) continue;
         final raw = doc.data();
-        if (raw is! Map) continue;
+        if (raw == null) continue;
         final data = Map<String, dynamic>.from(raw);
         data['id'] = doc.id;
         final supplier = SupplierModel.fromMap(data);
@@ -1099,13 +1099,22 @@ class CeoViewModel extends ChangeNotifier {
           .get();
       final reqData = reqSnap.data();
       await _partnershipRepo.acceptRequest(reqId);
-      if (reqData != null &&
-          PartnershipRequestModel.fromMap(reqId, reqData).isSupplierInitiated) {
-        await _notificationService.notifyPartnershipAccepted(
-          recipientUserId: reqData['supplierId'] as String,
-          senderName: _company?.name ?? reqData['companyName'] as String? ?? '',
-          companyId: reqData['companyId'] as String,
-        );
+      if (reqData != null) {
+        final model = PartnershipRequestModel.fromMap(reqId, reqData);
+        final supplierId = (reqData['supplierId'] as String?) ?? '';
+        if (supplierId.isNotEmpty) {
+          await _notificationService.dismissPartnershipInvitationNotifications(
+            recipientUserId: supplierId,
+            requestId: reqId,
+          );
+        }
+        if (model.isSupplierInitiated && supplierId.isNotEmpty) {
+          await _notificationService.notifyPartnershipAccepted(
+            recipientUserId: supplierId,
+            senderName: _company?.name ?? reqData['companyName'] as String? ?? '',
+            companyId: reqData['companyId'] as String,
+          );
+        }
       }
       _successMessage = 'Partnership accepted.';
     } on AppException catch (e) {
@@ -1128,13 +1137,22 @@ class CeoViewModel extends ChangeNotifier {
           .get();
       final reqData = reqSnap.data();
       await _partnershipRepo.rejectRequest(reqId, reason);
-      if (reqData != null &&
-          PartnershipRequestModel.fromMap(reqId, reqData).isSupplierInitiated) {
-        await _notificationService.notifyPartnershipDeclined(
-          recipientUserId: reqData['supplierId'] as String,
-          senderName: _company?.name ?? reqData['companyName'] as String? ?? '',
-          companyId: reqData['companyId'] as String,
-        );
+      if (reqData != null) {
+        final model = PartnershipRequestModel.fromMap(reqId, reqData);
+        final supplierId = (reqData['supplierId'] as String?) ?? '';
+        if (supplierId.isNotEmpty) {
+          await _notificationService.dismissPartnershipInvitationNotifications(
+            recipientUserId: supplierId,
+            requestId: reqId,
+          );
+        }
+        if (model.isSupplierInitiated && supplierId.isNotEmpty) {
+          await _notificationService.notifyPartnershipDeclined(
+            recipientUserId: supplierId,
+            senderName: _company?.name ?? reqData['companyName'] as String? ?? '',
+            companyId: reqData['companyId'] as String,
+          );
+        }
       }
       _successMessage = 'Partnership request rejected.';
     } on AppException catch (e) {
@@ -1151,7 +1169,19 @@ class CeoViewModel extends ChangeNotifier {
 
   Future<void> withdrawPartnershipRequest(String requestId) async {
     try {
+      final reqSnap = await _db
+          .collection(FirestorePaths.partnershipRequestsCol)
+          .doc(requestId)
+          .get();
+      final reqData = reqSnap.data();
       await _partnershipRepo.withdrawRequest(requestId);
+      final supplierId = (reqData?['supplierId'] as String?) ?? '';
+      if (supplierId.isNotEmpty) {
+        await _notificationService.dismissPartnershipInvitationNotifications(
+          recipientUserId: supplierId,
+          requestId: requestId,
+        );
+      }
       _successMessage = 'Partnership request withdrawn.';
     } on AppException catch (e) {
       _errorMessage = e.message;
@@ -1249,6 +1279,12 @@ class CeoViewModel extends ChangeNotifier {
     final company = _company;
     if (company == null) return;
     try {
+      final supplierSnap =
+          await _db.collection('suppliers').doc(supplierId).get();
+      final supplierName = (supplierSnap.data()?['name'] ??
+              supplierSnap.data()?['businessName'] ??
+              'Supplier')
+          .toString();
       await _partnershipRepo.removePartnership(
         companyId: company.id,
         supplierId: supplierId,
@@ -1257,8 +1293,11 @@ class CeoViewModel extends ChangeNotifier {
         recipientUserId: supplierId,
         companyName: company.name,
         companyId: company.id,
+        supplierName: supplierName,
+        removedByCompany: true,
       );
-      _successMessage = 'Partnership removed.';
+      _successMessage =
+          'Partnership removed. $supplierName is no longer linked and field users cannot order from them.';
     } catch (e) {
       _errorMessage = 'Failed to remove partnership: $e';
     }
@@ -1303,18 +1342,43 @@ class CeoViewModel extends ChangeNotifier {
       await _db.collection('users').doc(uid).update({'status': 'deactivated'});
 
   /// Activates or deactivates a linked supplier for this company.
+  /// Updates both company→supplier and supplier→company link docs, then notifies.
   Future<void> toggleSupplierStatus(
       String supplierId, String companyId, bool activate) async {
     try {
       final newStatus = activate ? 'active' : 'deactivated';
-      await _db
+      final batch = _db.batch();
+      final companyLink = _db
           .collection('companies')
           .doc(companyId)
           .collection('suppliers')
+          .doc(supplierId);
+      final supplierLink = _db
+          .collection('suppliers')
           .doc(supplierId)
-          .update({'status': newStatus});
-      _successMessage =
-      activate ? 'Supplier activated.' : 'Supplier deactivated.';
+          .collection('companies')
+          .doc(companyId);
+      batch.set(companyLink, {
+        'status': newStatus,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+      batch.set(supplierLink, {
+        'status': newStatus,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+      await batch.commit();
+
+      final companyName = _company?.name ?? 'A company';
+      await _notificationService.notifyPartnershipDeactivated(
+        recipientUserId: supplierId,
+        companyName: companyName,
+        companyId: companyId,
+        deactivated: !activate,
+      );
+
+      _successMessage = activate
+          ? 'Supplier reactivated. Field users can order from them again.'
+          : 'Supplier deactivated. Field users can no longer see or order from them.';
     } catch (e) {
       _errorMessage = 'Failed to update supplier status: $e';
     }

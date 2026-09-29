@@ -109,6 +109,8 @@ class _CeoFieldUsersViewState extends State<CeoFieldUsersView>
       backgroundColor: CeoColors.screenBg,
       appBar: CeoAppBar(
         title: 'User Management',
+        automaticallyImplyLeading: false,
+        showNotificationIcon: false,
         actions: [
           IconButton(
             icon: const Icon(Icons.person_add_alt_1_rounded),
@@ -120,7 +122,7 @@ class _CeoFieldUsersViewState extends State<CeoFieldUsersView>
           controller: _tabController,
           indicatorColor: CeoColors.amber,
           indicatorWeight: 3,
-          labelColor: Colors.white,
+          labelColor: CeoColors.navy,
           unselectedLabelColor: CeoColors.textGrey,
           labelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 13),
           unselectedLabelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w500, fontSize: 13),

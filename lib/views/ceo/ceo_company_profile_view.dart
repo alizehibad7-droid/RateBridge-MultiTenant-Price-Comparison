@@ -244,7 +244,7 @@ class _CeoCompanyProfileViewState extends State<CeoCompanyProfileView> {
         elevation: 0,
         scrolledUnderElevation: 0,
         automaticallyImplyLeading: false,
-        leading: AppNavigation.leading(context, color: Colors.white),
+        leading: null,
         systemOverlayStyle: SystemUiOverlayStyle.light,
         title: Text(
           'My Profile',

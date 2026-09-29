@@ -31,10 +31,24 @@ class AppNavigation {
     return false;
   }
 
-  /// AppBar leading: a back button only when there is a previous route.
-  static Widget? leading(BuildContext context, {Color? color}) {
-    if (!canPop(context)) return null;
-    return AppBackButton(color: color);
+  /// AppBar leading: a back button when there is a previous route.
+  /// If nothing to pop and [fallbackRoute] is set, navigates there instead
+  /// (e.g. Plan & Billing after a Stripe redirect cleared the stack).
+  static Widget? leading(
+    BuildContext context, {
+    Color? color,
+    String? fallbackRoute,
+  }) {
+    if (canPop(context)) {
+      return AppBackButton(color: color);
+    }
+    if (fallbackRoute != null && fallbackRoute.isNotEmpty) {
+      return AppBackButton(
+        color: color,
+        onPressed: () => context.go(fallbackRoute),
+      );
+    }
+    return null;
   }
 }
 

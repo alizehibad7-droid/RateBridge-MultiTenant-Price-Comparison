@@ -28,6 +28,29 @@ class OrderRepository {
           'This supplier is temporarily unavailable for new orders.',
         );
       }
+
+      // Partnership link must be active for this company (CEO deactivate / remove).
+      if (order.companyId.isNotEmpty && order.supplierId.isNotEmpty) {
+        final link = await _db
+            .collection('companies')
+            .doc(order.companyId)
+            .collection('suppliers')
+            .doc(order.supplierId)
+            .get();
+        if (!link.exists) {
+          throw AppException(
+            'This supplier is not partnered with your company.',
+          );
+        }
+        final linkStatus =
+            (link.data()?['status'] as String?)?.toLowerCase() ?? 'active';
+        if (linkStatus != 'active' && linkStatus != 'approved') {
+          throw AppException(
+            'This supplier has been deactivated for your company. New orders cannot be placed.',
+          );
+        }
+      }
+
       await _db
           .collection('orders')
           .doc(order.orderId)

@@ -66,7 +66,6 @@ const kPlans = <PlanDefinition>[
       'Max 15 linked suppliers',
       'Max 15 field users',
       'Full price trend history',
-      'AI price recommendations',
     ],
     aiUnlocked: true,
   ),
@@ -83,7 +82,6 @@ const kPlans = <PlanDefinition>[
       'Everything in Basic',
       'Unlimited linked suppliers',
       'Unlimited field users',
-      'Advanced AI analytics',
     ],
     aiUnlocked: true,
   ),
@@ -111,6 +109,10 @@ class SubscriptionModel {
   });
 
   bool get isActive {
+    // Free never expires — treat as always available when present.
+    if (plan == 'free') {
+      return status == 'active' || status == 'admin_granted' || status.isEmpty;
+    }
     if (status != 'active' && status != 'admin_granted') return false;
     if (expiresAt != null && expiresAt!.isBefore(DateTime.now())) {
       return false;
@@ -147,25 +149,45 @@ class SubscriptionModel {
     }
   }
 
-  // Feature specific getters for convenience
-  bool get aiInsightsEnabled => effectivePlanDef.aiUnlocked;
-
   factory SubscriptionModel.fromMap(
       String companyId, Map<String, dynamic> map) {
     final rawHistory = map['history'] as List<dynamic>? ?? [];
+    final history = <SubscriptionHistoryEntry>[];
+    for (final e in rawHistory) {
+      if (e is! Map) continue;
+      try {
+        history.add(
+          SubscriptionHistoryEntry.fromMap(Map<String, dynamic>.from(e)),
+        );
+      } catch (_) {
+        // Skip malformed history rows so one bad entry cannot blank the plan UI.
+      }
+    }
     return SubscriptionModel(
       companyId: companyId,
-      plan: map['plan'] ?? 'free',
-      status: map['status'] ?? 'active',
-      startedAt: (map['startedAt'] as Timestamp?)?.toDate(),
-      expiresAt: (map['expiresAt'] as Timestamp?)?.toDate(),
-      adminGranted: map['adminGranted'] ?? false,
-      adminNote: map['adminNote'],
-      history: rawHistory
-          .map((e) => SubscriptionHistoryEntry.fromMap(
-              e as Map<String, dynamic>))
-          .toList(),
+      plan: (map['plan'] as String?)?.trim().isNotEmpty == true
+          ? (map['plan'] as String).trim()
+          : 'free',
+      status: (map['status'] as String?)?.trim().isNotEmpty == true
+          ? (map['status'] as String).trim()
+          : 'active',
+      startedAt: _readDate(map['startedAt']),
+      expiresAt: _readDate(map['expiresAt']),
+      adminGranted: map['adminGranted'] == true,
+      adminNote: map['adminNote'] as String?,
+      history: history,
     );
+  }
+
+  static DateTime? _readDate(dynamic value) {
+    if (value == null) return null;
+    if (value is Timestamp) return value.toDate();
+    if (value is DateTime) return value;
+    if (value is int) {
+      return DateTime.fromMillisecondsSinceEpoch(value);
+    }
+    if (value is String) return DateTime.tryParse(value);
+    return null;
   }
 
   Map<String, dynamic> toMap() => {
@@ -186,6 +208,7 @@ class SubscriptionHistoryEntry {
   final DateTime date;
   final int? amountPaid;
   final String? note;
+  final String? stripePaymentIntentId;
 
   const SubscriptionHistoryEntry({
     required this.plan,
@@ -193,15 +216,19 @@ class SubscriptionHistoryEntry {
     required this.date,
     this.amountPaid,
     this.note,
+    this.stripePaymentIntentId,
   });
 
   factory SubscriptionHistoryEntry.fromMap(Map<String, dynamic> map) {
     return SubscriptionHistoryEntry(
-      plan: map['plan'] ?? '',
-      action: map['action'] ?? '',
-      date: (map['date'] as Timestamp?)?.toDate() ?? DateTime.now(),
-      amountPaid: map['amountPaid'],
-      note: map['note'],
+      plan: map['plan']?.toString() ?? '',
+      action: map['action']?.toString() ?? '',
+      date: SubscriptionModel._readDate(map['date']) ?? DateTime.now(),
+      amountPaid: map['amountPaid'] is num
+          ? (map['amountPaid'] as num).round()
+          : int.tryParse('${map['amountPaid'] ?? ''}'),
+      note: map['note']?.toString(),
+      stripePaymentIntentId: map['stripePaymentIntentId']?.toString(),
     );
   }
 
@@ -211,5 +238,7 @@ class SubscriptionHistoryEntry {
         'date': Timestamp.fromDate(date),
         if (amountPaid != null) 'amountPaid': amountPaid,
         if (note != null) 'note': note,
+        if (stripePaymentIntentId != null && stripePaymentIntentId!.isNotEmpty)
+          'stripePaymentIntentId': stripePaymentIntentId,
       };
 }

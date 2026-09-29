@@ -2,101 +2,424 @@ const functions = require("firebase-functions");
 const admin = require("firebase-admin");
 
 /**
- * Lazy initialization helper for Stripe to prevent top-level crashes
- * during deployment or when config is missing.
+ * Lazy Stripe init — functions.config().stripe.secret_key must match
+ * the Flutter publishable key (same Stripe account).
  */
 function getStripe() {
-  const secretKey = process.env.STRIPE_SECRET_KEY || functions.config().stripe?.secret_key;
+  const secretKey =
+    process.env.STRIPE_SECRET_KEY || functions.config().stripe?.secret_key;
   if (!secretKey) {
-    throw new Error("STRIPE_SECRET_KEY is not configured. Use firebase functions:config:set stripe.secret_key=\"...\" or set the environment variable.");
+    throw new Error(
+      "STRIPE_SECRET_KEY is not configured. Use firebase functions:config:set stripe.secret_key=\"sk_...\""
+    );
   }
   return require("stripe")(secretKey);
 }
 
-// Fixed PKR pricing — server decides the amount, client only sends the plan key.
 const SUBSCRIPTION_PLANS_PKR = {
-  basic: 1000,   // 1000 PKR
-  premium: 5000, // 5000 PKR
+  basic: 1000,
+  premium: 5000,
 };
 
-exports.createSubscriptionPaymentIntent = functions.https.onCall(async (data, context) => {
-  if (!context.auth) {
-    throw new functions.https.HttpsError("unauthenticated", "Login required");
-  }
+/** Stripe PKR amount is in paisa (Rs. 1 = 100). */
+function toStripeAmountPkr(amountPKR) {
+  return Math.round(Number(amountPKR) * 100);
+}
 
-  const { plan } = data;
-  const companyId = context.auth.token.companyId;
+function fromStripeAmountPkr(amountPaisa) {
+  return Math.round(Number(amountPaisa) / 100);
+}
 
-  const amountPKR = SUBSCRIPTION_PLANS_PKR[plan];
-  if (!amountPKR) {
-    throw new functions.https.HttpsError("invalid-argument", "Unknown plan: " + plan);
-  }
+function subscriptionMeta(plan, companyId, amountPKR) {
+  return {
+    type: "subscription",
+    companyId: companyId || "",
+    plan: String(plan || ""),
+    amountPKR: String(amountPKR),
+  };
+}
 
-  try {
-    const stripe = getStripe();
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount: amountPKR,
-      currency: "pkr",
-      metadata: {
-        type: "subscription",
-        companyId: companyId || "",
+function commissionMeta(supplierId, transactionIds, rupees) {
+  const ids = Array.isArray(transactionIds)
+    ? transactionIds
+    : String(transactionIds || "")
+        .split(",")
+        .filter(Boolean);
+  return {
+    type: "commission",
+    supplierId: supplierId || "",
+    transactionIds: ids.join(","),
+    amountPKR: String(rupees),
+  };
+}
+
+function planExpiryDate() {
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + 30);
+  return expiresAt;
+}
+
+function publicStripeError(error) {
+  const raw = String(error?.message || error || "Payment failed");
+  return raw.slice(0, 280);
+}
+
+async function applySuccessfulPayment(metadata, amountFallback, paymentRefId) {
+  const { type, companyId, plan, transactionIds, amountPKR } = metadata || {};
+
+  if (type === "subscription") {
+    if (!companyId) {
+      console.error(
+        "Subscription payment missing companyId in metadata",
+        metadata
+      );
+      return;
+    }
+    if (!plan || !SUBSCRIPTION_PLANS_PKR[plan]) {
+      console.error("Subscription payment missing/invalid plan", metadata);
+      return;
+    }
+    const subRef = admin.firestore().collection("subscriptions").doc(companyId);
+    const existing = await subRef.get();
+    const history = existing.data()?.history || [];
+    if (
+      paymentRefId &&
+      history.some((h) => h && h.stripePaymentIntentId === paymentRefId)
+    ) {
+      console.log("Subscription payment already applied:", paymentRefId);
+      return;
+    }
+
+    const now = admin.firestore.FieldValue.serverTimestamp();
+    const expiresAt = planExpiryDate();
+    const paidRupees = amountPKR
+      ? Math.round(Number(amountPKR))
+      : fromStripeAmountPkr(amountFallback);
+
+    await subRef.set(
+      {
         plan: plan,
+        status: "active",
+        startedAt: now,
+        expiresAt: admin.firestore.Timestamp.fromDate(expiresAt),
+        updatedAt: now,
+        adminGranted: false,
       },
-    });
-
-    return { clientSecret: paymentIntent.client_secret, amountPKR };
-  } catch (error) {
-    console.error("Stripe Subscription Error:", error);
-    throw new functions.https.HttpsError("internal", error.message);
-  }
-});
-
-exports.createCommissionPaymentIntent = functions.https.onCall(async (data, context) => {
-  if (!context.auth) {
-    throw new functions.https.HttpsError("unauthenticated", "Login required");
-  }
-
-  const { amountPKR, transactionIds } = data;
-  const supplierId = context.auth.uid;
-
-  if (!amountPKR || !transactionIds || !transactionIds.length) {
-    throw new functions.https.HttpsError(
-      "invalid-argument",
-      "amountPKR and transactionIds are required"
+      { merge: true }
     );
-  }
 
-  try {
-    const stripe = getStripe();
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount: Math.round(amountPKR),
-      currency: "pkr",
-      metadata: {
-        type: "commission",
-        supplierId: supplierId,
-        transactionIds: transactionIds.join(","),
-        amountPKR: amountPKR,
-      },
+    await subRef.update({
+      history: admin.firestore.FieldValue.arrayUnion({
+        plan: plan,
+        action: "purchased",
+        date: new Date(),
+        amountPaid: paidRupees,
+        stripePaymentIntentId: paymentRefId || "",
+      }),
     });
 
-    return { clientSecret: paymentIntent.client_secret, amountPKR };
-  } catch (error) {
-    console.error("Stripe Commission Error:", error);
-    throw new functions.https.HttpsError("internal", error.message);
+    await admin.firestore().collection("companies").doc(companyId).set(
+      {
+        plan: plan,
+        planExpiry: admin.firestore.Timestamp.fromDate(expiresAt),
+        status: "active",
+      },
+      { merge: true }
+    );
+    return;
   }
-});
 
+  if (type === "commission" && transactionIds) {
+    const ids = String(transactionIds).split(",").filter(Boolean);
+    if (!ids.length) return;
+    const batch = admin.firestore().batch();
+    ids.forEach((id) => {
+      batch.set(
+        admin.firestore().collection("transactions").doc(id),
+        {
+          status: "settled",
+          settledAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+    });
+    await batch.commit();
+  }
+}
+
+async function createSubscriptionCheckout({
+  plan,
+  companyId,
+  successUrl,
+  cancelUrl,
+}) {
+  const amountPKR = SUBSCRIPTION_PLANS_PKR[plan];
+  if (!amountPKR) throw new Error("Unknown plan: " + plan);
+  if (!companyId) throw new Error("companyId is required");
+  if (!successUrl || !cancelUrl) {
+    throw new Error("successUrl and cancelUrl are required");
+  }
+
+  const stripe = getStripe();
+  const metadata = subscriptionMeta(plan, companyId, amountPKR);
+  const session = await stripe.checkout.sessions.create({
+    mode: "payment",
+    payment_method_types: ["card"],
+    line_items: [
+      {
+        quantity: 1,
+        price_data: {
+          currency: "pkr",
+          unit_amount: toStripeAmountPkr(amountPKR),
+          product_data: {
+            name: `RateBridge ${String(plan).toUpperCase()} plan`,
+            description: "Monthly subscription",
+          },
+        },
+      },
+    ],
+    success_url: successUrl,
+    cancel_url: cancelUrl,
+    client_reference_id: companyId,
+    metadata,
+    payment_intent_data: { metadata },
+  });
+  if (!session.url) throw new Error("Checkout session missing URL");
+  return { url: session.url, amountPKR };
+}
+
+async function createCommissionCheckout({
+  supplierId,
+  amountPKR,
+  transactionIds,
+  successUrl,
+  cancelUrl,
+}) {
+  const rupees = Math.round(Number(amountPKR));
+  if (!Number.isFinite(rupees) || rupees <= 0) {
+    throw new Error("Invalid amountPKR");
+  }
+  if (!transactionIds || !transactionIds.length) {
+    throw new Error("transactionIds are required");
+  }
+  if (!successUrl || !cancelUrl) {
+    throw new Error("successUrl and cancelUrl are required");
+  }
+
+  const stripe = getStripe();
+  const metadata = commissionMeta(supplierId, transactionIds, rupees);
+  const session = await stripe.checkout.sessions.create({
+    mode: "payment",
+    payment_method_types: ["card"],
+    line_items: [
+      {
+        quantity: 1,
+        price_data: {
+          currency: "pkr",
+          unit_amount: toStripeAmountPkr(rupees),
+          product_data: {
+            name: "RateBridge commission settlement",
+          },
+        },
+      },
+    ],
+    success_url: successUrl,
+    cancel_url: cancelUrl,
+    metadata,
+    payment_intent_data: { metadata },
+  });
+  if (!session.url) throw new Error("Checkout session missing URL");
+  return { url: session.url, amountPKR: rupees };
+}
+
+async function createSubscriptionPaymentIntent({ plan, companyId }) {
+  const amountPKR = SUBSCRIPTION_PLANS_PKR[plan];
+  if (!amountPKR) throw new Error("Unknown plan: " + plan);
+  if (!companyId) throw new Error("companyId is required");
+
+  const stripe = getStripe();
+  const metadata = subscriptionMeta(plan, companyId, amountPKR);
+  const paymentIntent = await stripe.paymentIntents.create({
+    amount: toStripeAmountPkr(amountPKR),
+    currency: "pkr",
+    automatic_payment_methods: { enabled: true },
+    metadata,
+  });
+  return { clientSecret: paymentIntent.client_secret, amountPKR };
+}
+
+async function createCommissionPaymentIntent({
+  supplierId,
+  amountPKR,
+  transactionIds,
+}) {
+  const rupees = Math.round(Number(amountPKR));
+  if (!Number.isFinite(rupees) || rupees <= 0) {
+    throw new Error("Invalid amountPKR");
+  }
+  if (!transactionIds || !transactionIds.length) {
+    throw new Error("transactionIds are required");
+  }
+
+  const stripe = getStripe();
+  const metadata = commissionMeta(supplierId, transactionIds, rupees);
+  const paymentIntent = await stripe.paymentIntents.create({
+    amount: toStripeAmountPkr(rupees),
+    currency: "pkr",
+    automatic_payment_methods: { enabled: true },
+    metadata,
+  });
+  return { clientSecret: paymentIntent.client_secret, amountPKR: rupees };
+}
+
+/**
+ * Firestore job trigger — same pattern as onAiJobCreated.
+ * Avoids HTTPS callable 403/CORS on Flutter Web (Cloud Run IAM).
+ *
+ * Client writes stripe_jobs/{id} with status=pending, then listens until
+ * status is complete|error.
+ */
+exports.onStripeJobCreated = functions
+  .region("us-central1")
+  .runWith({ timeoutSeconds: 60, memory: "256MB" })
+  .firestore.document("stripe_jobs/{jobId}")
+  .onCreate(async (snap) => {
+    const data = snap.data() || {};
+    const uid = typeof data.uid === "string" ? data.uid : "";
+    const mode = data.mode === "payment_sheet" ? "payment_sheet" : "checkout";
+    const type = data.type === "commission" ? "commission" : "subscription";
+
+    if (!uid) {
+      await snap.ref.update({
+        status: "error",
+        error: "Missing uid.",
+      });
+      return;
+    }
+
+    try {
+      let result;
+      if (mode === "checkout") {
+        if (type === "subscription") {
+          result = await createSubscriptionCheckout({
+            plan: data.plan,
+            companyId: data.companyId,
+            successUrl: data.successUrl,
+            cancelUrl: data.cancelUrl,
+          });
+        } else {
+          result = await createCommissionCheckout({
+            supplierId: uid,
+            amountPKR: data.amountPKR,
+            transactionIds: data.transactionIds,
+            successUrl: data.successUrl,
+            cancelUrl: data.cancelUrl,
+          });
+        }
+        await snap.ref.update({
+          status: "complete",
+          url: result.url,
+          amountPKR: result.amountPKR,
+          completedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        return;
+      }
+
+      // payment_sheet (mobile)
+      if (type === "subscription") {
+        result = await createSubscriptionPaymentIntent({
+          plan: data.plan,
+          companyId: data.companyId,
+        });
+      } else {
+        result = await createCommissionPaymentIntent({
+          supplierId: uid,
+          amountPKR: data.amountPKR,
+          transactionIds: data.transactionIds,
+        });
+      }
+      await snap.ref.update({
+        status: "complete",
+        clientSecret: result.clientSecret,
+        amountPKR: result.amountPKR,
+        completedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    } catch (error) {
+      console.error("onStripeJobCreated error:", error);
+      await snap.ref.update({
+        status: "error",
+        error: publicStripeError(error),
+      });
+    }
+  });
+
+/**
+ * Client writes stripe_activate_jobs after Checkout success.
+ * Admin SDK applies the plan — bypasses client Firestore permission issues.
+ */
+exports.onStripeActivateJobCreated = functions
+  .region("us-central1")
+  .runWith({ timeoutSeconds: 60, memory: "256MB" })
+  .firestore.document("stripe_activate_jobs/{jobId}")
+  .onCreate(async (snap) => {
+    const data = snap.data() || {};
+    const uid = typeof data.uid === "string" ? data.uid : "";
+    const companyId =
+      typeof data.companyId === "string" ? data.companyId.trim() : "";
+    const plan = typeof data.plan === "string" ? data.plan.trim() : "";
+    const amountPKR = data.amountPKR;
+
+    if (!uid || !companyId || !SUBSCRIPTION_PLANS_PKR[plan]) {
+      await snap.ref.update({
+        status: "error",
+        error: "uid, companyId, and a valid plan are required.",
+      });
+      return;
+    }
+
+    try {
+      const paymentRef =
+        typeof data.paymentRefId === "string" && data.paymentRefId
+          ? data.paymentRefId
+          : `activate_${snap.id}`;
+      await applySuccessfulPayment(
+        {
+          type: "subscription",
+          companyId,
+          plan,
+          amountPKR: String(
+            amountPKR != null ? amountPKR : SUBSCRIPTION_PLANS_PKR[plan]
+          ),
+        },
+        toStripeAmountPkr(SUBSCRIPTION_PLANS_PKR[plan]),
+        paymentRef
+      );
+      await snap.ref.update({
+        status: "complete",
+        completedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    } catch (error) {
+      console.error("onStripeActivateJobCreated error:", error);
+      await snap.ref.update({
+        status: "error",
+        error: publicStripeError(error),
+      });
+    }
+  });
+
+/** HTTP webhook — Stripe → Firestore activation / settlement. */
 exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
   const sig = req.headers["stripe-signature"];
-  let event;
-
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || functions.config().stripe?.webhook_secret;
+  const webhookSecret =
+    process.env.STRIPE_WEBHOOK_SECRET ||
+    functions.config().stripe?.webhook_secret;
 
   if (!webhookSecret) {
     console.error("Missing STRIPE_WEBHOOK_SECRET configuration");
     return res.status(500).send("Webhook configuration missing");
   }
 
+  let event;
   try {
     const stripe = getStripe();
     event = stripe.webhooks.constructEvent(req.rawBody, sig, webhookSecret);
@@ -105,52 +428,23 @@ exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
-  if (event.type === "payment_intent.succeeded") {
-    const intent = event.data.object;
-    const { type, companyId, supplierId, plan, transactionIds } = intent.metadata;
-    try {
-      if (type === "subscription" && companyId) {
-        const now = admin.firestore.FieldValue.serverTimestamp();
-        // 1. Update the official subscription record
-        await admin.firestore().collection("subscriptions").doc(companyId).set({
-          plan: plan,
-          status: "active",
-          startedAt: now,
-          updatedAt: now,
-        }, { merge: true });
-
-        // 2. Add to history
-        await admin.firestore().collection("subscriptions").doc(companyId).update({
-          history: admin.firestore.FieldValue.arrayUnion({
-            plan: plan,
-            action: "purchased",
-            date: new Date(),
-            amountPaid: intent.amount,
-            stripePaymentIntentId: intent.id,
-          })
-        });
-
-        // 3. Update the company doc for field user inheritance and UI
-        await admin.firestore().collection("companies").doc(companyId).update({
-          plan: plan,
-          aiEnabled: plan !== 'free',
-          status: "active",
-        });
-
-      } else if (type === "commission" && transactionIds) {
-        const ids = transactionIds.split(",");
-        const batch = admin.firestore().batch();
-        ids.forEach((id) => {
-          batch.update(admin.firestore().collection("transactions").doc(id), {
-            status: "settled",
-            settledAt: admin.firestore.FieldValue.serverTimestamp(),
-          });
-        });
-        await batch.commit();
+  try {
+    if (event.type === "payment_intent.succeeded") {
+      const intent = event.data.object;
+      await applySuccessfulPayment(intent.metadata, intent.amount, intent.id);
+    } else if (event.type === "checkout.session.completed") {
+      const session = event.data.object;
+      if (session.payment_status === "paid") {
+        await applySuccessfulPayment(
+          session.metadata,
+          session.amount_total,
+          session.payment_intent || session.id
+        );
       }
-    } catch (err) {
-      console.error("Error updating Firestore after payment:", err);
     }
+  } catch (err) {
+    console.error("Error updating Firestore after payment:", err);
   }
+
   res.json({ received: true });
 });

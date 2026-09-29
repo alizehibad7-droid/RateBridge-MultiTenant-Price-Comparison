@@ -228,10 +228,22 @@ void navigateForSupplierNotification(
   if (_notifContains(notification, 'partnership')) {
     final event = (_dataString(data, 'event') ?? '').toLowerCase();
     if (event == 'invitation_received') {
-      context.push('${RouteNames.supplierMyCompanies}?tab=1');
+      final requestId = _dataString(data, 'requestId') ??
+          _dataString(data, 'relatedId');
+      final query = <String, String>{'tab': '1'};
+      if (requestId != null && requestId.isNotEmpty) {
+        query['requestId'] = requestId;
+      }
+      if (companyId != null && companyId.isNotEmpty) {
+        query['companyId'] = companyId;
+      }
+      context.push(
+        Uri(path: RouteNames.supplierMyCompanies, queryParameters: query)
+            .toString(),
+      );
       return;
     }
-    // Accepted / declined / removed → partnerships hub (Active tab).
+    // Accepted / declined / removed / deactivated → partnerships hub (Active).
     final query = <String, String>{'tab': '0'};
     if (companyId != null && companyId.isNotEmpty) {
       query['companyId'] = companyId;

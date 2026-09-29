@@ -110,9 +110,31 @@ service cloud.firestore {
       allow read: if signedIn() || resource.data.status == 'active';
       allow create: if signedIn();
       allow update: if isAdmin()
+        || (isCeo()
+            && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+            && 'companyId' in currentUser()
+            && currentUser().companyId == companyId)
         || (signedIn() && 'ceoUid' in resource.data && resource.data.ceoUid == request.auth.uid)
         || (signedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['fieldUserCount', 'updatedAt']));
       allow delete: if isAdmin();
+    }
+
+    match /subscriptions/{companyId} {
+      allow read: if signedIn();
+      allow create, update: if isAdmin()
+        || (isCeo()
+            && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+            && 'companyId' in currentUser()
+            && currentUser().companyId == companyId);
+      allow delete: if isAdmin();
+    }
+
+    match /stripe_activate_jobs/{jobId} {
+      allow create: if signedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.status == 'pending';
+      allow read: if signedIn() && resource.data.uid == request.auth.uid;
+      allow update, delete: if false;
     }
 
     // Explicitly allow reading/writing to company subcollections if signed in.
@@ -251,6 +273,15 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    match /stripe_jobs/{jobId} {
+      allow create: if signedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.status == 'pending';
+      allow read: if isAdmin()
+        || (signedIn() && resource.data.uid == request.auth.uid);
+      allow update, delete: if false;
+    }
+
     function orderStatusUpdateKeysOnly() {
       return request.resource.data.diff(resource.data).affectedKeys()
         .hasOnly([
@@ -330,11 +361,14 @@ service cloud.firestore {
       allow read, write: if signedIn()
         && collection != 'users'
         && collection != 'companies'
+        && collection != 'subscriptions'
+        && collection != 'stripe_activate_jobs'
         && collection != 'orders'
         && collection != 'rfqs'
         && collection != 'disputes'
         && collection != 'audit_logs'
         && collection != 'ai_jobs'
+        && collection != 'stripe_jobs'
         && collection != 'rfq_jobs'
         && collection != 'dispute_jobs'
         && collection != 'dispute_update_jobs'

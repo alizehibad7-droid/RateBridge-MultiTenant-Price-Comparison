@@ -31,9 +31,6 @@ class AppConstants {
   /// CEO company invite code used by Field Users at registration.
   static const Duration fieldUserInviteCodeExpiry = Duration(minutes: 30);
 
-  // AI rate limit
-  static const int geminiRateLimit = 14;
-
   // Debounce
   static const Duration searchDebounce = Duration(milliseconds: 300);
   static const Duration supplierSearchDebounce = Duration(milliseconds: 400);

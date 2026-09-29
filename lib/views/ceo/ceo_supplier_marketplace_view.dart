@@ -88,7 +88,10 @@ class _CeoSupplierMarketplaceViewState
       backgroundColor: CeoColors.screenBg,
       appBar: widget.isTab
           ? null
-          : const CeoAppBar(title: 'Supplier Marketplace'),
+          : const CeoAppBar(
+              title: 'Supplier Marketplace',
+              showNotificationIcon: false,
+            ),
       body: Column(
         children: [
           Container(

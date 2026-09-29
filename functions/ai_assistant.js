@@ -2,19 +2,6 @@ const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 const axios = require('axios');
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
-const { GoogleAuth } = require('google-auth-library');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
-
-const VERTEX_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
-
-function readGeminiKey() {
-  if (process.env.GEMINI_KEY) return process.env.GEMINI_KEY;
-  try {
-    return functions.config().gemini?.key || '';
-  } catch (_) {
-    return '';
-  }
-}
 
 function readGroqKey() {
   if (process.env.GROQ_API_KEY) return process.env.GROQ_API_KEY;
@@ -23,46 +10,6 @@ function readGroqKey() {
   } catch (_) {
     return '';
   }
-}
-
-async function generateWithVertex(prompt, model) {
-  const auth = new GoogleAuth({
-    scopes: ['https://www.googleapis.com/auth/cloud-platform'],
-  });
-  const client = await auth.getClient();
-  const project = process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT;
-  if (!project) {
-    throw new Error('Missing GCP project id');
-  }
-  const location = 'us-central1';
-  const url =
-    `https://${location}-aiplatform.googleapis.com/v1/projects/${project}` +
-    `/locations/${location}/publishers/google/models/${model}:generateContent`;
-
-  const res = await client.request({
-    url,
-    method: 'POST',
-    data: {
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: { maxOutputTokens: 500, temperature: 0.3 },
-    },
-  });
-
-  const parts = res.data?.candidates?.[0]?.content?.parts || [];
-  return parts.map((part) => part.text || '').join('').trim();
-}
-
-async function generateWithApiKey(prompt, apiKey) {
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({
-    model: 'gemini-3.6-flash',
-    generationConfig: {
-      maxOutputTokens: 500,
-      temperature: 0.3,
-    },
-  });
-  const result = await model.generateContent(prompt);
-  return (result.response.text() || '').trim();
 }
 
 async function generateWithGroq(prompt, apiKey) {
@@ -92,54 +39,16 @@ async function generateWithGroq(prompt, apiKey) {
 
 async function generateText(prompt) {
   const groqKey = readGroqKey();
-  const apiKey = readGeminiKey();
-  console.log('AI providers available:', {
-    groq: Boolean(groqKey),
-    gemini: Boolean(apiKey),
-    vertex: true,
-  });
-
-  if (groqKey) {
-    try {
-      const text = await generateWithGroq(prompt, groqKey);
-      if (text) {
-        console.log('AI provider used: groq');
-        return text;
-      }
-      console.warn('Groq returned an empty response');
-    } catch (error) {
-      console.warn('Groq path failed:', error.message || error);
-    }
+  if (!groqKey) {
+    throw new Error('GROQ_API_KEY is not configured for Cloud Functions.');
   }
 
-  if (apiKey) {
-    try {
-      const text = await generateWithApiKey(prompt, apiKey);
-      if (text) {
-        console.log('AI provider used: gemini-api-key');
-        return text;
-      }
-      console.warn('Gemini API key path returned an empty response');
-    } catch (error) {
-      console.warn('Gemini API key path failed, trying Vertex:', error.message || error);
-    }
+  const text = await generateWithGroq(prompt, groqKey);
+  if (!text) {
+    throw new Error('AI returned an empty response.');
   }
-
-  let lastError;
-  for (const model of VERTEX_MODELS) {
-    try {
-      const text = await generateWithVertex(prompt, model);
-      if (text) {
-        console.log('AI provider used: vertex', model);
-        return text;
-      }
-      console.warn(`Vertex model ${model} returned an empty response`);
-    } catch (error) {
-      lastError = error;
-      console.warn(`Vertex model ${model} failed:`, error.message || error);
-    }
-  }
-  throw lastError || new Error('AI returned an empty response.');
+  console.log('AI provider used: groq');
+  return text;
 }
 
 function publicAiError(error) {
@@ -149,9 +58,10 @@ function publicAiError(error) {
     lower.includes('api key') ||
     lower.includes('unauthenticated') ||
     lower.includes('401') ||
-    lower.includes('permission')
+    lower.includes('permission') ||
+    lower.includes('groq_api_key')
   ) {
-    return 'AI provider authentication failed. Set GROQ_API_KEY or GEMINI_KEY for the Cloud Function.';
+    return 'AI provider authentication failed. Set GROQ_API_KEY for the Cloud Function.';
   }
   if (lower.includes('429') || lower.includes('rate limit') || lower.includes('resource exhausted')) {
     return 'AI provider rate limit reached. Try again shortly.';

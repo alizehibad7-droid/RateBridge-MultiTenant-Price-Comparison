@@ -3,7 +3,6 @@ import 'dart:async';
 import 'dart:developer' as developer;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/transaction_model.dart';
-import '../models/payment_proof_model.dart';
 import '../services/firestore_service.dart';
 import '../constants/firestore_paths.dart';
 import '../constants/app_constants.dart';
@@ -96,7 +95,6 @@ class TransactionRepository {
   Stream<CommissionLedgerSnapshot> watchCommissionLedger() {
     late StreamController<CommissionLedgerSnapshot> controller;
     StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? txSub;
-    StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? paySub;
 
     Future<void> refresh() async {
       if (controller.isClosed) return;
@@ -106,13 +104,7 @@ class TransactionRepository {
             .orderBy('createdAt', descending: true)
             .get();
 
-        final paymentSnap = await _db
-            .collection('payment_proofs')
-            .where('type', isEqualTo: 'commission')
-            .where('status', whereIn: ['confirmed', 'settled', 'approved'])
-            .get();
-
-        final snapshot = await _buildSnapshotFromData(txSnap, paymentSnap);
+        final snapshot = await _buildSnapshotFromData(txSnap);
         if (!controller.isClosed) controller.add(snapshot);
       } catch (e) {
         developer.log('Error refreshing commission ledger: $e');
@@ -125,18 +117,11 @@ class TransactionRepository {
             .collection(FirestorePaths.transactionsCol)
             .snapshots()
             .listen((_) => refresh());
-        paySub ??= _db
-            .collection('payment_proofs')
-            .where('type', isEqualTo: 'commission')
-            .snapshots()
-            .listen((_) => refresh());
         refresh();
       },
       onCancel: () {
         txSub?.cancel();
-        paySub?.cancel();
         txSub = null;
-        paySub = null;
       },
     );
 
@@ -144,50 +129,49 @@ class TransactionRepository {
   }
 
   Future<CommissionLedgerSnapshot> _buildSnapshotFromData(
-    QuerySnapshot<Map<String, dynamic>> txSnap, 
-    QuerySnapshot<Map<String, dynamic>> paymentSnap
+    QuerySnapshot<Map<String, dynamic>> txSnap,
   ) async {
-    final allTxs = txSnap.docs.map((d) => TransactionModel.fromMap(d.id, d.data())).toList();
-    final payments = paymentSnap.docs.map((d) => PaymentProofModel.fromMap(d.id, d.data())).toList();
+    final allTxs =
+        txSnap.docs.map((d) => TransactionModel.fromMap(d.id, d.data())).toList();
 
-    double collectedThisMonth = 0;
-    double grandTotalCollected = payments.fold(0.0, (sum, p) => sum + p.amount);
     final now = DateTime.now();
+    double collectedThisMonth = 0;
+    double grandTotalCollected = 0;
 
-    for (final p in payments) {
-      final date = p.confirmedAt ?? p.createdAt;
+    for (final tx in allTxs) {
+      if (!tx.isSettled) continue;
+      grandTotalCollected += tx.commissionAmount;
+      final date = tx.settledAt ?? tx.createdAt;
       if (date.year == now.year && date.month == now.month) {
-        collectedThisMonth += p.amount;
+        collectedThisMonth += tx.commissionAmount;
       }
     }
 
+    // Outstanding = unsettled txs only (settled via Stripe drop out of the list).
     final dataBySupplier = <String, Map<String, dynamic>>{};
     for (final tx in allTxs) {
-      dataBySupplier.putIfAbsent(tx.supplierUid, () => {'generated': 0.0, 'orders': 0, 'txIds': <String>[]});
+      if (!tx.isUnsettled) continue;
+      dataBySupplier.putIfAbsent(
+        tx.supplierUid,
+        () => {'generated': 0.0, 'orders': 0, 'txIds': <String>[]},
+      );
       dataBySupplier[tx.supplierUid]!['generated'] += tx.commissionAmount;
       dataBySupplier[tx.supplierUid]!['orders'] += 1;
       dataBySupplier[tx.supplierUid]!['txIds'].add(tx.txId);
     }
 
-    final paymentsBySupplier = <String, double>{};
-    for (final p in payments) {
-      paymentsBySupplier[p.payerId] = (paymentsBySupplier[p.payerId] ?? 0.0) + p.amount;
-    }
-
     final suppliers = <SupplierUnsettledSummary>[];
     for (final uid in dataBySupplier.keys) {
-      final totalGenerated = dataBySupplier[uid]!['generated'] as double;
-      final totalPaid = paymentsBySupplier[uid] ?? 0.0;
-      final netOwed = totalGenerated - totalPaid;
-
+      final netOwed = dataBySupplier[uid]!['generated'] as double;
       if (netOwed > 0.01) {
-        // Fetch name
         final sDoc = await _db.collection('suppliers').doc(uid).get();
-        final name = sDoc.data()?['name'] ?? uid;
+        final name = sDoc.data()?['name'] ??
+            sDoc.data()?['businessName'] ??
+            uid;
 
         suppliers.add(SupplierUnsettledSummary(
           supplierUid: uid,
-          supplierName: name,
+          supplierName: name.toString(),
           unsettledAmount: netOwed,
           orderCount: dataBySupplier[uid]!['orders'] as int,
           transactionIds: List<String>.from(dataBySupplier[uid]!['txIds']),
@@ -196,7 +180,8 @@ class TransactionRepository {
     }
 
     suppliers.sort((a, b) => b.unsettledAmount.compareTo(a.unsettledAmount));
-    final outstandingThisMonth = suppliers.fold(0.0, (sum, s) => sum + s.unsettledAmount);
+    final outstandingThisMonth =
+        suppliers.fold(0.0, (sum, s) => sum + s.unsettledAmount);
 
     return CommissionLedgerSnapshot(
       outstandingThisMonth: outstandingThisMonth,

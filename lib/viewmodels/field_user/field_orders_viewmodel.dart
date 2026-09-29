@@ -292,40 +292,8 @@ class FieldOrdersViewModel extends ChangeNotifier {
       final ceoUid = await _orderRepo.resolveCeoUid(companyId);
 
       if (isAutoApproved) {
-        // Notify supplier
-        await _notificationService.notifyNewOrder(
-          supplierId: order.supplierId,
-          orderId: order.orderId,
-          companyId: order.companyId,
-          materialName: order.materialName,
-          fieldUserName: order.fieldUserName,
-        );
-        // Notify CEO (Informational)
-        if (ceoUid != null) {
-          await _notificationService.notifyOrderAutoApproved(
-            ceoUid: ceoUid,
-            orderId: order.orderId,
-            companyId: companyId,
-            materialName: order.materialName,
-            totalAmount: totalAmount,
-          );
-        }
-      } else {
-        if (ceoUid != null) {
-          await _notificationService.notifyOrderPendingApproval(
-            ceoUid: ceoUid,
-            orderId: order.orderId,
-            companyId: companyId,
-            materialName: order.materialName,
-            fieldUserName: order.fieldUserName,
-          );
-        } else {
-          // Fallback if no CEO found (should not happen in proper team setup)
-          await _orderRepo.updateStatus(
-            order.orderId,
-            companyId,
-            AppConstants.statusPending,
-          );
+        // Notify supplier (server also backs this up on status=pending).
+        try {
           await _notificationService.notifyNewOrder(
             supplierId: order.supplierId,
             orderId: order.orderId,
@@ -333,6 +301,54 @@ class FieldOrdersViewModel extends ChangeNotifier {
             materialName: order.materialName,
             fieldUserName: order.fieldUserName,
           );
+        } catch (e) {
+          debugPrint('notifyNewOrder failed (order still created): $e');
+        }
+        // Notify CEO (Informational)
+        if (ceoUid != null) {
+          try {
+            await _notificationService.notifyOrderAutoApproved(
+              ceoUid: ceoUid,
+              orderId: order.orderId,
+              companyId: companyId,
+              materialName: order.materialName,
+              totalAmount: totalAmount,
+            );
+          } catch (e) {
+            debugPrint('notifyOrderAutoApproved failed: $e');
+          }
+        }
+      } else {
+        if (ceoUid != null) {
+          try {
+            await _notificationService.notifyOrderPendingApproval(
+              ceoUid: ceoUid,
+              orderId: order.orderId,
+              companyId: companyId,
+              materialName: order.materialName,
+              fieldUserName: order.fieldUserName,
+            );
+          } catch (e) {
+            debugPrint('notifyOrderPendingApproval failed: $e');
+          }
+        } else {
+          // Fallback if no CEO found (should not happen in proper team setup)
+          await _orderRepo.updateStatus(
+            order.orderId,
+            companyId,
+            AppConstants.statusPending,
+          );
+          try {
+            await _notificationService.notifyNewOrder(
+              supplierId: order.supplierId,
+              orderId: order.orderId,
+              companyId: order.companyId,
+              materialName: order.materialName,
+              fieldUserName: order.fieldUserName,
+            );
+          } catch (e) {
+            debugPrint('notifyNewOrder fallback failed: $e');
+          }
         }
       }
       return true;

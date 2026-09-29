@@ -35,7 +35,7 @@ class AdminFinanceView extends StatelessWidget {
               tabs: const [
                 Tab(
                   icon: Icon(Icons.payment_rounded, size: 20),
-                  text: 'Payment Queue',
+                  text: 'Payments',
                 ),
                 Tab(
                   icon: Icon(Icons.account_balance_rounded, size: 20),

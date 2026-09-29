@@ -99,7 +99,7 @@ import 'views/admin/admin_dashboard_view.dart';
 import 'views/admin/admin_notifications_view.dart';
 import 'views/admin/admin_ceo_management_view.dart';
 import 'views/admin/admin_categories_view.dart';
-import 'views/admin/admin_payment_queue_view.dart';
+import 'views/admin/admin_finance_view.dart';
 import 'views/admin/admin_subscription_view.dart';
 import 'views/admin/admin_dispute_list_view.dart';
 import 'views/admin/admin_audit_log_view.dart';
@@ -675,8 +675,12 @@ class _RateBridgeAppState extends State<RateBridgeApp> {
           builder: (context, state) {
             final tab =
                 int.tryParse(state.uri.queryParameters['tab'] ?? '0') ?? 0;
+            final requestId = state.uri.queryParameters['requestId'];
             return SupplierTheme.wrap(
-              SupplierPartnershipsHubView(initialTab: tab),
+              SupplierPartnershipsHubView(
+                initialTab: tab,
+                focusRequestId: requestId,
+              ),
             );
           },
         ),
@@ -713,7 +717,7 @@ class _RateBridgeAppState extends State<RateBridgeApp> {
           path: RouteNames.adminPayments,
           builder:
               (context, state) =>
-                  AdminTheme.wrap(const AdminPaymentQueueView()),
+                  AdminTheme.wrap(const AdminFinanceView()),
         ),
         GoRoute(
           path: RouteNames.adminSubscription,

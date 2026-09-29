@@ -29,8 +29,6 @@ import 'admin_subscription_view.dart';
 import 'admin_analytics_view.dart';
 import 'admin_all_users_view.dart';
 import 'admin_orders_view.dart';
-import 'admin_payment_queue_view.dart';
-import 'admin_commission_ledger_view.dart';
 import 'package:ratebridge/widgets/admin/admin_widgets.dart';
 
 class AdminDashboardView extends StatefulWidget {
@@ -66,9 +64,7 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
       AdminSupplierManagementView(embedded: true, debugFirestore: widget.debugFirestore),
       const AdminOrdersView(),
       const AdminAnalyticsView(),
-      const AdminPaymentQueueView(embedded: true),
       const AdminFinanceView(),
-      const AdminCommissionLedgerView(),
       const AdminSubscriptionView(),
       const AdminNotificationsView(),
       const AdminAppealsView(),
@@ -116,7 +112,7 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
               adminName: auth.user?.name ?? 'Admin',
               unreadNotifications: notifVM.unreadCount,
               isLoading: adminVM.isLoading,
-              onProfileTap: () => _onTabTapped(14),
+              onProfileTap: () => _onTabTapped(12),
               onMenuTap: () => _scaffoldKey.currentState?.openDrawer(),
             ),
             Expanded(
@@ -153,7 +149,7 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
                   adminName: auth.user?.name ?? 'Admin',
                   unreadNotifications: notifVM.unreadCount,
                   isLoading: adminVM.isLoading,
-                  onProfileTap: () => _onTabTapped(14),
+                  onProfileTap: () => _onTabTapped(12),
                 ),
                 Expanded(
                   child: IndexedStack(
@@ -177,15 +173,13 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
       case 3: return 'Suppliers';
       case 4: return 'Orders';
       case 5: return 'Analytics';
-      case 6: return 'Payment Queue';
-      case 7: return 'Finance';
-      case 8: return 'Commission';
-      case 9: return 'Subscriptions';
-      case 10: return 'Notifications';
-      case 11: return 'Appeals';
-      case 12: return 'Disputes';
-      case 13: return 'Audit Logs';
-      case 14: return 'Profile';
+      case 6: return 'Finance';
+      case 7: return 'Subscriptions';
+      case 8: return 'Notifications';
+      case 9: return 'Appeals';
+      case 10: return 'Disputes';
+      case 11: return 'Audit Logs';
+      case 12: return 'Profile';
       default: return 'RateBridge Admin';
     }
   }
@@ -228,14 +222,14 @@ class _AdminSidebar extends StatelessWidget {
                 
                 _SidebarSection(label: 'REPORTS', isCollapsed: isCollapsed),
                 _SidebarItem(icon: Icons.analytics_outlined, activeIcon: Icons.analytics_rounded, label: 'Analytics', isSelected: selectedIndex == 5, isCollapsed: isCollapsed, onTap: () => onItemSelected(5)),
-                _SidebarItem(icon: Icons.account_balance_wallet_outlined, activeIcon: Icons.account_balance_wallet_rounded, label: 'Finance', isSelected: selectedIndex == 7, isCollapsed: isCollapsed, onTap: () => onItemSelected(7)),
+                _SidebarItem(icon: Icons.account_balance_wallet_outlined, activeIcon: Icons.account_balance_wallet_rounded, label: 'Finance', isSelected: selectedIndex == 6, isCollapsed: isCollapsed, onTap: () => onItemSelected(6)),
                 
                 _SidebarSection(label: 'SYSTEM', isCollapsed: isCollapsed),
-                _SidebarItem(icon: Icons.card_membership_outlined, activeIcon: Icons.card_membership_rounded, label: 'Subscriptions', isSelected: selectedIndex == 9, isCollapsed: isCollapsed, onTap: () => onItemSelected(9)),
-                _SidebarItem(icon: Icons.notifications_active_outlined, activeIcon: Icons.notifications_active_rounded, label: 'Notifications', isSelected: selectedIndex == 10, isCollapsed: isCollapsed, onTap: () => onItemSelected(10)),
-                _SidebarItem(icon: Icons.history_edu_outlined, activeIcon: Icons.history_edu_rounded, label: 'Appeals', isSelected: selectedIndex == 11, isCollapsed: isCollapsed, onTap: () => onItemSelected(11)),
-                _SidebarItem(icon: Icons.gavel_outlined, activeIcon: Icons.gavel_rounded, label: 'Disputes', isSelected: selectedIndex == 12, isCollapsed: isCollapsed, onTap: () => onItemSelected(12)),
-                _SidebarItem(icon: Icons.assignment_outlined, activeIcon: Icons.assignment_rounded, label: 'Audit Logs', isSelected: selectedIndex == 13, isCollapsed: isCollapsed, onTap: () => onItemSelected(13)),
+                _SidebarItem(icon: Icons.card_membership_outlined, activeIcon: Icons.card_membership_rounded, label: 'Subscriptions', isSelected: selectedIndex == 7, isCollapsed: isCollapsed, onTap: () => onItemSelected(7)),
+                _SidebarItem(icon: Icons.notifications_active_outlined, activeIcon: Icons.notifications_active_rounded, label: 'Notifications', isSelected: selectedIndex == 8, isCollapsed: isCollapsed, onTap: () => onItemSelected(8)),
+                _SidebarItem(icon: Icons.history_edu_outlined, activeIcon: Icons.history_edu_rounded, label: 'Appeals', isSelected: selectedIndex == 9, isCollapsed: isCollapsed, onTap: () => onItemSelected(9)),
+                _SidebarItem(icon: Icons.gavel_outlined, activeIcon: Icons.gavel_rounded, label: 'Disputes', isSelected: selectedIndex == 10, isCollapsed: isCollapsed, onTap: () => onItemSelected(10)),
+                _SidebarItem(icon: Icons.assignment_outlined, activeIcon: Icons.assignment_rounded, label: 'Audit Logs', isSelected: selectedIndex == 11, isCollapsed: isCollapsed, onTap: () => onItemSelected(11)),
               ],
             ),
           ),
@@ -714,9 +708,9 @@ class _AdminHomeOverviewState extends State<_AdminHomeOverview> {
                             children: [
                               Text('Quick Operations', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: isMobile ? 14 : 15, color: AdminColors.navy)),
                               const SizedBox(height: 8),
-                              _ShortcutItem(label: 'Financial Ledger & Ledger Sync', icon: Icons.account_balance_wallet_outlined, onTap: () => widget.onAction(7)),
-                              _ShortcutItem(label: 'Corporate SaaS Subscription Plans', icon: Icons.card_membership_outlined, onTap: () => widget.onAction(9)),
-                              _ShortcutItem(label: 'Security Audit & Event Log', icon: Icons.shield_outlined, onTap: () => widget.onAction(13)),
+                              _ShortcutItem(label: 'Financial Ledger & Ledger Sync', icon: Icons.account_balance_wallet_outlined, onTap: () => widget.onAction(6)),
+                              _ShortcutItem(label: 'Corporate SaaS Subscription Plans', icon: Icons.card_membership_outlined, onTap: () => widget.onAction(7)),
+                              _ShortcutItem(label: 'Security Audit & Event Log', icon: Icons.shield_outlined, onTap: () => widget.onAction(11)),
                             ],
                           ),
                         ),

@@ -81,14 +81,11 @@ class AdminTheme {
       case 'active':
       case 'confirmed':
       case 'approved':
+      case 'success':
+      case 'settled':
         return (
           bg: AdminColors.green.withValues(alpha: 0.1),
           fg: AdminColors.green,
-        );
-      case 'settled':
-        return (
-          bg: AdminColors.purple.withValues(alpha: 0.1),
-          fg: AdminColors.purple,
         );
       case 'rejected':
       case 'failed':
@@ -333,6 +330,8 @@ class AdminAppBar extends StatelessWidget implements PreferredSizeWidget {
   final bool automaticallyImplyLeading;
   final bool showNotificationIcon;
   final Widget? leading;
+  /// Used when the stack cannot pop (deep link / Checkout return).
+  final String? backFallbackRoute;
 
   const AdminAppBar({
     super.key,
@@ -343,6 +342,7 @@ class AdminAppBar extends StatelessWidget implements PreferredSizeWidget {
     this.automaticallyImplyLeading = true,
     this.showNotificationIcon = true,
     this.leading,
+    this.backFallbackRoute,
   }) : assert(title != null || titleWidget != null);
 
   @override
@@ -374,7 +374,11 @@ class AdminAppBar extends StatelessWidget implements PreferredSizeWidget {
       automaticallyImplyLeading: false,
       leading: leading ??
           (automaticallyImplyLeading
-              ? AppNavigation.leading(context, color: AdminColors.navy)
+              ? AppNavigation.leading(
+                  context,
+                  color: AdminColors.navy,
+                  fallbackRoute: backFallbackRoute,
+                )
               : null),
       title: titleWidget ?? (title != null ? Text(title!) : null),
       actions: allActions,

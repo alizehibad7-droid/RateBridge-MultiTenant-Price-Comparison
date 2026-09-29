@@ -3,7 +3,6 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../constants/route_names.dart';
-import '../../models/payment_proof_model.dart';
 import '../../models/transaction_model.dart';
 import '../../theme/supplier_theme.dart';
 import '../../utils/app_theme.dart';
@@ -62,14 +61,6 @@ class _SupplierEarningsViewState extends State<SupplierEarningsView> {
     );
   }
 
-  void _openProofImage(String url) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => _FullScreenProofView(imageUrl: url),
-      ),
-    );
-  }
-
   void _toggleSelection(String id) {
     setState(() {
       if (_selectedIds.contains(id)) {
@@ -110,8 +101,7 @@ class _SupplierEarningsViewState extends State<SupplierEarningsView> {
             await vm.hideTransaction(id);
           }
         } else {
-          // If clearing all payment proofs
-          await vm.clearPaymentHistory();
+          await vm.clearSettlementHistoryFromView();
         }
         setState(() {
           _selectedIds.clear();
@@ -162,7 +152,7 @@ class _SupplierEarningsViewState extends State<SupplierEarningsView> {
           final grossSales = vm.grossSalesForMonth(_monthKey);
           final netEarnings = vm.netEarningsForMonth(_monthKey);
           final transactions = vm.transactions;
-          final payments = vm.paymentHistory;
+          final settlements = vm.stripeSettlementHistory;
 
           return ListView(
             padding: const EdgeInsets.fromLTRB(
@@ -220,21 +210,21 @@ class _SupplierEarningsViewState extends State<SupplierEarningsView> {
                       ),
                     ),
                   ),
-                  if (_historyIndex == 1 && payments.isNotEmpty && !_isSelectionMode)
+                  if (_historyIndex == 1 && settlements.isNotEmpty && !_isSelectionMode)
                     TextButton(
                       onPressed: () async {
                         final confirm = await showDialog<bool>(
                           context: context,
                           builder: (ctx) => AlertDialog(
                             title: const Text('Clear history?'),
-                            content: const Text('Remove all payment proofs from your view?'),
+                            content: const Text('Remove settled Stripe payments from your view?'),
                             actions: [
                               TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
                               TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Clear All', style: TextStyle(color: Colors.red))),
                             ],
                           ),
                         );
-                        if (confirm == true) await vm.clearPaymentHistory();
+                        if (confirm == true) await vm.clearSettlementHistoryFromView();
                       },
                       child: const Text('Clear All'),
                     ),
@@ -253,7 +243,7 @@ class _SupplierEarningsViewState extends State<SupplierEarningsView> {
               if (_historyIndex == 0)
                 ..._orderCards(transactions)
               else
-                ..._paymentCards(payments),
+                ..._settlementCards(settlements),
             ],
           );
         },
@@ -301,46 +291,103 @@ class _SupplierEarningsViewState extends State<SupplierEarningsView> {
     ];
   }
 
-  List<Widget> _paymentCards(List<PaymentProofModel> payments) {
-    if (payments.isEmpty) {
+  List<Widget> _settlementCards(List<TransactionModel> settlements) {
+    if (settlements.isEmpty) {
       return const [
         SizedBox(
           height: 220,
           child: SupplierEmptyState(
             icon: Icons.payments_outlined,
-            title: 'No payment proofs yet',
-            subtitle: 'Screenshots you upload when paying commission will show here.',
+            title: 'No Stripe settlements yet',
+            subtitle: 'Commission payments you complete via Stripe will appear here.',
           ),
         ),
       ];
     }
     return [
-      for (final payment in payments)
+      for (final tx in settlements)
         Padding(
           padding: const EdgeInsets.only(bottom: FieldSpacing.sm),
-          child: _PaymentProofCard(
-            payment: payment,
-            onOpenImage: payment.screenshotUrl.trim().isEmpty || _isSelectionMode
-                ? null
-                : () => _openProofImage(payment.screenshotUrl),
-            isSelected: _selectedIds.contains(payment.id),
+          child: _StripeSettlementCard(
+            transaction: tx,
+            isSelected: _selectedIds.contains(tx.txId),
             isSelectionMode: _isSelectionMode,
             onTap: () {
               if (_isSelectionMode) {
-                _toggleSelection(payment.id);
+                _toggleSelection(tx.txId);
               }
             },
             onLongPress: () {
               if (!_isSelectionMode) {
                 setState(() {
                   _isSelectionMode = true;
-                  _selectedIds.add(payment.id);
+                  _selectedIds.add(tx.txId);
                 });
               }
             },
           ),
         ),
     ];
+  }
+}
+
+class _StripeSettlementCard extends StatelessWidget {
+  final TransactionModel transaction;
+  final bool isSelected;
+  final bool isSelectionMode;
+  final VoidCallback onTap;
+  final VoidCallback onLongPress;
+
+  const _StripeSettlementCard({
+    required this.transaction,
+    required this.isSelected,
+    required this.isSelectionMode,
+    required this.onTap,
+    required this.onLongPress,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final date = transaction.settledAt ?? transaction.createdAt;
+    return Container(
+      decoration: SupplierTheme.cardDecoration(
+        borderColor: isSelected ? FieldColors.accentAmber : null,
+      ),
+      child: InkWell(
+        onTap: onTap,
+        onLongPress: onLongPress,
+        borderRadius: BorderRadius.circular(FieldRadius.card),
+        child: Padding(
+          padding: const EdgeInsets.all(FieldSpacing.md),
+          child: Row(
+            children: [
+              if (isSelectionMode) ...[
+                Checkbox(value: isSelected, onChanged: (_) => onTap(), activeColor: FieldColors.accentAmber),
+                const SizedBox(width: 8),
+              ],
+              const Icon(Icons.payment_rounded, color: FieldColors.statusSuccess),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Stripe commission paid', style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w700)),
+                    Text(
+                      'Order #${transaction.orderId.length > 6 ? transaction.orderId.substring(transaction.orderId.length - 6) : transaction.orderId} · ${DateFormat('MMM dd, yyyy').format(date)}',
+                      style: AppTextStyles.caption,
+                    ),
+                  ],
+                ),
+              ),
+              Text(
+                CurrencyFormatter.formatPKR(transaction.commissionAmount),
+                style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w800, color: FieldColors.statusSuccess),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -572,7 +619,7 @@ class _HistorySegment extends StatelessWidget {
           ),
           Expanded(
             child: _SegmentChip(
-              label: 'Payment proofs',
+              label: 'Stripe paid',
               selected: selectedIndex == 1,
               onTap: () => onChanged(1),
             ),
@@ -745,104 +792,6 @@ class _OrderCommissionCard extends StatelessWidget {
   }
 }
 
-class _PaymentProofCard extends StatelessWidget {
-  final PaymentProofModel payment;
-  final VoidCallback? onOpenImage;
-  final bool isSelected;
-  final bool isSelectionMode;
-  final VoidCallback onTap;
-  final VoidCallback onLongPress;
-
-  const _PaymentProofCard({
-    required this.payment,
-    required this.onOpenImage,
-    required this.isSelected,
-    required this.isSelectionMode,
-    required this.onTap,
-    required this.onLongPress,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final status = payment.status.toLowerCase();
-    final isConfirmed = status == 'confirmed' || status == 'approved' || status == 'settled';
-
-    return Container(
-      decoration: SupplierTheme.cardDecoration(
-        borderColor: isSelected ? FieldColors.accentAmber : null,
-      ),
-      child: InkWell(
-        onTap: onTap,
-        onLongPress: onLongPress,
-        borderRadius: BorderRadius.circular(FieldRadius.card),
-        child: Padding(
-          padding: const EdgeInsets.all(FieldSpacing.md),
-          child: Row(
-            children: [
-              if (isSelectionMode) ...[
-                Checkbox(
-                  value: isSelected,
-                  onChanged: (_) => onTap(),
-                  activeColor: FieldColors.accentAmber,
-                ),
-                const SizedBox(width: 8),
-              ],
-              GestureDetector(
-                onTap: onOpenImage,
-                child: Container(
-                  width: 50,
-                  height: 50,
-                  decoration: BoxDecoration(
-                    color: FieldColors.screenBackground,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: FieldColors.borderSubtle),
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: payment.screenshotUrl.isEmpty
-                      ? const Icon(Icons.image_not_supported_outlined, size: 20, color: FieldColors.textMuted)
-                      : AppNetworkImage(
-                          url: payment.screenshotUrl,
-                          fallback: const Icon(Icons.image_not_supported_outlined, size: 20, color: FieldColors.textMuted),
-                          fit: BoxFit.cover,
-                          width: 50,
-                          height: 50,
-                        ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      CurrencyFormatter.formatPKR(payment.amount),
-                      style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w700),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'via ${payment.method}',
-                      style: AppTextStyles.caption,
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      DateFormat('MMM dd, yyyy').format(payment.createdAt),
-                      style: AppTextStyles.caption.copyWith(fontSize: 10),
-                    ),
-                  ],
-                ),
-              ),
-              _StatusDot(
-                label: payment.status.toUpperCase(),
-                color: isConfirmed ? FieldColors.statusSuccess : FieldColors.statusWarning,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _StatusDot extends StatelessWidget {
   final String label;
   final Color color;
@@ -874,31 +823,3 @@ class _StatusDot extends StatelessWidget {
   }
 }
 
-class _FullScreenProofView extends StatelessWidget {
-  final String imageUrl;
-
-  const _FullScreenProofView({required this.imageUrl});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        iconTheme: const IconThemeData(color: Colors.white),
-        title: const Text('Payment Proof', style: TextStyle(color: Colors.white)),
-      ),
-      body: Center(
-        child: InteractiveViewer(
-          child: AppNetworkImage(
-            url: imageUrl,
-            fallback: const Icon(Icons.broken_image_outlined, size: 48, color: Colors.white),
-            width: double.infinity,
-            height: double.infinity,
-            fit: BoxFit.contain,
-          ),
-        ),
-      ),
-    );
-  }
-}

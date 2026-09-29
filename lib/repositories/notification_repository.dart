@@ -60,11 +60,15 @@ class NotificationRepository {
 
   Future<void> createNotification(NotificationModel notification) async {
     try {
-      await _db
-          .collection('notifications')
-          .doc(notification.notifId.isEmpty ? null : notification.notifId)
-          .set({
+      final ref = notification.notifId.isEmpty
+          ? _db.collection('notifications').doc()
+          : _db.collection('notifications').doc(notification.notifId);
+      // create-only for deterministic ids so client/server races don't rewrite.
+      final existing = await ref.get();
+      if (existing.exists) return;
+      await ref.set({
         ...notification.toMap(),
+        'notifId': ref.id,
         'createdAt': FieldValue.serverTimestamp(),
       });
     } on FirebaseException catch (e) {
@@ -132,6 +136,43 @@ class NotificationRepository {
       await batch.commit();
     } on FirebaseException catch (e) {
       throw AppException('Failed to clear notifications: ${e.message}');
+    }
+  }
+
+  /// Deletes notifications for [recipientUserId] whose data.relatedId / requestId
+  /// matches [relatedId]. Optionally filter by [event] (e.g. invitation_received).
+  Future<void> deleteByRelatedId({
+    required String recipientUserId,
+    required String relatedId,
+    String? event,
+  }) async {
+    if (recipientUserId.isEmpty || relatedId.isEmpty) return;
+    try {
+      final snap = await _db
+          .collection('notifications')
+          .where('recipientUserId', isEqualTo: recipientUserId)
+          .get();
+      final batch = _db.batch();
+      var count = 0;
+      for (final doc in snap.docs) {
+        final data = doc.data();
+        final payload = Map<String, dynamic>.from(data['data'] as Map? ?? {});
+        final rid = (payload['relatedId'] ?? payload['requestId'] ?? '')
+            .toString();
+        if (rid != relatedId) continue;
+        if (event != null &&
+            event.isNotEmpty &&
+            (payload['event'] ?? '').toString() != event) {
+          continue;
+        }
+        batch.delete(doc.reference);
+        count++;
+      }
+      if (count > 0) await batch.commit();
+    } on FirebaseException catch (e) {
+      throw AppException(
+        'Failed to clear related notifications: ${e.message}',
+      );
     }
   }
 }

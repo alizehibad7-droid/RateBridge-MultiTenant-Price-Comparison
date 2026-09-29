@@ -41,15 +41,43 @@ class NotificationService {
     }
 
     final id = '${recipient}_${DateTime.now().microsecondsSinceEpoch}';
-    
-    // Ensure data contains useful info for navigation
+    await _createWithId(
+      notifId: id,
+      recipientUserId: recipient,
+      recipientRole: recipientRole,
+      type: type,
+      title: title,
+      message: message,
+      senderUserId: senderUserId,
+      companyId: companyId,
+      data: data,
+    );
+  }
+
+  /// Creates or overwrites a notification with a stable [notifId] (idempotent).
+  Future<void> _createWithId({
+    required String notifId,
+    required String recipientUserId,
+    required String recipientRole,
+    required String type,
+    required String title,
+    required String message,
+    String? senderUserId,
+    String? companyId,
+    Map<String, dynamic> data = const {},
+  }) async {
+    final recipient = recipientUserId.trim();
+    if (recipient.isEmpty) {
+      throw AppException('Cannot create notification: missing recipient.');
+    }
+
     final extendedData = Map<String, dynamic>.from(data);
     if (companyId != null) extendedData['companyId'] = companyId;
     if (senderUserId != null) extendedData['senderUserId'] = senderUserId;
 
     await _repo.createNotification(
       NotificationModel(
-        notifId: id,
+        notifId: notifId,
         recipientUserId: recipient,
         recipientRole: recipientRole,
         type: type,
@@ -202,7 +230,8 @@ class NotificationService {
     required String materialName,
     required String fieldUserName,
   }) async {
-    await _create(
+    await _createWithId(
+      notifId: 'order_${orderId}_supplier_pending',
       recipientUserId: supplierId,
       recipientRole: 'Supplier',
       type: typeNewOrder,
@@ -230,7 +259,8 @@ class NotificationService {
     final company = (companyName != null && companyName.trim().isNotEmpty)
         ? companyName.trim()
         : 'A company';
-    await _create(
+    await _createWithId(
+      notifId: 'order_${orderId}_supplier_pending',
       recipientUserId: supplierId,
       recipientRole: 'Supplier',
       type: typeNewOrder,
@@ -617,20 +647,84 @@ class NotificationService {
     required String recipientUserId,
     required String companyName,
     required String companyId,
+    String? supplierName,
+    bool removedByCompany = true,
+  }) async {
+    final user = await _getUser(recipientUserId);
+    final role = (user?.role ?? '').toLowerCase();
+    final isSupplierRecipient =
+        role.contains('supplier') || supplierName == null;
+    const title = 'Partnership ended';
+    final partnerLabel =
+        (supplierName != null && supplierName.trim().isNotEmpty)
+            ? supplierName.trim()
+            : 'a supplier';
+    final String message;
+    if (removedByCompany) {
+      message = isSupplierRecipient
+          ? '$companyName has ended your partnership. You are no longer connected with this company, and their field users cannot place new orders with you.'
+          : 'Partnership with $partnerLabel has ended.';
+    } else {
+      message = isSupplierRecipient
+          ? 'You ended the partnership with $companyName.'
+          : '$partnerLabel ended the partnership with $companyName. Field users can no longer order from them.';
+    }
+    await _create(
+      recipientUserId: recipientUserId,
+      recipientRole: user?.role ?? (isSupplierRecipient ? 'Supplier' : 'CEO'),
+      type: typePartnership,
+      title: title,
+      message: message,
+      companyId: companyId,
+      data: {
+        'event': 'removed',
+        'companyName': companyName,
+        if (supplierName != null) 'supplierName': supplierName,
+        'relatedId': companyId,
+        'relatedCollection': 'companies',
+      },
+    );
+  }
+
+  Future<void> notifyPartnershipDeactivated({
+    required String recipientUserId,
+    required String companyName,
+    required String companyId,
+    required bool deactivated,
   }) async {
     final user = await _getUser(recipientUserId);
     await _create(
       recipientUserId: recipientUserId,
       recipientRole: user?.role ?? 'Supplier',
       type: typePartnership,
-      title: 'Partnership removed',
-      message: 'The partnership with $companyName has been terminated.',
+      title: deactivated ? 'Partnership paused' : 'Partnership reactivated',
+      message: deactivated
+          ? '$companyName has deactivated your partnership. Their field users can no longer see your materials or place new orders until they reactivate you.'
+          : '$companyName has reactivated your partnership. Their field users can order from you again.',
       companyId: companyId,
       data: {
-        'event': 'removed',
+        'event': deactivated ? 'deactivated' : 'reactivated',
         'companyName': companyName,
+        'relatedId': companyId,
+        'relatedCollection': 'companies',
       },
     );
+  }
+
+  /// Clears stale partnership invitation notifications for a request.
+  Future<void> dismissPartnershipInvitationNotifications({
+    required String recipientUserId,
+    required String requestId,
+  }) async {
+    try {
+      await _repo.deleteByRelatedId(
+        recipientUserId: recipientUserId,
+        relatedId: requestId,
+        event: 'invitation_received',
+      );
+    } catch (e) {
+      developer.log('dismissPartnershipInvitationNotifications: $e');
+    }
   }
 
   // --- RFQ Notifications ---

@@ -7,7 +7,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../models/company_model.dart';
 import '../models/user_model.dart';
 import '../models/category_model.dart';
-import '../models/payment_proof_model.dart';
+import '../models/admin_payment_record.dart';
 import '../models/subscription_model.dart';
 import '../models/transaction_model.dart';
 import '../models/order_model.dart';
@@ -149,11 +149,32 @@ class AdminViewModel extends ChangeNotifier {
   List<PlatformTransaction> _transactions = [];
   List<PlatformTransaction> get transactions => _transactions;
 
-  List<PaymentProofModel> _pendingPayments = [];
-  List<PaymentProofModel> get pendingPayments => _pendingPayments;
+  /// Stripe-only payment ledger for Admin Finance.
+  List<AdminPaymentRecord> _paymentRecords = [];
+  List<AdminPaymentRecord> get paymentRecords => _paymentRecords;
 
-  List<PaymentProofModel> _confirmedPayments = [];
-  List<PaymentProofModel> get confirmedPayments => _confirmedPayments;
+  List<AdminPaymentRecord> get successfulPaymentRecords =>
+      _paymentRecords.where((r) => r.status == 'success').toList();
+
+  List<AdminPaymentRecord> get incompletePaymentRecords =>
+      _paymentRecords.where((r) => r.status == 'pending' || r.status == 'failed').toList();
+
+  List<AdminPaymentRecord> get commissionSettlementRecords =>
+      _paymentRecords
+          .where((r) => r.type == 'commission' && r.status == 'success')
+          .toList();
+
+  StreamSubscription? _stripeSubsSub;
+  StreamSubscription? _stripeTxSub;
+  StreamSubscription? _stripeJobsSub;
+
+  List<QueryDocumentSnapshot<Map<String, dynamic>>> _latestSubs = [];
+  List<QueryDocumentSnapshot<Map<String, dynamic>>> _latestSettledTxs = [];
+  List<QueryDocumentSnapshot<Map<String, dynamic>>> _latestStripeJobs = [];
+
+  final Map<String, String> _companyNameCache = {};
+  final Map<String, String> _userNameCache = {};
+  final Map<String, String> _supplierNameCache = {};
 
   AdminStats _stats = AdminStats();
   AdminStats get stats => _stats;
@@ -174,7 +195,6 @@ class AdminViewModel extends ChangeNotifier {
   final Map<String, List<OrderModel>> _supplierOrdersCache = {};
   final Map<String, List<RatingModel>> _supplierRatingsCache = {};
 
-  StreamSubscription? _paymentQueueSub;
   StreamSubscription? _statsSub;
   bool _isAnalyticsLoading = false;
 
@@ -199,7 +219,9 @@ class AdminViewModel extends ChangeNotifier {
 
   @override
   void dispose() {
-    _paymentQueueSub?.cancel();
+    _stripeSubsSub?.cancel();
+    _stripeTxSub?.cancel();
+    _stripeJobsSub?.cancel();
     _statsSub?.cancel();
     super.dispose();
   }
@@ -610,7 +632,8 @@ class AdminViewModel extends ChangeNotifier {
         _db.collection('orders').where('status', isEqualTo: 'confirmed').count().get(),
         _db.collection('orders').where('status', isEqualTo: 'cancelled').count().get(),
         _db.collection('ratings').get(),
-        _db.collection('payment_proofs').where('status', isEqualTo: 'confirmed').get(),
+        _db.collection('subscriptions').get(),
+        _db.collection(FirestorePaths.transactionsCol).where('status', isEqualTo: 'settled').get(),
       ]);
       final usersCount = results[0] as AggregateQuerySnapshot;
       final ceosCount = results[1] as AggregateQuerySnapshot;
@@ -622,10 +645,33 @@ class AdminViewModel extends ChangeNotifier {
       final completedOrdersCount = results[7] as AggregateQuerySnapshot;
       final cancelledOrdersCount = results[8] as AggregateQuerySnapshot;
       final ratingsSnap = results[9] as QuerySnapshot<Map<String, dynamic>>;
-      final confirmedPayments = results[10] as QuerySnapshot<Map<String, dynamic>>;
+      final subsSnap = results[10] as QuerySnapshot<Map<String, dynamic>>;
+      final settledTxSnap = results[11] as QuerySnapshot<Map<String, dynamic>>;
       double avgRating = ratingsSnap.docs.isEmpty ? 0.0 : ratingsSnap.docs.map((r) => (r.data()['rating'] as num?)?.toDouble() ?? 0.0).reduce((a, b) => a + b) / ratingsSnap.docs.length;
       double totalRevenue = 0.0;
-      for (var doc in confirmedPayments.docs) totalRevenue += (doc.data()['amount'] as num? ?? 0).toDouble();
+      for (final doc in subsSnap.docs) {
+        final history = doc.data()['history'] as List<dynamic>? ?? [];
+        for (final raw in history) {
+          if (raw is! Map) continue;
+          final entry = SubscriptionHistoryEntry.fromMap(Map<String, dynamic>.from(raw));
+          final note = (entry.note ?? '').toLowerCase();
+          if (note.contains('confirmed by admin') || note.contains('admin granted')) {
+            continue;
+          }
+          final stripeId = (entry.stripePaymentIntentId ?? '').trim();
+          final isStripe = stripeId.isNotEmpty ||
+              note.contains('stripe') ||
+              ((entry.amountPaid ?? 0) > 0 && note.isEmpty);
+          if (entry.action == 'purchased' &&
+              (entry.amountPaid ?? 0) > 0 &&
+              isStripe) {
+            totalRevenue += (entry.amountPaid ?? 0).toDouble();
+          }
+        }
+      }
+      for (final doc in settledTxSnap.docs) {
+        totalRevenue += (doc.data()['commissionAmount'] as num? ?? 0).toDouble();
+      }
       _stats = AdminStats(
         totalUsers: usersCount.count ?? 0, totalCEOs: ceosCount.count ?? 0, totalFieldUsers: fieldUsersCount.count ?? 0,
         totalSuppliers: suppliersCount.count ?? 0, totalCompanies: companiesCount.count ?? 0, totalOrders: ordersCount.count ?? 0,
@@ -637,63 +683,217 @@ class AdminViewModel extends ChangeNotifier {
   }
 
   Future<void> loadPaymentQueue() async {
-    _paymentQueueSub?.cancel();
+    _stripeSubsSub?.cancel();
+    _stripeTxSub?.cancel();
+    _stripeJobsSub?.cancel();
     _isLoading = true;
     notifyListeners();
-    _paymentQueueSub = _db.collection('payment_proofs').orderBy('createdAt', descending: true).snapshots().listen((snap) {
-      final all = snap.docs.map((doc) => PaymentProofModel.fromMap(doc.id, doc.data())).toList();
-      _pendingPayments = all.where((p) => p.status == 'pending').toList();
-      _confirmedPayments = all.where((p) => p.status != 'pending' && p.status != 'rejected').toList();
+
+    void onError(Object e) {
+      developer.log('Payment ledger stream error: $e');
       _isLoading = false;
       notifyListeners();
-    }, onError: (e) {
-      _isLoading = false;
-      notifyListeners();
-    });
+    }
+
+    _stripeSubsSub = _db.collection('subscriptions').snapshots().listen((snap) {
+      _latestSubs = snap.docs;
+      _rebuildPaymentRecords();
+    }, onError: onError);
+
+    _stripeTxSub = _db
+        .collection(FirestorePaths.transactionsCol)
+        .where('status', isEqualTo: 'settled')
+        .snapshots()
+        .listen((snap) {
+      _latestSettledTxs = snap.docs;
+      _rebuildPaymentRecords();
+    }, onError: onError);
+
+    _stripeJobsSub = _db.collection('stripe_jobs').snapshots().listen((snap) {
+      _latestStripeJobs = snap.docs;
+      _rebuildPaymentRecords();
+    }, onError: onError);
   }
 
-  Future<void> confirmPayment(PaymentProofModel payment) async {
-    if (payment.status == 'confirmed' || payment.status == 'settled') return;
-    _isLoading = true;
-    notifyListeners();
+  int _paymentRebuildToken = 0;
+
+  Future<void> _rebuildPaymentRecords() async {
+    final token = ++_paymentRebuildToken;
     try {
-      final now = DateTime.now();
-      final batch = _db.batch();
-      final paymentRef = _db.collection('payment_proofs').doc(payment.id);
-      final targetStatus = payment.type == 'commission' ? 'settled' : 'confirmed';
-      batch.update(paymentRef, {'status': targetStatus, 'confirmedAt': FieldValue.serverTimestamp(), 'confirmedBy': _uid ?? 'admin'});
-      if (payment.type == 'subscription' && payment.planId != null) {
-        final plan = kPlans.firstWhere((p) => p.planKey == payment.planId, orElse: () => kPlans.first);
-        final expiry = plan.durationDays > 0 ? now.add(Duration(days: plan.durationDays)) : null;
-        final subRef = _db.collection('subscriptions').doc(payment.companyId);
-        batch.set(subRef, {'plan': plan.planKey, 'status': 'active', 'startedAt': FieldValue.serverTimestamp(), 'expiresAt': expiry != null ? Timestamp.fromDate(expiry) : null, 'adminGranted': false}, SetOptions(merge: true));
-        final historyEntry = SubscriptionHistoryEntry(plan: plan.planKey, action: 'purchased', date: now, amountPaid: payment.amount.toInt(), note: 'Confirmed by Admin');
-        batch.update(subRef, {'history': FieldValue.arrayUnion([historyEntry.toMap()])});
-        final companyRef = _db.collection('companies').doc(payment.companyId);
-        batch.update(companyRef, {'plan': plan.planKey, 'planExpiry': expiry != null ? Timestamp.fromDate(expiry) : null, 'aiEnabled': plan.aiUnlocked, 'status': 'active'});
-      } else if (payment.type == 'commission' && payment.relatedTransactions != null) {
-        for (var txId in payment.relatedTransactions!) batch.update(_db.collection(FirestorePaths.transactionsCol).doc(txId), {'status': 'settled', 'settledAt': FieldValue.serverTimestamp(), 'settledBy': _uid ?? 'admin', 'paymentProofId': payment.id});
-      }
-      await batch.commit();
-      if (_notificationService != null) {
-        if (payment.type == 'subscription') {
-          final plan = kPlans.firstWhere((p) => p.planKey == payment.planId, orElse: () => kPlans.first);
-          await _notificationService!.notifySubscriptionDecision(ceoUid: payment.payerId, companyId: payment.companyId, title: 'Subscription Activated! ✅', message: 'Your ${plan.name} subscription has been activated successfully.', data: {'planId': plan.planKey, 'status': 'active'});
-        } else if (payment.type == 'commission') {
-          await _notificationService!.notifyPaymentStatus(userId: payment.payerId, companyId: payment.companyId, title: 'Commission Payment Confirmed ✅', message: 'Your commission payment of Rs ${payment.amount} has been settled.', data: {'status': 'settled'});
+      final records = <AdminPaymentRecord>[];
+
+      // CEO Stripe subscription purchases from subscriptions.history
+      for (final doc in _latestSubs) {
+        final companyId = doc.id;
+        final companyName = await _cachedCompanyName(companyId);
+        final history = doc.data()['history'] as List<dynamic>? ?? [];
+        String ceoName = '';
+        String ceoUid = '';
+        try {
+          final ceoSnap = await _db
+              .collection('users')
+              .where('companyId', isEqualTo: companyId)
+              .where('role', isEqualTo: 'CEO')
+              .limit(1)
+              .get();
+          if (ceoSnap.docs.isNotEmpty) {
+            ceoUid = ceoSnap.docs.first.id;
+            ceoName = (ceoSnap.docs.first.data()['name'] ?? '').toString();
+          }
+        } catch (_) {}
+        if (ceoName.isEmpty) ceoName = companyName.isNotEmpty ? companyName : 'CEO';
+
+        for (var i = 0; i < history.length; i++) {
+          final raw = history[i];
+          if (raw is! Map) continue;
+          final entry =
+              SubscriptionHistoryEntry.fromMap(Map<String, dynamic>.from(raw));
+          if (entry.action != 'purchased') continue;
+
+          final stripeId = (entry.stripePaymentIntentId ?? '').trim();
+          final note = (entry.note ?? '').toLowerCase();
+          // Skip admin-confirmed bank proofs (already in payment_proofs).
+          if (note.contains('confirmed by admin') ||
+              note.contains('admin granted')) {
+            continue;
+          }
+          final isStripe = stripeId.isNotEmpty ||
+              note.contains('stripe') ||
+              ((entry.amountPaid ?? 0) > 0 && note.isEmpty);
+          if (!isStripe) continue;
+          if ((entry.amountPaid ?? 0) <= 0 && stripeId.isEmpty) continue;
+
+          final planLabel = entry.plan.isNotEmpty
+              ? '${entry.plan[0].toUpperCase()}${entry.plan.substring(1)}'
+              : 'Plan';
+          records.add(AdminPaymentRecord(
+            id: 'sub_${companyId}_$i${stripeId.isNotEmpty ? '_$stripeId' : ''}',
+            payerId: ceoUid,
+            payerName: ceoName,
+            payerRole: 'CEO',
+            companyId: companyId,
+            companyName: companyName,
+            amount: (entry.amountPaid ?? 0).toDouble(),
+            status: 'success',
+            date: entry.date,
+            type: 'subscription',
+            relatedLabel: 'Subscription · $planLabel',
+            stripeRef: stripeId.isNotEmpty ? stripeId : null,
+          ));
         }
       }
-      await _logAction(actionType: 'confirm_payment', targetType: 'payment_proof', targetId: payment.id, description: 'Confirmed ${payment.type} payment from ${payment.payerName}');
-    } catch (e) {} finally { _isLoading = false; notifyListeners(); }
+
+      for (final doc in _latestSettledTxs) {
+        final tx = TransactionModel.fromMap(doc.id, doc.data());
+        final supplierName = await _cachedSupplierName(tx.supplierUid);
+        final companyName = await _cachedCompanyName(tx.companyId);
+        records.add(AdminPaymentRecord(
+          id: 'tx_settle_${tx.txId}',
+          payerId: tx.supplierUid,
+          payerName: supplierName,
+          payerRole: 'Supplier',
+          companyId: tx.companyId,
+          companyName: companyName,
+          amount: tx.commissionAmount,
+          status: 'success',
+          date: tx.settledAt ?? tx.createdAt,
+          type: 'commission',
+          relatedLabel: tx.orderId.isNotEmpty
+              ? 'Order ${tx.orderId}'
+              : 'Commission · Tx ${tx.txId}',
+        ));
+      }
+
+      // Stripe jobs: pending / failed checkout attempts
+      for (final doc in _latestStripeJobs) {
+        final data = doc.data();
+        final status = (data['status'] ?? '').toString().toLowerCase();
+        if (status != 'pending' && status != 'error' && status != 'failed') {
+          continue;
+        }
+        final uid = (data['uid'] ?? '').toString();
+        final type = (data['type'] ?? 'subscription').toString();
+        final companyId = (data['companyId'] ?? '').toString();
+        final amount = (data['amountPKR'] as num?)?.toDouble() ?? 0.0;
+        final plan = (data['plan'] ?? '').toString();
+        final txIds = data['transactionIds'];
+        final relatedTx = txIds is List
+            ? txIds.map((e) => e.toString()).join(', ')
+            : (txIds?.toString() ?? '');
+        final isCommission = type == 'commission';
+        final payerRole = isCommission ? 'Supplier' : 'CEO';
+        final payerName = isCommission
+            ? await _cachedSupplierName(uid)
+            : await _cachedUserName(uid);
+        final companyName = await _cachedCompanyName(companyId);
+        final created = data['createdAt'] is Timestamp
+            ? (data['createdAt'] as Timestamp).toDate()
+            : DateTime.now();
+        records.add(AdminPaymentRecord(
+          id: 'job_${doc.id}',
+          payerId: uid,
+          payerName: payerName.isNotEmpty ? payerName : uid,
+          payerRole: payerRole,
+          companyId: companyId,
+          companyName: companyName,
+          amount: amount,
+          status: status == 'pending' ? 'pending' : 'failed',
+          date: created,
+          type: isCommission ? 'commission' : 'subscription',
+          relatedLabel: isCommission
+              ? (relatedTx.isNotEmpty
+                  ? 'Tx: $relatedTx'
+                  : 'Commission checkout')
+              : (plan.isNotEmpty
+                  ? 'Subscription · $plan'
+                  : 'Subscription checkout'),
+          stripeRef: doc.id,
+        ));
+      }
+
+      records.sort((a, b) => b.date.compareTo(a.date));
+      if (token != _paymentRebuildToken) return;
+      _paymentRecords = records;
+      _isLoading = false;
+      notifyListeners();
+    } catch (e) {
+      if (token != _paymentRebuildToken) return;
+      developer.log('rebuildPaymentRecords error: $e');
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
-  Future<void> rejectPayment(PaymentProofModel payment, String reason) async {
-    _isLoading = true; notifyListeners();
+  Future<String> _cachedCompanyName(String companyId) async {
+    if (companyId.isEmpty) return '';
+    if (_companyNameCache.containsKey(companyId)) {
+      return _companyNameCache[companyId]!;
+    }
+    final name = await _companyName(companyId);
+    final resolved = name == 'unknown company' ? '' : name;
+    _companyNameCache[companyId] = resolved;
+    return resolved;
+  }
+
+  Future<String> _cachedUserName(String uid) async {
+    if (uid.isEmpty) return '';
+    if (_userNameCache.containsKey(uid)) return _userNameCache[uid]!;
     try {
-      await _db.collection('payment_proofs').doc(payment.id).update({'status': 'rejected', 'adminNotes': reason});
-      if (_notificationService != null) await _notificationService!.notifyPaymentStatus(userId: payment.payerId, companyId: payment.companyId, title: 'Payment Rejected ❌', message: 'Your payment proof for ${payment.type} was rejected. Reason: $reason', data: {'status': 'rejected', 'reason': reason});
-      await _logAction(actionType: 'reject_payment', targetType: 'payment_proof', targetId: payment.id, description: 'Rejected ${payment.type} payment from ${payment.payerName}', reason: reason);
-    } catch (e) {} finally { _isLoading = false; notifyListeners(); }
+      final doc = await _db.collection('users').doc(uid).get();
+      final name = (doc.data()?['name'] ?? '').toString().trim();
+      _userNameCache[uid] = name.isNotEmpty ? name : uid;
+    } catch (_) {
+      _userNameCache[uid] = uid;
+    }
+    return _userNameCache[uid]!;
+  }
+
+  Future<String> _cachedSupplierName(String uid) async {
+    if (uid.isEmpty) return '';
+    if (_supplierNameCache.containsKey(uid)) return _supplierNameCache[uid]!;
+    final name = await _supplierName(uid);
+    _supplierNameCache[uid] = name;
+    return name;
   }
 
   Future<void> loadCEOs() async {

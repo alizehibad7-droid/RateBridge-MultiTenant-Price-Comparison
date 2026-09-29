@@ -13,7 +13,6 @@ import '../models/material_model.dart';
 import '../models/order_model.dart';
 import '../models/rating_model.dart';
 import '../models/transaction_model.dart';
-import '../models/payment_proof_model.dart';
 import '../constants/app_constants.dart';
 import '../constants/firestore_paths.dart';
 import '../models/company_model.dart';
@@ -92,8 +91,6 @@ class SupplierViewModel extends ChangeNotifier {
   List<RatingModel> _ratings = [];
   List<TransactionModel> _transactions = [];
   List<TransactionModel> _allCommissions = [];
-  List<PaymentProofModel> _confirmedCommissionPayments = [];
-  List<PaymentProofModel> _pendingCommissionPayments = [];
   List<InvitationModel> _invitations = [];
   
   List<CompanyModel> _companies = [];
@@ -124,7 +121,6 @@ class SupplierViewModel extends ChangeNotifier {
   StreamSubscription? _materialsSubscription;
   StreamSubscription? _ordersSubscription;
   StreamSubscription? _commissionsSub;
-  StreamSubscription? _paymentsSub;
   StreamSubscription? _invitationsSubscription;
   StreamSubscription? _ratingsSubscription;
   StreamSubscription? _supplierRestrictionSub;
@@ -172,7 +168,15 @@ class SupplierViewModel extends ChangeNotifier {
   bool get partnershipHubDataLoaded => _partnershipHubDataLoaded;
   bool get isCommissionRestricted => _commissionRestricted;
   String? get commissionRestrictionReason => _commissionRestrictionReason;
-  List<PaymentProofModel> get paymentHistory => [..._confirmedCommissionPayments, ..._pendingCommissionPayments]..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  /// Settled commission transactions (Stripe payments to platform).
+  List<TransactionModel> get stripeSettlementHistory => _allCommissions
+      .where((tx) => tx.isSettled)
+      .toList()
+    ..sort((a, b) {
+      final da = a.settledAt ?? a.createdAt;
+      final db = b.settledAt ?? b.createdAt;
+      return db.compareTo(da);
+    });
   List<MonthlyEarning> get monthlyEarnings => _monthlyEarnings;
 
   // --- Commission Ledger Getters (whole rupees) ---
@@ -183,13 +187,14 @@ class SupplierViewModel extends ChangeNotifier {
         ),
       );
   double get totalCommissionPaid => CurrencyFormatter.roundToRupee(
-        _confirmedCommissionPayments.fold<double>(
-          0.0,
-          (acc, p) => acc + p.amount,
-        ),
+        _allCommissions
+            .where((tx) => tx.isSettled)
+            .fold<double>(0.0, (acc, tx) => acc + tx.commissionAmount),
       );
   double get commissionOwed {
-    final owed = totalCommissionGenerated - totalCommissionPaid;
+    final owed = _allCommissions
+        .where((tx) => tx.isUnsettled)
+        .fold<double>(0.0, (acc, tx) => acc + tx.commissionAmount);
     if (owed <= 0) return 0;
     return CurrencyFormatter.roundToRupee(owed);
   }
@@ -202,13 +207,6 @@ class SupplierViewModel extends ChangeNotifier {
       .map((tx) => tx.txId)
       .where((id) => id.isNotEmpty)
       .toList();
-
-  double get pendingCommissionApproval => CurrencyFormatter.roundToRupee(
-        _pendingCommissionPayments.fold<double>(
-          0.0,
-          (acc, p) => acc + p.amount,
-        ),
-      );
 
   // --- Stats and Aggregates ---
   double get totalEarnings => _orders.where((o) => o.status == 'confirmed').fold(0.0, (acc, o) => acc + o.totalAmount);
@@ -295,8 +293,6 @@ class SupplierViewModel extends ChangeNotifier {
     _orders = [];
     _allCommissions = [];
     _transactions = [];
-    _confirmedCommissionPayments = [];
-    _pendingCommissionPayments = [];
     _invitations = [];
     _allPartnershipRequests = [];
     _incomingPartnershipRequests = [];
@@ -346,20 +342,6 @@ class SupplierViewModel extends ChangeNotifier {
           _checkDashboardReady();
           notifyListeners();
         }, onError: (e) => _onDashboardStreamError('earnings', e));
-
-    _paymentsSub?.cancel();
-    _paymentsSub = _db.collection('payment_proofs')
-        .where('payerId', isEqualTo: uid)
-        .where('type', isEqualTo: 'commission')
-        .snapshots().listen((snap) {
-          final all = snap.docs
-              .map((d) => PaymentProofModel.fromMap(d.id, d.data()))
-              .where((p) => !p.hiddenBy.contains(uid))
-              .toList();
-          _confirmedCommissionPayments = all.where((p) => p.status == 'confirmed' || p.status == 'approved' || p.status == 'settled').toList();
-          _pendingCommissionPayments = all.where((p) => p.status == 'pending').toList();
-          notifyListeners();
-        });
 
     _db.collection('commission_ensure_jobs').doc(uid).set({
       'uid': uid,
@@ -1042,6 +1024,12 @@ class SupplierViewModel extends ChangeNotifier {
         orElse: () => null,
       );
       await _partnershipRepo.acceptRequest(requestId);
+      if (_supplierUid != null) {
+        await _notificationService.dismissPartnershipInvitationNotifications(
+          recipientUserId: _supplierUid!,
+          requestId: requestId,
+        );
+      }
       return req?.companyName;
     } catch (e) {
       _error = e.toString();
@@ -1056,6 +1044,12 @@ class SupplierViewModel extends ChangeNotifier {
     _isLoading = true; notifyListeners();
     try {
       await _partnershipRepo.rejectRequest(requestId, reason);
+      if (_supplierUid != null) {
+        await _notificationService.dismissPartnershipInvitationNotifications(
+          recipientUserId: _supplierUid!,
+          requestId: requestId,
+        );
+      }
       return true;
     } catch (e) {
       _error = e.toString();
@@ -1068,7 +1062,18 @@ class SupplierViewModel extends ChangeNotifier {
 
   Future<void> withdrawPartnershipRequest(String requestId) async {
     _isLoading = true; notifyListeners();
-    try { await _partnershipRepo.withdrawRequest(requestId); } finally { _isLoading = false; notifyListeners(); }
+    try {
+      await _partnershipRepo.withdrawRequest(requestId);
+      if (_supplierUid != null) {
+        await _notificationService.dismissPartnershipInvitationNotifications(
+          recipientUserId: _supplierUid!,
+          requestId: requestId,
+        );
+      }
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
   Future<String?> removePartnership(String companyId) async {
@@ -1076,9 +1081,31 @@ class SupplierViewModel extends ChangeNotifier {
     _isLoading = true; notifyListeners();
     try {
       final company = await _companyRepo.getCompanyById(companyId);
-      await _partnershipRepo.removePartnership(companyId: companyId, supplierId: _supplierUid!);
+      await _partnershipRepo.removePartnership(
+        companyId: companyId,
+        supplierId: _supplierUid!,
+      );
+      final companyName = company?.name ?? 'the company';
+      final supplierName = _profile?.name ?? 'A supplier';
+      try {
+        final ceoUid = await _orderRepo.resolveCeoUid(companyId);
+        if (ceoUid != null && ceoUid.isNotEmpty) {
+          await _notificationService.notifyPartnershipRemoved(
+            recipientUserId: ceoUid,
+            companyName: companyName,
+            companyId: companyId,
+            supplierName: supplierName,
+            removedByCompany: false,
+          );
+        }
+      } catch (e) {
+        developer.log('removePartnership CEO notify failed: $e');
+      }
       return company?.name;
-    } finally { _isLoading = false; notifyListeners(); }
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
   void openCompanyContext(String companyId) => switchCompany(companyId);
@@ -1098,46 +1125,6 @@ class SupplierViewModel extends ChangeNotifier {
     _isDashboardLoading = true; notifyListeners();
     await Future.wait([loadMaterials(_selectedCompanyId!), loadOrders(_selectedCompanyId!, null), loadEarnings(monthKey()), loadRatings(_supplierUid!, _selectedCompanyId!)]);
     _isDashboardLoading = false; notifyListeners();
-  }
-
-  Future<bool> submitCommissionPayment({required double amount, required String method, required XFile screenshotFile}) async {
-    if (_supplierUid == null) return false;
-    final owed = commissionOwed;
-    final payAmount = CurrencyFormatter.roundToRupee(amount);
-    if (payAmount <= 0 || payAmount > owed) {
-      _error = 'Invalid amount';
-      notifyListeners();
-      return false;
-    }
-    _isLoading = true; notifyListeners();
-    try {
-      final url = await _uploadImageBytes(bytes: await screenshotFile.readAsBytes(), folder: 'commission_proofs/$_supplierUid', filename: 'comm_${DateTime.now().millisecondsSinceEpoch}.jpg');
-      if (url == null) throw Exception("Upload failed");
-
-      final unsettledTxIds = _allCommissions
-          .where((tx) => tx.status.toLowerCase() == 'unsettled' || tx.status.toLowerCase() == 'pending')
-          .map((tx) => tx.txId)
-          .toList();
-
-      final proof = PaymentProofModel(
-        id: '', 
-        payerId: _supplierUid!, 
-        companyId: '', 
-        payerName: _profile?.name ?? 'Supplier', 
-        payerRole: 'Supplier', 
-        amount: payAmount, 
-        method: method, 
-        screenshotUrl: url, 
-        status: 'pending', 
-        type: 'commission', 
-        createdAt: DateTime.now(),
-        relatedTransactions: unsettledTxIds,
-      );
-      
-      await _db.collection('payment_proofs').add(proof.toMap());
-      _successMessage = 'Payment submitted.';
-      return true;
-    } catch (e) { _error = e.toString(); return false; } finally { _isLoading = false; notifyListeners(); }
   }
 
   Stream<List<RfqModel>> streamOpenRfqsForSupplier() {
@@ -1271,14 +1258,14 @@ class SupplierViewModel extends ChangeNotifier {
     }
   }
 
-  Future<void> clearPaymentHistory() async {
+  Future<void> clearSettlementHistoryFromView() async {
     if (_supplierUid == null) return;
     _isLoading = true;
     notifyListeners();
     try {
-      await _transactionRepo.hideAllPaymentProofsForUser(_supplierUid!);
-      _confirmedCommissionPayments.clear();
-      _pendingCommissionPayments.clear();
+      for (final tx in _allCommissions.where((t) => t.isSettled)) {
+        await _transactionRepo.hideTransactionForUser(tx.txId, _supplierUid!);
+      }
       notifyListeners();
     } catch (e) {
       _error = e.toString();
@@ -1352,7 +1339,6 @@ class SupplierViewModel extends ChangeNotifier {
     _materialsSubscription?.cancel(); _materialsSubscription = null;
     _ordersSubscription?.cancel(); _ordersSubscription = null;
     _commissionsSub?.cancel(); _commissionsSub = null;
-    _paymentsSub?.cancel(); _paymentsSub = null;
     _invitationsSubscription?.cancel(); _invitationsSubscription = null;
     _ratingsSubscription?.cancel(); _ratingsSubscription = null;
     _supplierRestrictionSub?.cancel(); _supplierRestrictionSub = null;

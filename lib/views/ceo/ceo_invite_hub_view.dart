@@ -84,7 +84,11 @@ class _CeoInviteHubViewState extends State<CeoInviteHubView> {
       homeRoute: RouteNames.ceoDashboard,
       child: Scaffold(
       backgroundColor: CeoColors.screenBg,
-      appBar: const CeoAppBar(title: 'Marketplace & Invites'),
+      appBar: const CeoAppBar(
+        title: 'Marketplace & Invites',
+        automaticallyImplyLeading: false,
+        showNotificationIcon: false,
+      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Column(

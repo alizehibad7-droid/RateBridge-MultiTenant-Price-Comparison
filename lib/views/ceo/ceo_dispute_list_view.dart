@@ -89,6 +89,7 @@ class _CeoDisputeListViewState extends State<CeoDisputeListView> {
     return Scaffold(
       backgroundColor: CeoColors.screenBg,
       appBar: CeoAppBar(
+        showNotificationIcon: false,
         leading: _isSelectionMode
             ? IconButton(
                 icon: const Icon(Icons.close_rounded),

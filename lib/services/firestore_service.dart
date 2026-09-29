@@ -977,8 +977,15 @@ class FirestoreService {
   }
 
   // --- Subscriptions ---
-  Future<SubscriptionModel?> getSubscription(String companyId) async {
-    final doc = await _db.collection('subscriptions').doc(companyId).get();
+  Future<SubscriptionModel?> getSubscription(
+    String companyId, {
+    bool fromServer = false,
+  }) async {
+    final doc = await _db.collection('subscriptions').doc(companyId).get(
+          fromServer
+              ? const GetOptions(source: Source.server)
+              : const GetOptions(source: Source.serverAndCache),
+        );
     if (doc.exists && doc.data() != null) {
       return SubscriptionModel.fromMap(companyId, _requireDocData(doc));
     }
@@ -1007,9 +1014,10 @@ class FirestoreService {
     String companyId,
     SubscriptionHistoryEntry entry,
   ) async {
-    await _db.collection('subscriptions').doc(companyId).update({
+    // Use set+merge so history works even when the subscription doc is new.
+    await _db.collection('subscriptions').doc(companyId).set({
       'history': FieldValue.arrayUnion([entry.toMap()]),
-    });
+    }, SetOptions(merge: true));
   }
 
   // --- Price Indices ---

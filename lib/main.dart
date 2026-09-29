@@ -77,10 +77,16 @@ void main() async {
 
       // Stripe Payment Sheet (test publishable key from Eman Stripe integration).
       // Swap for pk_live_... when going to production.
-      Stripe.publishableKey =
-          'pk_test_51UDAH2BiKPUcGjilfFduv9mdleNH3LaKO1parFKh1T2G40UbWobY9gzC6tlzcF2JThgFB4sA1j6HwD6Rt1gso0oJ00jt47cZei';
-      if (!kIsWeb) {
-        await Stripe.instance.applySettings();
+      // Isolate from Firebase setup — flutter_stripe can throw on web if the
+      // web plugin is missing (Platform._operatingSystem).
+      try {
+        Stripe.publishableKey =
+            'pk_test_51UDAH2BiKPUcGjilfFduv9mdleNH3LaKO1parFKh1T2G40UbWobY9gzC6tlzcF2JThgFB4sA1j6HwD6Rt1gso0oJ00jt47cZei';
+        if (!kIsWeb) {
+          await Stripe.instance.applySettings();
+        }
+      } catch (e) {
+        debugPrint('Stripe setup skipped: $e');
       }
 
       // Initialize FCM only on mobile platforms

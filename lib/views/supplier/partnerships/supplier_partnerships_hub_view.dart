@@ -15,8 +15,13 @@ import 'partnership_ui.dart';
 
 class SupplierPartnershipsHubView extends StatefulWidget {
   final int initialTab;
+  final String? focusRequestId;
 
-  const SupplierPartnershipsHubView({super.key, this.initialTab = 0});
+  const SupplierPartnershipsHubView({
+    super.key,
+    this.initialTab = 0,
+    this.focusRequestId,
+  });
 
   @override
   State<SupplierPartnershipsHubView> createState() =>
@@ -27,6 +32,7 @@ class _SupplierPartnershipsHubViewState
     extends State<SupplierPartnershipsHubView>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
+  bool _focusHandled = false;
 
   @override
   void initState() {
@@ -38,7 +44,71 @@ class _SupplierPartnershipsHubViewState
     );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<SupplierViewModel>().loadPartnershipHubData();
+      _resolveFocusRequest();
     });
+  }
+
+  Future<void> _resolveFocusRequest() async {
+    final requestId = widget.focusRequestId?.trim() ?? '';
+    if (requestId.isEmpty || _focusHandled || !mounted) return;
+
+    final vm = context.read<SupplierViewModel>();
+    // Wait briefly for partnership stream if still loading.
+    for (var i = 0; i < 20 && !vm.partnershipListsReady; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      if (!mounted) return;
+    }
+    if (!mounted) return;
+    _focusHandled = true;
+
+    final match = vm.allPartnershipRequests.cast<PartnershipRequestModel?>().firstWhere(
+          (r) => r?.requestId == requestId,
+          orElse: () => null,
+        );
+
+    if (match == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'This partnership invitation is no longer available. It may have been accepted, declined, or withdrawn.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    if (match.status == 'pending' && match.isCeoInitiated) {
+      if (_tabController.index != 1) _tabController.animateTo(1);
+      return;
+    }
+    if (match.status == 'pending' && match.isSupplierInitiated) {
+      if (_tabController.index != 2) _tabController.animateTo(2);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Opened your sent partnership request.'),
+        ),
+      );
+      return;
+    }
+    if (match.status == 'accepted') {
+      if (_tabController.index != 0) _tabController.animateTo(0);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'You are already partnered with ${match.companyName}.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'This invitation from ${match.companyName} is no longer pending.',
+        ),
+      ),
+    );
   }
 
   @override

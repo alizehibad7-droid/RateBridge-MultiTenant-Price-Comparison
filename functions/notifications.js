@@ -375,3 +375,62 @@ exports.onMessageSent = functions.firestore
     });
     return null;
   });
+
+/**
+ * Ensures suppliers always get an in-app notification when an order becomes
+ * actionable (status → pending), even if the client notify call fails.
+ * Uses a stable notification id so client + server do not duplicate.
+ */
+exports.onOrderNotifySupplier = functions.firestore
+  .document('orders/{orderId}')
+  .onWrite(async (change, context) => {
+    if (!change.after.exists) return null;
+    const after = change.after.data() || {};
+    const before = change.before.exists ? change.before.data() || {} : null;
+    const status = String(after.status || '').toLowerCase();
+    const prev = before ? String(before.status || '').toLowerCase() : '';
+    if (status !== 'pending' || prev === 'pending') return null;
+
+    const supplierId = String(after.supplierId || after.supplierUid || '').trim();
+    if (!supplierId) {
+      console.error('[onOrderNotifySupplier] Missing supplierId', context.params.orderId);
+      return null;
+    }
+
+    const orderId = context.params.orderId;
+    const notifId = `order_${orderId}_supplier_pending`;
+    const existing = await db.collection('notifications').doc(notifId).get();
+    if (existing.exists) {
+      console.log('[onOrderNotifySupplier] Already notified', notifId);
+      return null;
+    }
+
+    const materialName = after.materialName || 'a material';
+    const fieldUserName = after.fieldUserName || 'A field user';
+    const companyId = after.companyId || null;
+    const fromCeoApproval = prev === 'pending_approval';
+
+    await db.collection('notifications').doc(notifId).set({
+      notifId,
+      recipientUserId: supplierId,
+      recipientRole: 'Supplier',
+      type: 'newOrder',
+      title: 'New order received',
+      message: fromCeoApproval
+        ? `A company approved an order for ${materialName} from ${fieldUserName}. Review and accept.`
+        : `${fieldUserName} ordered ${materialName}`,
+      data: {
+        orderId,
+        status: 'pending',
+        relatedId: orderId,
+        relatedCollection: 'orders',
+        ...(fromCeoApproval ? { event: 'ceo_approved', fieldUserName } : {}),
+        ...(companyId ? { companyId } : {}),
+      },
+      isRead: false,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      companyId: companyId || null,
+    });
+    console.log('[onOrderNotifySupplier] Wrote', notifId, 'for', supplierId);
+    return null;
+  });

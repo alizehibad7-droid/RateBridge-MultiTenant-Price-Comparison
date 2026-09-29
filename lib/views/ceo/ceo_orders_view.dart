@@ -113,6 +113,8 @@ class _CeoOrdersViewState extends State<CeoOrdersView>
       child: Scaffold(
       backgroundColor: CeoColors.screenBg,
       appBar: CeoAppBar(
+        automaticallyImplyLeading: false,
+        showNotificationIcon: false,
         leading: _isSelectionMode
             ? IconButton(
                 icon: const Icon(Icons.close_rounded),
@@ -138,7 +140,7 @@ class _CeoOrdersViewState extends State<CeoOrdersView>
           isScrollable: false,
           indicatorColor: CeoColors.amber,
           indicatorWeight: 3,
-          labelColor: Colors.white,
+          labelColor: CeoColors.navy,
           unselectedLabelColor: CeoColors.textGrey,
           labelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 13),
           unselectedLabelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w500, fontSize: 13),

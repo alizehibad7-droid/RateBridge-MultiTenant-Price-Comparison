@@ -49,11 +49,12 @@ class _CeoJoinRequestsViewState extends State<CeoJoinRequestsView>
       backgroundColor: CeoColors.screenBg,
       appBar: CeoAppBar(
         title: 'Partnership Requests',
+        showNotificationIcon: false,
         bottom: TabBar(
           controller: _tabController,
           indicatorColor: CeoColors.amber,
           indicatorWeight: 3,
-          labelColor: Colors.white,
+          labelColor: CeoColors.navy,
           unselectedLabelColor: CeoColors.textGrey,
           labelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 13),
           unselectedLabelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w500, fontSize: 13),

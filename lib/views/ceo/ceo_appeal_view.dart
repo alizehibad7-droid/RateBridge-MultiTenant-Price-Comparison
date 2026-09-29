@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../viewmodels/ceo_viewmodel.dart';
 import '../../theme/ceo_theme.dart';
+import '../../utils/app_navigation.dart';
 
 class CeoAppealView extends StatefulWidget {
   const CeoAppealView({super.key});
@@ -68,6 +69,8 @@ class _CeoAppealViewState extends State<CeoAppealView> {
         title: const Text('Submit Appeal'),
         backgroundColor: CeoColors.navy,
         foregroundColor: Colors.white,
+        automaticallyImplyLeading: false,
+        leading: AppNavigation.leading(context, color: Colors.white),
       ),
       body: viewModel.appealSubmitted 
         ? _buildSuccessCard()

@@ -3,8 +3,6 @@ import 'dart:convert';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
-import '../models/price_history_model.dart';
-import '../models/supplier_compare_model.dart';
 import '../services/firestore_service.dart';
 import '../utils/app_exception.dart';
 
@@ -21,17 +19,7 @@ class AiViewModel extends ChangeNotifier {
 
   String? get result => _result;
   bool get isLoading => _isLoading;
-  bool get isAnalyzing => _isLoading;
   String? get error => _error;
-  String get statusFeedback =>
-      _error ?? _result ?? 'AI Engine ready for analysis.';
-
-  void _setLoading() {
-    _isLoading = true;
-    _result = null;
-    _error = null;
-    notifyListeners();
-  }
 
   void _setError(Object error) {
     final message = error is AppException ? error.message : error.toString();
@@ -100,79 +88,11 @@ Rules:
     debugPrint(
       'AI assistant ask screen=$screenName questionLen=${question.length}',
     );
-    return _runPrompt(prompt);
-  }
-
-  Future<void> runMarketAnalysis(String scenario) async {
-    _setLoading();
     try {
-      _result = await _runPrompt(
-        'Analyze the following construction material market scenario and provide a forecast: $scenario',
-      );
+      return await _runPrompt(prompt);
     } catch (e) {
       _setError(e);
-      return;
+      rethrow;
     }
-    _isLoading = false;
-    notifyListeners();
-  }
-
-  Future<void> runDetailedBidAnalysis({
-    required String city,
-    required List<String> materialsNeeded,
-    required Map<String, dynamic> bidPrice,
-  }) async {
-    _setLoading();
-    try {
-      _result = await _runPrompt(
-        'Evaluate construction bid in $city. Materials: ${materialsNeeded.join(', ')}. Price details: $bidPrice. Is this bid competitive?',
-      );
-    } catch (e) {
-      _setError(e);
-      return;
-    }
-    _isLoading = false;
-    notifyListeners();
-  }
-
-  Future<void> getSupplierRecommendation(
-    List<SupplierCompareModel> suppliers,
-    String query,
-    String locale,
-  ) async {
-    _setLoading();
-    try {
-      final supplierData = suppliers
-          .map((s) => '${s.businessName} (Rating: ${s.rating}, Price: ${s.price})')
-          .join(', ');
-      _result = await _runPrompt(
-        'Based on these suppliers: [$supplierData], recommend the best fit for: $query. Language: $locale',
-      );
-    } catch (e) {
-      _setError(e);
-      return;
-    }
-    _isLoading = false;
-    notifyListeners();
-  }
-
-  Future<void> getPriceTrendInsight(
-    List<PriceHistoryModel> history,
-    String materialName,
-    String locale,
-  ) async {
-    _setLoading();
-    try {
-      final prices =
-          history.map((h) => '${h.timestamp}: ${h.price}').join(', ');
-      _result = await _runPrompt(
-        'Analyze price trends for $materialName based on this history: [$prices]. Language: $locale',
-      );
-    } catch (e) {
-      _setError(e);
-      return;
-    }
-    _isLoading = false;
-    notifyListeners();
   }
 }

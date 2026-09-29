@@ -138,7 +138,7 @@ class StatusChip extends StatelessWidget {
         : status[0].toUpperCase() + status.substring(1).replaceAll('_', ' ');
         
     IconData statusIcon = Icons.info_outline_rounded;
-    if (status == 'active' || status == 'confirmed' || status == 'approved') statusIcon = Icons.check_circle_rounded;
+    if (status == 'active' || status == 'confirmed' || status == 'approved' || status == 'success' || status == 'settled') statusIcon = Icons.check_circle_rounded;
     if (status == 'pending') statusIcon = Icons.hourglass_empty_rounded;
     if (status == 'rejected' || status == 'suspended' || status == 'failed') statusIcon = Icons.cancel_rounded;
 

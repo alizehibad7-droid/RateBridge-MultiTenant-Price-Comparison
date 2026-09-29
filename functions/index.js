@@ -16,7 +16,8 @@ const {
   onUserRegistration, 
   onPaymentProofCreated, 
   onDisputeCreated, 
-  onAppealCreated 
+  onAppealCreated,
+  onOrderNotifySupplier,
 } = require('./notifications');
 const { verifyPaymentScreenshot } = require('./payment_verification');
 const {
@@ -49,14 +50,16 @@ exports.scheduledOrderApprovalReminders = scheduledOrderApprovalReminders;
 exports.onMessageSent = onMessageSent;
 exports.onNotificationCreated = onNotificationCreated;
 exports.onAdminNotificationCreated = onAdminNotificationCreated;
+exports.onOrderNotifySupplier = onOrderNotifySupplier;
 
 // Admin Triggers
 exports.onUserRegistration = onUserRegistration;
-exports.onPaymentProofCreated = onPaymentProofCreated;
+// Screenshot payment proofs removed — Stripe-only payments.
+// exports.onPaymentProofCreated = onPaymentProofCreated;
 exports.onDisputeCreated = onDisputeCreated;
 exports.onAppealCreated = onAppealCreated;
 
-exports.verifyPaymentScreenshot = verifyPaymentScreenshot;
+// exports.verifyPaymentScreenshot = verifyPaymentScreenshot;
 exports.createRfq = createRfq;
 exports.submitRfqBid = submitRfqBid;
 exports.awardRfq = awardRfq;
@@ -73,8 +76,6 @@ exports.onDisputeWithdrawJobCreated = onDisputeWithdrawJobCreated;
 exports.generateAiText = generateAiText;
 exports.onAiJobCreated = onAiJobCreated;
 
-exports.createSubscriptionPaymentIntent =
-  stripeFunctions.createSubscriptionPaymentIntent;
-exports.createCommissionPaymentIntent =
-  stripeFunctions.createCommissionPaymentIntent;
+exports.onStripeJobCreated = stripeFunctions.onStripeJobCreated;
+exports.onStripeActivateJobCreated = stripeFunctions.onStripeActivateJobCreated;
 exports.stripeWebhook = stripeFunctions.stripeWebhook;

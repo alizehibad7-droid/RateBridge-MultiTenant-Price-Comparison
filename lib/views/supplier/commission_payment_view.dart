@@ -63,11 +63,16 @@ class _CommissionPaymentViewState extends State<CommissionPaymentView> {
       final authVM = context.read<AuthViewModel>();
       final supplierUid = authVM.user?.uid ?? '';
 
-      await stripe.payWithStripe(
+      final outcome = await stripe.payWithStripe(
         amountPKR: input.round(),
         type: 'commission',
         transactionIds: txIds,
       );
+
+      if (outcome == StripePayOutcome.redirected) {
+        // Web Checkout — settlement via Stripe webhook after pay.
+        return;
+      }
 
       if (supplierUid.isNotEmpty) {
         await txRepo.settleSupplierCommissions(supplierUid, txIds);
@@ -84,6 +89,7 @@ class _CommissionPaymentViewState extends State<CommissionPaymentView> {
       }
     } catch (e) {
       if (!mounted) return;
+      if (e is AppException && e.code == 'canceled') return;
       setState(() {
         _error = e is AppException ? e.message : e.toString();
       });

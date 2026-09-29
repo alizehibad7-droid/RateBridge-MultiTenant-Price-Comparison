@@ -107,6 +107,27 @@ class NotificationViewModel extends ChangeNotifier {
   /// Marks a notification as read.
   /// Standardized to use only notifId as it is unique in the root collection.
   Future<void> markAsRead(String notifId, [String? _]) async {
+    if (notifId.isEmpty) return;
+    // Optimistic local update so the UI reflects read state immediately.
+    final idx = _notifications.indexWhere((n) => n.notifId == notifId);
+    if (idx >= 0 && !_notifications[idx].isRead) {
+      final n = _notifications[idx];
+      _notifications[idx] = NotificationModel(
+        notifId: n.notifId,
+        recipientUserId: n.recipientUserId,
+        recipientRole: n.recipientRole,
+        type: n.type,
+        title: n.title,
+        message: n.message,
+        data: n.data,
+        isRead: true,
+        createdAt: n.createdAt,
+        senderUserId: n.senderUserId,
+        companyId: n.companyId,
+      );
+      if (_unreadCount > 0) _unreadCount -= 1;
+      notifyListeners();
+    }
     try {
       await _notificationRepo.markAsRead(notifId);
     } catch (e) {

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -11,7 +12,6 @@ import '../../viewmodels/auth_viewmodel.dart';
 import '../../viewmodels/subscription_viewmodel.dart';
 import '../../widgets/ceo/ceo_widgets.dart';
 import '../../services/stripe_service.dart';
-import '../../models/payment_proof_model.dart';
 import '../../utils/app_exception.dart';
 
 class CeoSubscriptionView extends StatefulWidget {
@@ -22,6 +22,9 @@ class CeoSubscriptionView extends StatefulWidget {
 }
 
 class _CeoSubscriptionViewState extends State<CeoSubscriptionView> {
+  bool _handlingPaymentReturn = false;
+  bool _activationDone = false;
+
   @override
   void initState() {
     super.initState();
@@ -30,11 +33,198 @@ class _CeoSubscriptionViewState extends State<CeoSubscriptionView> {
     });
   }
 
-  void _bootstrap() {
+  Future<void> _bootstrap() async {
+    if (_handlingPaymentReturn || _activationDone) return;
+
     final auth = context.read<AuthViewModel>();
-    final companyId = auth.user?.companyId ?? '';
-    if (companyId.isEmpty) return;
-    context.read<SubscriptionViewModel>().loadSubscription(companyId);
+    final subVm = context.read<SubscriptionViewModel>();
+    subVm.setBusyMessage('Loading your plan…');
+
+    var companyId = auth.user?.companyId ?? '';
+    if (companyId.isEmpty) {
+      for (var i = 0; i < 20 && companyId.isEmpty; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+        if (!mounted) return;
+        companyId = context.read<AuthViewModel>().user?.companyId ?? '';
+      }
+    }
+    if (companyId.isEmpty) {
+      subVm.setBusyMessage(null);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Could not load your company. Sign out and sign in, then open Plan & Billing again.',
+            ),
+          ),
+        );
+      }
+      return;
+    }
+
+    final stripe = context.read<StripeService>();
+    final stripeStatus = _queryFromUrl('stripe');
+    final urlPlan = _queryFromUrl('plan');
+    final pending = await stripe.readPendingSubscription();
+
+    final shouldActivate = stripeStatus == 'success' || pending != null;
+    if (shouldActivate) {
+      _handlingPaymentReturn = true;
+      final planKey = (urlPlan != null && urlPlan.isNotEmpty)
+          ? urlPlan
+          : (pending?.plan ?? '');
+      final activateCompanyId =
+          (pending?.companyId.isNotEmpty == true) ? pending!.companyId : companyId;
+      final amount = pending?.amountPKR;
+
+      final plan = kPlans.firstWhere(
+        (p) => p.planKey == planKey,
+        orElse: () => kPlans.first,
+      );
+
+      if (plan.id == PlanId.free) {
+        await subVm.loadSubscription(companyId, fromServer: true);
+        subVm.setBusyMessage(null);
+        _handlingPaymentReturn = false;
+        return;
+      }
+
+      await _activatePaidPlan(
+        companyId: activateCompanyId,
+        plan: plan,
+        amountPKR: amount ?? plan.priceRs,
+      );
+      _handlingPaymentReturn = false;
+      return;
+    }
+
+    await subVm.loadSubscription(companyId, fromServer: true);
+    subVm.setBusyMessage(null);
+    if (stripeStatus == 'cancel' && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Payment cancelled.')),
+      );
+    }
+  }
+
+  Future<void> _activatePaidPlan({
+    required String companyId,
+    required PlanDefinition plan,
+    required int amountPKR,
+  }) async {
+    final subVm = context.read<SubscriptionViewModel>();
+    final stripe = context.read<StripeService>();
+
+    // 1) Instant UI — never wait for restart / Cloud Function.
+    subVm.applyLocalPlan(
+      companyId: companyId,
+      plan: plan,
+      amountPaid: amountPKR,
+    );
+    _activationDone = true;
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${plan.name} plan is now active.')),
+      );
+    }
+
+    // 2) Persist quickly via client write (source of truth for this screen).
+    subVm.setBusyMessage('Saving your plan…');
+    try {
+      await subVm.activateSubscription(
+        companyId: companyId,
+        plan: plan,
+        adminGranted: false,
+        amountPaid: amountPKR,
+      );
+      await stripe.clearPendingSubscription();
+      subVm.setBusyMessage(null);
+    } catch (e, st) {
+      debugPrint('Client activate failed, trying admin job: $e\n$st');
+      // 3) Fallback: Admin SDK job (slower, but reliable).
+      subVm.setBusyMessage('Finalizing payment…');
+      try {
+        await stripe.claimSubscriptionActivation(
+          companyId: companyId,
+          plan: plan.planKey,
+          amountPKR: amountPKR,
+        );
+        await subVm.loadSubscription(companyId, fromServer: true);
+        subVm.setBusyMessage(null);
+      } catch (e2) {
+        subVm.setBusyMessage(null);
+        debugPrint('Admin activate also failed: $e2');
+        // Keep local plan on screen; data may still sync via Stripe webhook.
+      }
+    }
+  }
+
+  Future<void> _selectPlan(PlanDefinition plan) async {
+    if (plan.id == PlanId.free) return;
+    final subVm = context.read<SubscriptionViewModel>();
+    final authVm = context.read<AuthViewModel>();
+    final companyId = authVm.user?.companyId ?? '';
+    if (companyId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Company not loaded. Sign in again and retry.'),
+        ),
+      );
+      return;
+    }
+
+    subVm.setBusyMessage('Opening secure checkout…');
+    try {
+      final stripe = context.read<StripeService>();
+      final outcome = await stripe.payWithStripe(
+        type: 'subscription',
+        plan: plan.planKey,
+        companyId: companyId,
+        amountPKR: plan.priceRs,
+      );
+      if (outcome == StripePayOutcome.redirected) {
+        // Browser navigates to Stripe — keep message until unload.
+        subVm.setBusyMessage('Redirecting to Stripe…');
+        return;
+      }
+      subVm.setBusyMessage('Activating ${plan.name} plan…');
+      subVm.applyLocalPlan(
+        companyId: companyId,
+        plan: plan,
+        amountPaid: plan.priceRs,
+      );
+      await subVm.activateSubscription(
+        companyId: companyId,
+        plan: plan,
+        adminGranted: false,
+        amountPaid: plan.priceRs,
+      );
+      subVm.setBusyMessage(null);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${plan.name} plan is now active.')),
+      );
+    } catch (e) {
+      subVm.setBusyMessage(null);
+      if (!mounted) return;
+      if (e is AppException && e.code == 'canceled') return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e is AppException ? e.message : e.toString()),
+        ),
+      );
+    }
+  }
+
+  /// Supports ?stripe= on the URI and hash routes (#/path?stripe=&plan=).
+  String? _queryFromUrl(String key) {
+    final direct = Uri.base.queryParameters[key];
+    if (direct != null && direct.isNotEmpty) return direct;
+
+    final fragment = Uri.base.fragment;
+    final q = fragment.indexOf('?');
+    if (q < 0) return null;
+    return Uri.splitQueryString(fragment.substring(q + 1))[key];
   }
 
   void _confirmCancellation(String companyId) {
@@ -69,24 +259,22 @@ class _CeoSubscriptionViewState extends State<CeoSubscriptionView> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: CeoColors.screenBg,
-      appBar: CeoAppBar(title: 'Plan & Billing', actions: [
-        IconButton(
-          icon: const Icon(Icons.account_circle_rounded), 
-          tooltip: 'Profile',
-          onPressed: () => context.push(RouteNames.ceoProfile)
-        ),
-      ]),
+      appBar: const CeoAppBar(
+        title: 'Plan & Billing',
+        showNotificationIcon: false,
+        backFallbackRoute: RouteNames.ceoProfile,
+      ),
       body: Consumer<SubscriptionViewModel>(
         builder: (context, viewModel, child) {
-          if (viewModel.isLoading && viewModel.currentSubscription == null) {
+          if (viewModel.isLoading && viewModel.currentSubscription == null && !viewModel.isBusy) {
             return const Center(child: CircularProgressIndicator());
           }
 
           final sub = viewModel.currentSubscription;
           final planDef = sub?.planDef ?? kPlans.first;
-          final isPending = viewModel.isWaitingVerification;
-
-          return ListView(
+          return Stack(
+            children: [
+              ListView(
             padding: const EdgeInsets.all(24),
             children: [
               if (viewModel.error != null) 
@@ -102,12 +290,7 @@ class _CeoSubscriptionViewState extends State<CeoSubscriptionView> {
                   color: CeoColors.green
                 ),
               
-              if (isPending) 
-                _buildPendingVerificationCard(viewModel.pendingPayment),
-              
               _buildCurrentPlanCard(sub, planDef),
-              const SizedBox(height: 24),
-              _buildAiStatusCard(planDef.aiUnlocked && (sub?.isActive ?? false)),
               const SizedBox(height: 32),
               
               Row(
@@ -124,43 +307,12 @@ class _CeoSubscriptionViewState extends State<CeoSubscriptionView> {
                 child: Row(
                   children: kPlans.map((plan) => Padding(
                     padding: const EdgeInsets.only(right: 16),
-                    child: _buildPlanOption(plan, sub?.plan == plan.planKey, isPending, () async {
-                      if (plan.id == PlanId.free) return;
-                      final subVm = context.read<SubscriptionViewModel>();
-                      final authVm = context.read<AuthViewModel>();
-                      final companyId = authVm.user?.companyId ?? '';
-                      try {
-                        final stripe = context.read<StripeService>();
-                        await stripe.payWithStripe(
-                          type: 'subscription',
-                          plan: plan.planKey,
-                          amountPKR: plan.priceRs,
-                        );
-                        if (companyId.isNotEmpty) {
-                          await subVm.activateSubscription(
-                            companyId: companyId,
-                            plan: plan,
-                            adminGranted: false,
-                            amountPaid: plan.priceRs,
-                          );
-                        }
-                        if (!mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Payment successful. Plan activated.'),
-                          ),
-                        );
-                        _bootstrap();
-                      } catch (e) {
-                        if (!mounted) return;
-                        final msg = e is AppException
-                            ? e.message
-                            : e.toString();
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(msg)),
-                        );
-                      }
-                    }),
+                    child: _buildPlanOption(
+                      plan,
+                      sub?.plan == plan.planKey,
+                      viewModel.isBusy,
+                      viewModel.isBusy ? null : () => _selectPlan(plan),
+                    ),
                   )).toList(),
                 ),
               ),
@@ -190,55 +342,59 @@ class _CeoSubscriptionViewState extends State<CeoSubscriptionView> {
               else ...viewModel.history.map(_buildHistoryTile),
               const SizedBox(height: 40),
             ],
+              ),
+              if (viewModel.isBusy)
+                Positioned.fill(
+                  child: ColoredBox(
+                    color: Colors.black.withValues(alpha: 0.45),
+                    child: Center(
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 32),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 28,
+                          vertical: 24,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const CircularProgressIndicator(),
+                            const SizedBox(height: 16),
+                            Text(
+                              viewModel.busyMessage ?? 'Please wait…',
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.plusJakartaSans(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 15,
+                                color: CeoColors.navy,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'This can take up to ~20 seconds. Do not close the page.',
+                              textAlign: TextAlign.center,
+                              style: CeoTheme.mutedStyle(size: 12),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
           );
         },
       ),
     );
   }
 
-  Widget _buildPendingVerificationCard(PaymentProofModel? payment) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 24),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: CeoColors.amber.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: CeoColors.amber.withValues(alpha: 0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: const BoxDecoration(
-                  color: CeoColors.amber,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.hourglass_top_rounded, color: Colors.white, size: 20),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text('Payment Verification Pending', 
-                  style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, color: CeoColors.navy)),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'Your payment for the ${payment?.planName ?? "selected"} plan is currently under review. Premium features will be unlocked immediately once confirmed by the admin.',
-            style: CeoTheme.mutedStyle(size: 13).copyWith(color: CeoColors.darkAmber, fontWeight: FontWeight.w500),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildCurrentPlanCard(SubscriptionModel? sub, PlanDefinition planDef) {
-    final textTheme = Theme.of(context).textTheme;
-    final isFree = sub?.plan == 'free';
-    final isActive = sub?.isActive ?? false;
+    final isFree = sub == null || planDef.id == PlanId.free || sub.plan == 'free';
+    // Free is always "active" in the UI; never show as expired.
+    final isActive = isFree ? true : (sub?.isActive ?? false);
 
     return AdminCard(
       padding: const EdgeInsets.all(20),
@@ -273,7 +429,12 @@ class _CeoSubscriptionViewState extends State<CeoSubscriptionView> {
             ],
           ),
           const SizedBox(height: 16),
-          if (isActive && sub?.expiresAt != null)
+          if (isFree)
+            Text(
+              'Free plan — always available. Upgrade anytime for more capacity.',
+              style: CeoTheme.mutedStyle(),
+            )
+          else if (isActive && sub?.expiresAt != null)
             Row(
               children: [
                 const Icon(Icons.event_available_rounded, size: 14, color: CeoColors.textGrey),
@@ -291,17 +452,15 @@ class _CeoSubscriptionViewState extends State<CeoSubscriptionView> {
                   style: GoogleFonts.plusJakartaSans(fontSize: 14, color: CeoColors.navy, fontWeight: FontWeight.w600)),
               ],
             )
-          else if (!isActive && !isFree)
+          else
             Row(
               children: [
                 const Icon(Icons.error_outline_rounded, size: 14, color: CeoColors.red),
                 const SizedBox(width: 6),
-                Text('Subscription Expired', 
+                Text('Subscription Expired — select a plan to renew', 
                   style: GoogleFonts.plusJakartaSans(fontSize: 14, color: CeoColors.red, fontWeight: FontWeight.w700)),
               ],
-            )
-          else
-            Text('Enjoy basic construction material procurement features.', style: CeoTheme.mutedStyle()),
+            ),
           
           if (!isFree && isActive) ...[
              const SizedBox(height: 20),
@@ -319,47 +478,6 @@ class _CeoSubscriptionViewState extends State<CeoSubscriptionView> {
           ],
         ],
       ),
-    );
-  }
-
-  Widget _buildAiStatusCard(bool isUnlocked) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isUnlocked ? CeoColors.green.withValues(alpha: 0.08) : CeoColors.textGrey.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: isUnlocked ? CeoColors.green.withValues(alpha: 0.2) : CeoColors.border),
-      ),
-      child: Row(children: [
-        Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: isUnlocked ? CeoColors.green : CeoColors.textGrey,
-            shape: BoxShape.circle,
-          ),
-          child: Icon(isUnlocked ? Icons.auto_awesome_rounded : Icons.lock_rounded, color: Colors.white, size: 18),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                isUnlocked ? 'AI Market Insights Active' : 'AI Market Insights Locked',
-                style: GoogleFonts.plusJakartaSans(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 14,
-                  color: isUnlocked ? CeoColors.green : CeoColors.navy,
-                ),
-              ),
-              Text(
-                isUnlocked ? 'Advanced analytics enabled' : 'Upgrade to unlock intelligent price predictions',
-                style: CeoTheme.mutedStyle(size: 11),
-              ),
-            ],
-          ),
-        ),
-      ]),
     );
   }
 

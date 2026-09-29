@@ -1,12 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:firebase_storage/firebase_storage.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
-import 'dart:io';
+import 'package:flutter/foundation.dart' show debugPrint;
 
 import '../models/subscription_model.dart';
-import '../models/payment_proof_model.dart';
 import '../services/cloud_function_service.dart';
 import '../services/firestore_service.dart';
 import '../services/notification_service.dart';
@@ -44,77 +40,94 @@ class SubscriptionViewModel extends ChangeNotifier {
   bool _isLoading = false;
   String? error;
   String? successMessage;
+  String? busyMessage;
   SubscriptionModel? _subscription;
-  PaymentProofModel? _pendingPayment;
 
   bool get isLoading => _isLoading;
   SubscriptionModel? get currentSubscription => _subscription;
-  List<SubscriptionHistoryEntry> get history => _subscription?.history ?? [];
-  PaymentProofModel? get pendingPayment => _pendingPayment;
+  List<SubscriptionHistoryEntry> get history {
+    final list =
+        List<SubscriptionHistoryEntry>.from(_subscription?.history ?? const []);
+    list.sort((a, b) => b.date.compareTo(a.date));
+    return list;
+  }
 
-  bool get hasPendingPayment => _pendingPayment != null;
-  bool get isWaitingVerification => _pendingPayment?.status == 'pending';
+  bool get isBusy => busyMessage != null && busyMessage!.isNotEmpty;
 
-  Future<void> loadSubscription(String companyId) async {
+  void setBusyMessage(String? message) {
+    busyMessage = message;
+    notifyListeners();
+  }
+
+  /// Instant UI update so the plan does not flash back to Free after payment.
+  void applyLocalPlan({
+    required String companyId,
+    required PlanDefinition plan,
+    int? amountPaid,
+  }) {
+    final now = DateTime.now();
+    final expiry = plan.durationDays > 0
+        ? now.add(Duration(days: plan.durationDays))
+        : null;
+    final previous = _subscription?.history ?? const <SubscriptionHistoryEntry>[];
+    final entry = SubscriptionHistoryEntry(
+      plan: plan.planKey,
+      action: 'purchased',
+      date: now,
+      amountPaid: amountPaid ?? plan.priceRs,
+    );
+    _subscription = SubscriptionModel(
+      companyId: companyId,
+      plan: plan.planKey,
+      status: 'active',
+      startedAt: now,
+      expiresAt: expiry,
+      adminGranted: false,
+      history: [entry, ...previous],
+    );
+    successMessage = '${plan.name} plan activated successfully.';
+    error = null;
+    _isLoading = false;
+    busyMessage = null;
+    notifyListeners();
+  }
+
+  Future<void> loadSubscription(
+    String companyId, {
+    bool fromServer = false,
+  }) async {
     if (companyId.isEmpty) return;
-    _isLoading = true;
+    final keepPlan = _subscription;
+    _isLoading = keepPlan == null;
     error = null;
     notifyListeners();
     try {
-      _subscription = await _firestoreService.getSubscription(companyId);
-      if (_subscription == null) {
+      final loaded = await _firestoreService.getSubscription(
+        companyId,
+        fromServer: fromServer,
+      );
+      if (loaded != null) {
+        _subscription = loaded;
+      } else if (keepPlan != null &&
+          keepPlan.companyId == companyId &&
+          keepPlan.plan != 'free') {
+        // Keep the plan we just activated — avoid Free flash from a stale miss.
+        _subscription = keepPlan;
+      } else {
         _subscription = SubscriptionModel(
           companyId: companyId,
           plan: 'free',
           status: 'active',
         );
       }
-      await _loadPendingPayment(companyId);
     } catch (e) {
       error = 'Failed to load subscription: $e';
+      if (keepPlan != null && keepPlan.companyId == companyId) {
+        _subscription = keepPlan;
+      }
     } finally {
       _isLoading = false;
       notifyListeners();
-    }
-  }
-
-  Future<void> _loadPendingPayment(String companyId) async {
-    final snap = await _db
-        .collection('payment_proofs')
-        .where('companyId', isEqualTo: companyId)
-        .where('status', isEqualTo: 'pending')
-        .where('type', isEqualTo: 'subscription')
-        .limit(1)
-        .get();
-    
-    if (snap.docs.isNotEmpty) {
-      _pendingPayment = PaymentProofModel.fromMap(snap.docs.first.id, snap.docs.first.data());
-    } else {
-      _pendingPayment = null;
-    }
-  }
-
-  Future<void> _notifyAdminsPaymentSubmitted({
-    required String companyId,
-    required String fallbackName,
-  }) async {
-    final notifications = _notificationService;
-    if (notifications == null) return;
-    try {
-      final company = await _firestoreService.getCompany(companyId);
-      final companyName = (company?.name.trim().isNotEmpty == true)
-          ? company!.name
-          : fallbackName;
-      final adminIds = await _firestoreService.getAdminUserIds();
-      for (final adminUserId in adminIds) {
-        await notifications.notifySubscriptionPaymentSubmitted(
-          adminUserId: adminUserId,
-          companyName: companyName,
-          companyId: companyId,
-        );
-      }
-    } catch (_) {
-      // Proof already stored; admin alert is best-effort.
     }
   }
 
@@ -133,76 +146,6 @@ class SubscriptionViewModel extends ChangeNotifier {
       _subscription = sub;
       return sub;
     });
-  }
-
-  Future<bool> submitPaymentProof({
-    required String ceoId,
-    required String companyId,
-    required String ceoName,
-    required PlanDefinition plan,
-    required String method,
-    required double amount,
-    required XFile screenshotFile,
-  }) async {
-    if (companyId.isEmpty) {
-      error = "Invalid Company ID. Please log in again.";
-      notifyListeners();
-      return false;
-    }
-
-    _isLoading = true;
-    error = null;
-    successMessage = null;
-    notifyListeners();
-
-    try {
-      // 1. Read bytes for upload
-      final bytes = await screenshotFile.readAsBytes();
-      if (bytes.isEmpty) throw Exception("Selected file is empty.");
-
-      // 2. Upload to Cloudinary instead of Firebase Storage to bypass CORS/Storage errors
-      final url = await _uploadImageBytes(
-        bytes: bytes,
-        folder: 'payment_proofs/$companyId',
-        filename: '${DateTime.now().millisecondsSinceEpoch}.jpg',
-      );
-      
-      if (url == null) throw Exception("Failed to upload screenshot to Cloudinary.");
-
-      // 3. Create Payment Proof record in Firestore
-      final proof = PaymentProofModel(
-        id: '',
-        payerId: ceoId,
-        companyId: companyId,
-        payerName: ceoName,
-        payerRole: 'CEO',
-        amount: amount,
-        method: method,
-        screenshotUrl: url,
-        status: 'pending',
-        type: 'subscription',
-        planId: plan.planKey,
-        planName: plan.name,
-        createdAt: DateTime.now(),
-      );
-
-      await _db.collection('payment_proofs').add(proof.toMap());
-      
-      _pendingPayment = proof;
-      successMessage = 'Payment proof submitted. Plan will be active after Admin verification.';
-      await _notifyAdminsPaymentSubmitted(
-        companyId: companyId,
-        fallbackName: ceoName,
-      );
-      return true;
-    } catch (e) {
-      debugPrint("Upload Error: $e");
-      error = 'Failed to submit payment proof: ${e.toString()}';
-      return false;
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
   }
 
   Future<void> adminGrantPlan({
@@ -236,46 +179,61 @@ class SubscriptionViewModel extends ChangeNotifier {
     String? adminNote,
     int? amountPaid,
   }) async {
-    final now = DateTime.now();
-    final expiry = plan.durationDays > 0
-        ? now.add(Duration(days: plan.durationDays))
-        : null;
+    _isLoading = true;
+    error = null;
+    successMessage = null;
+    notifyListeners();
+    try {
+      final now = DateTime.now();
+      final expiry = plan.durationDays > 0
+          ? now.add(Duration(days: plan.durationDays))
+          : null;
 
-    final updatedSub = SubscriptionModel(
-      companyId: companyId,
-      plan: plan.planKey,
-      status: adminGranted ? 'admin_granted' : 'active',
-      startedAt: now,
-      expiresAt: expiry,
-      adminGranted: adminGranted,
-      adminNote: adminNote,
-    );
+      final updatedSub = SubscriptionModel(
+        companyId: companyId,
+        plan: plan.planKey,
+        status: adminGranted ? 'admin_granted' : 'active',
+        startedAt: now,
+        expiresAt: expiry,
+        adminGranted: adminGranted,
+        adminNote: adminNote,
+        history: _subscription?.history ?? const [],
+      );
 
-    // 1. Save to subscriptions collection
-    await _firestoreService.saveSubscription(updatedSub);
+      await _firestoreService.saveSubscription(updatedSub);
 
-    final historyEntry = SubscriptionHistoryEntry(
-      plan: plan.planKey,
-      action: adminGranted ? 'admin_granted' : 'purchased',
-      date: now,
-      amountPaid: amountPaid ?? (adminGranted ? 0 : plan.priceRs),
-      note: adminNote,
-    );
+      final historyEntry = SubscriptionHistoryEntry(
+        plan: plan.planKey,
+        action: adminGranted ? 'admin_granted' : 'purchased',
+        date: now,
+        amountPaid: amountPaid ?? (adminGranted ? 0 : plan.priceRs),
+        note: adminNote,
+      );
 
-    await _firestoreService.updateSubscriptionHistory(companyId, historyEntry);
+      await _firestoreService.updateSubscriptionHistory(companyId, historyEntry);
 
-    // 2. Update Company doc so Field Users inherit the plan automatically
-    await _db
-        .collection('companies')
-        .doc(companyId)
-        .set({
-      'plan': plan.planKey,
-      'planExpiry': expiry != null ? Timestamp.fromDate(expiry) : null,
-      'aiEnabled': plan.aiUnlocked,
-      'status': 'active', 
-    }, SetOptions(merge: true));
+      try {
+        await _db.collection('companies').doc(companyId).set({
+          'plan': plan.planKey,
+          'planExpiry': expiry != null ? Timestamp.fromDate(expiry) : null,
+          'aiEnabled': plan.aiUnlocked,
+          'status': 'active',
+        }, SetOptions(merge: true));
+      } catch (e) {
+        // Subscription doc is the source of truth for Plan & Billing UI.
+        debugPrint('Company plan sync skipped: $e');
+      }
 
-    await loadSubscription(companyId);
+      await loadSubscription(companyId, fromServer: true);
+      successMessage =
+          '${plan.name} plan activated successfully.';
+    } catch (e) {
+      error = 'Failed to activate plan: $e';
+      rethrow;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
   Future<void> cancelSubscription(String companyId) async {
