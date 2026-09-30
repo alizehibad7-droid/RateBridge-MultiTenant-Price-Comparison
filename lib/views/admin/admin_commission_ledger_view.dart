@@ -54,38 +54,41 @@ class _AdminCommissionLedgerViewState extends State<AdminCommissionLedgerView>
     final adminVM = context.watch<AdminViewModel>();
     final settled = adminVM.commissionSettlementRecords;
 
-    return Column(
-      children: [
-        Container(
-          color: Colors.white,
-          child: TabBar(
-            controller: _tabController,
-            labelColor: AdminColors.navy,
-            unselectedLabelColor: AdminColors.textGrey,
-            indicatorColor: AdminColors.navy,
-            indicatorWeight: 3,
-            tabs: const [
-              Tab(
-                icon: Icon(Icons.account_balance_wallet_rounded, size: 20),
-                text: 'Active Ledger',
-              ),
-              Tab(
-                icon: Icon(Icons.history_rounded, size: 20),
-                text: 'Stripe Settlements',
-              ),
-            ],
+    return Material(
+      color: AdminColors.screenBg,
+      child: Column(
+        children: [
+          Container(
+            color: Colors.white,
+            child: TabBar(
+              controller: _tabController,
+              labelColor: AdminColors.navy,
+              unselectedLabelColor: AdminColors.textGrey,
+              indicatorColor: AdminColors.navy,
+              indicatorWeight: 3,
+              tabs: const [
+                Tab(
+                  icon: Icon(Icons.account_balance_wallet_rounded, size: 20),
+                  text: 'Pending Commission',
+                ),
+                Tab(
+                  icon: Icon(Icons.history_rounded, size: 20),
+                  text: 'Paid Commission',
+                ),
+              ],
+            ),
           ),
-        ),
-        Expanded(
-          child: TabBarView(
-            controller: _tabController,
-            children: [
-              _buildLedgerTab(adminVM),
-              _buildSettledTab(settled, adminVM),
-            ],
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                _buildLedgerTab(adminVM),
+                _buildSettledTab(settled, adminVM),
+              ],
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -118,7 +121,7 @@ class _AdminCommissionLedgerViewState extends State<AdminCommissionLedgerView>
                   const Icon(Icons.store_rounded,
                       color: AdminColors.navy, size: 18),
                   const SizedBox(width: 8),
-                  const AdminSectionLabel('Supplier Balances (unsettled)'),
+                  const AdminSectionLabel('Unpaid Balances'),
                 ],
               ),
               const SizedBox(height: 12),
@@ -134,7 +137,7 @@ class _AdminCommissionLedgerViewState extends State<AdminCommissionLedgerView>
                               size: 64),
                           const SizedBox(height: 16),
                           const Text(
-                            'No outstanding commissions.',
+                            'No pending commissions.',
                             style: TextStyle(
                               color: AdminColors.textGrey,
                               fontWeight: FontWeight.w500,
@@ -143,7 +146,7 @@ class _AdminCommissionLedgerViewState extends State<AdminCommissionLedgerView>
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            'Suppliers pay via Stripe; settled amounts move to Stripe Settlements.',
+                            'Commission payments from suppliers will appear here.',
                             textAlign: TextAlign.center,
                             style: AdminTheme.mutedStyle(size: 13),
                           ),
@@ -178,10 +181,10 @@ class _AdminCommissionLedgerViewState extends State<AdminCommissionLedgerView>
                 label: Text('Supplier',
                     style: AdminTheme.sectionHeaderStyle())),
             DataColumn(
-                label: Text('Pending Orders',
+                label: Text('Orders',
                     style: AdminTheme.sectionHeaderStyle())),
             DataColumn(
-                label: Text('Outstanding',
+                label: Text('Pending Amount',
                     style: AdminTheme.sectionHeaderStyle())),
           ],
           rows: suppliers
@@ -214,11 +217,11 @@ class _AdminCommissionLedgerViewState extends State<AdminCommissionLedgerView>
             const Icon(Icons.history_rounded,
                 size: 64, color: AdminColors.textGrey),
             const SizedBox(height: 16),
-            Text('No Stripe settlements yet',
+            Text('No paid commissions yet',
                 style: AdminTheme.titleStyle(size: 18)
                     .copyWith(color: AdminColors.textGrey)),
             const SizedBox(height: 8),
-            Text('Supplier commission payments via Stripe appear here.',
+            Text('Successful commission payments will appear here.',
                 style: AdminTheme.mutedStyle()),
           ],
         ),
@@ -276,19 +279,19 @@ class _SummaryStrip extends StatelessWidget {
       runSpacing: 16,
       children: [
         _StatBox(
-          label: 'Outstanding (unsettled)',
+          label: 'Pending Commission',
           value: currency.format(outstanding),
           color: AdminColors.red,
           wide: isDesktop,
         ),
         _StatBox(
-          label: 'Collected this month',
+          label: 'Paid This Month',
           value: currency.format(collected),
           color: AdminColors.green,
           wide: isDesktop,
         ),
         _StatBox(
-          label: 'Total collected (Stripe)',
+          label: 'Total Commission',
           value: currency.format(grandTotal),
           color: AdminColors.navy,
           wide: isDesktop,
@@ -352,7 +355,7 @@ class _SupplierBalanceTile extends StatelessWidget {
       child: ListTile(
         title: Text(supplier.supplierName,
             style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700)),
-        subtitle: Text('${supplier.orderCount} pending order(s)'),
+        subtitle: Text('${supplier.orderCount} order(s)'),
         trailing: Text(
           currency.format(supplier.unsettledAmount),
           style: const TextStyle(

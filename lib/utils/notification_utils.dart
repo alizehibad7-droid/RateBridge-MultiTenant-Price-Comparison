@@ -395,17 +395,27 @@ void navigateForAdminNotification(
     context.push(RouteNames.adminDisputes);
     return;
   }
-  if (_notifContains(notification, 'subscription') ||
-      (_notifContains(notification, 'payment') &&
-          !_notifContains(notification, 'commission'))) {
-    context.push(RouteNames.adminSubscription);
+
+  final isCommission = _notifContains(notification, 'commission') || 
+                      _dataString(notification.data, 'paymentType') == 'commission';
+  final isSubscription = _notifContains(notification, 'subscription') || 
+                        _dataString(notification.data, 'paymentType') == 'subscription';
+
+  if (isSubscription) {
+    context.push('${RouteNames.adminPayments}?tab=0');
     return;
   }
-  if (_notifContains(notification, 'commission') ||
-      _notifContains(notification, 'payment')) {
+  
+  if (isCommission) {
+    context.push('${RouteNames.adminPayments}?tab=1');
+    return;
+  }
+
+  if (_notifContains(notification, 'payment')) {
     context.push(RouteNames.adminPayments);
     return;
   }
+  
   if (_notifContains(notification, 'approval')) {
     context.push(RouteNames.adminCompanies);
     return;

@@ -13,8 +13,11 @@ import '../../viewmodels/subscription_viewmodel.dart';
 import '../../widgets/admin/admin_widgets.dart';
 
 class AdminSubscriptionView extends StatefulWidget {
+  final bool embedded;
+
   const AdminSubscriptionView({
     super.key,
+    this.embedded = false,
     @visibleForTesting this.debugFirestore,
     @visibleForTesting this.debugLoadGate,
   });
@@ -100,38 +103,48 @@ class _AdminSubscriptionViewState extends State<AdminSubscriptionView> {
     final double screenWidth = MediaQuery.of(context).size.width;
     final double paddingValue = screenWidth < 600 ? 12.0 : 24.0;
 
-    return Material(
-      color: AdminColors.screenBg,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _buildHeader(),
-          Expanded(
-            child: _loadingCompanies
-                ? const Center(child: CircularProgressIndicator())
-                : SingleChildScrollView(
-                    padding: EdgeInsets.fromLTRB(paddingValue, 0, paddingValue, 24),
-                    child: Column(
-                      children: [
-                        _buildMetricsRow(),
-                        const SizedBox(height: 24),
-                        _buildFilterBar(),
-                        const SizedBox(height: 20),
-                        AdminCard(
-                          padding: EdgeInsets.zero,
-                          child: _filtered.isEmpty
-                              ? const Padding(padding: EdgeInsets.all(80), child: AdminEmptyState(icon: Icons.business_rounded, message: 'No companies matching your search criteria.'))
-                              : SingleChildScrollView(
-                                  scrollDirection: Axis.horizontal,
-                                  child: _buildSubscriptionTable(),
-                                ),
-                        ),
-                      ],
-                    ),
+    Widget content = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildHeader(),
+        Expanded(
+          child: _loadingCompanies
+              ? const Center(child: CircularProgressIndicator())
+              : SingleChildScrollView(
+                  padding: EdgeInsets.fromLTRB(paddingValue, 0, paddingValue, 24),
+                  child: Column(
+                    children: [
+                      _buildMetricsRow(),
+                      const SizedBox(height: 24),
+                      _buildFilterBar(),
+                      const SizedBox(height: 20),
+                      AdminCard(
+                        padding: EdgeInsets.zero,
+                        child: _filtered.isEmpty
+                            ? const Padding(padding: EdgeInsets.all(80), child: AdminEmptyState(icon: Icons.business_rounded, message: 'No companies matching your search criteria.'))
+                            : SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                child: _buildSubscriptionTable(),
+                              ),
+                      ),
+                    ],
                   ),
-          ),
-        ],
-      ),
+                ),
+        ),
+      ],
+    );
+
+    if (widget.embedded) {
+      return Material(
+        color: AdminColors.screenBg,
+        child: content,
+      );
+    }
+
+    return Scaffold(
+      appBar: const AdminAppBar(title: 'Subscriptions'),
+      backgroundColor: AdminColors.screenBg,
+      body: content,
     );
   }
 

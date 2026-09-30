@@ -35,7 +35,6 @@ class _AdminAnalyticsViewState extends State<AdminAnalyticsView> {
   Widget build(BuildContext context) {
     final adminVM = context.watch<AdminViewModel>();
     
-    // Determine if this is a "hard" loading state (no data at all)
     final bool isHardLoading = adminVM.isLoading && 
                                adminVM.ceoPerformance.isEmpty && 
                                adminVM.supplierPerformance.isEmpty;
@@ -57,7 +56,7 @@ class _AdminAnalyticsViewState extends State<AdminAnalyticsView> {
                             Positioned(
                               top: 0, left: 0, right: 0,
                               child: LinearProgressIndicator(
-                                minHeight: 3,
+                                minHeight: 2,
                                 backgroundColor: Colors.transparent,
                                 valueColor: AlwaysStoppedAnimation<Color>(AdminColors.amber.withValues(alpha: 0.8)),
                               ),
@@ -75,14 +74,15 @@ class _AdminAnalyticsViewState extends State<AdminAnalyticsView> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.analytics_outlined, size: 64, color: Color(0xFFCBD5E1)),
-          const SizedBox(height: 16),
-          Text('Analytics temporarily unavailable', style: AdminTheme.titleStyle(size: 18)),
-          const SizedBox(height: 8),
-          Text(error, style: AdminTheme.mutedStyle()),
-          const SizedBox(height: 24),
+          const Icon(Icons.analytics_outlined, size: 48, color: Color(0xFFCBD5E1)),
+          const SizedBox(height: 12),
+          Text('Analytics unavailable', style: AdminTheme.titleStyle(size: 16)),
+          const SizedBox(height: 6),
+          Text(error, style: AdminTheme.mutedStyle(size: 12)),
+          const SizedBox(height: 20),
           ElevatedButton(
             onPressed: () => context.read<AdminViewModel>().loadAnalytics(),
+            style: AdminTheme.primaryButtonStyle(height: 36),
             child: const Text('Refresh Insights'),
           ),
         ],
@@ -95,9 +95,8 @@ class _AdminAnalyticsViewState extends State<AdminAnalyticsView> {
     final double screenWidth = MediaQuery.of(context).size.width;
 
     if (screenWidth < 640) {
-      // Mobile header
       return Container(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(10),
         decoration: const BoxDecoration(
           color: Colors.white,
           border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
@@ -109,22 +108,22 @@ class _AdminAnalyticsViewState extends State<AdminAnalyticsView> {
               children: [
                 if (mode != AnalyticsViewMode.overall) ...[
                   IconButton(
-                    icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 14),
+                    icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 12),
                     onPressed: () => adminVM.setAnalyticsMode(AnalyticsViewMode.overall),
                     style: IconButton.styleFrom(
                       backgroundColor: const Color(0xFFF1F5F9),
-                      padding: const EdgeInsets.all(8),
+                      padding: const EdgeInsets.all(6),
                     ),
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    mode == AnalyticsViewMode.ceoDetail ? 'CEO Intelligence' : 'Supplier Metrics',
-                    style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.w800, color: AdminColors.navy),
+                    mode == AnalyticsViewMode.ceoDetail ? 'Company Analytics' : 'Supplier Analytics',
+                    style: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.w800, color: AdminColors.navy),
                   ),
                 ] else ...[
                   Text(
-                    'Intelligence',
-                    style: GoogleFonts.plusJakartaSans(fontSize: 18, fontWeight: FontWeight.w900, color: AdminColors.navy),
+                    'Analytics',
+                    style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.w900, color: AdminColors.navy),
                   ),
                 ],
                 const Spacer(),
@@ -139,19 +138,19 @@ class _AdminAnalyticsViewState extends State<AdminAnalyticsView> {
             if (mode == AnalyticsViewMode.overall) ...[
               const SizedBox(height: 8),
               Container(
-                height: 38,
+                height: 34,
                 decoration: BoxDecoration(
                   color: const Color(0xFFF1F5F9),
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: const Color(0xFFE2E8F0)),
                 ),
                 child: TextField(
                   onChanged: (val) => setState(() => _searchQuery = val),
-                  style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w600, color: AdminColors.navy),
+                  style: GoogleFonts.plusJakartaSans(fontSize: 11, fontWeight: FontWeight.w600, color: AdminColors.navy),
                   decoration: InputDecoration(
-                    hintText: 'Search partners...',
-                    hintStyle: AdminTheme.mutedStyle(size: 12),
-                    prefixIcon: const Icon(Icons.search_rounded, size: 16, color: AdminColors.textGrey),
+                    hintText: 'Search...',
+                    hintStyle: AdminTheme.mutedStyle(size: 11),
+                    prefixIcon: const Icon(Icons.search_rounded, size: 14, color: AdminColors.textGrey),
                     border: InputBorder.none,
                     contentPadding: const EdgeInsets.symmetric(vertical: 8),
                   ),
@@ -164,9 +163,9 @@ class _AdminAnalyticsViewState extends State<AdminAnalyticsView> {
     }
 
     return Container(
-      height: 72,
+      height: 60,
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.symmetric(horizontal: 20),
       decoration: const BoxDecoration(
         color: Colors.white,
         border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
@@ -176,17 +175,17 @@ class _AdminAnalyticsViewState extends State<AdminAnalyticsView> {
         children: [
           if (mode != AnalyticsViewMode.overall) ...[
             IconButton(
-              icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
+              icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 16),
               onPressed: () => adminVM.setAnalyticsMode(AnalyticsViewMode.overall),
               style: IconButton.styleFrom(
                 backgroundColor: const Color(0xFFF1F5F9),
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(8),
               ),
             ),
-            const SizedBox(width: 16),
+            const SizedBox(width: 12),
             Text(
-              mode == AnalyticsViewMode.ceoDetail ? 'CEO Intelligence' : 'Supplier Metrics',
-              style: GoogleFonts.plusJakartaSans(fontSize: 18, fontWeight: FontWeight.w800, color: AdminColors.navy),
+              mode == AnalyticsViewMode.ceoDetail ? 'Company Analytics' : 'Supplier Analytics',
+              style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.w800, color: AdminColors.navy),
             ),
           ] else ...[
             Column(
@@ -194,33 +193,33 @@ class _AdminAnalyticsViewState extends State<AdminAnalyticsView> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Enterprise Intelligence',
-                  style: GoogleFonts.plusJakartaSans(fontSize: 20, fontWeight: FontWeight.w900, color: AdminColors.navy, letterSpacing: -0.5),
+                  'Analytics',
+                  style: GoogleFonts.plusJakartaSans(fontSize: 18, fontWeight: FontWeight.w900, color: AdminColors.navy, letterSpacing: -0.5),
                 ),
-                Text('Real-time ecosystem monitoring', style: AdminTheme.mutedStyle(size: 11)),
+                Text('System monitoring', style: AdminTheme.mutedStyle(size: 10)),
               ],
             ),
-            const SizedBox(width: 40),
+            const SizedBox(width: 32),
             Expanded(
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Container(
-                  constraints: const BoxConstraints(maxWidth: 400),
-                  height: 42,
+                  constraints: const BoxConstraints(maxWidth: 350),
+                  height: 38,
                   decoration: BoxDecoration(
                     color: const Color(0xFFF1F5F9),
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(10),
                     border: Border.all(color: const Color(0xFFE2E8F0)),
                   ),
                   child: TextField(
                     onChanged: (val) => setState(() => _searchQuery = val),
-                    style: GoogleFonts.plusJakartaSans(fontSize: 13, fontWeight: FontWeight.w600, color: AdminColors.navy),
+                    style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w600, color: AdminColors.navy),
                     decoration: InputDecoration(
-                      hintText: 'Search partners...',
-                      hintStyle: AdminTheme.mutedStyle(size: 13),
-                      prefixIcon: const Icon(Icons.search_rounded, size: 20, color: AdminColors.textGrey),
+                      hintText: 'Search performance...',
+                      hintStyle: AdminTheme.mutedStyle(size: 12),
+                      prefixIcon: const Icon(Icons.search_rounded, size: 18, color: AdminColors.textGrey),
                       border: InputBorder.none,
-                      contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                      contentPadding: const EdgeInsets.symmetric(vertical: 8),
                     ),
                   ),
                 ),
@@ -243,24 +242,24 @@ class _AdminAnalyticsViewState extends State<AdminAnalyticsView> {
 
   Widget _buildHeaderFilter({String? value, String? hint, required IconData icon, required List<String> items, required ValueChanged<String?> onChanged}) {
     return Container(
-      height: 38,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
+      height: 34,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
         color: const Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(color: const Color(0xFFE2E8F0)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: AdminColors.textGrey),
-          const SizedBox(width: 8),
+          Icon(icon, size: 12, color: AdminColors.textGrey),
+          const SizedBox(width: 6),
           DropdownButtonHideUnderline(
             child: DropdownButton<String>(
               value: items.contains(value) ? value : null,
-              hint: hint != null ? Text(hint, style: AdminTheme.mutedStyle(size: 12, weight: FontWeight.w600)) : null,
-              icon: const Icon(Icons.expand_more_rounded, size: 18),
-              items: items.map((e) => DropdownMenuItem(value: e, child: Text(e, style: AdminTheme.bodyStyle(size: 12, weight: FontWeight.w600)))).toList(),
+              hint: hint != null ? Text(hint, style: AdminTheme.mutedStyle(size: 11, weight: FontWeight.w600)) : null,
+              icon: const Icon(Icons.expand_more_rounded, size: 16),
+              items: items.map((e) => DropdownMenuItem(value: e, child: Text(e, style: AdminTheme.bodyStyle(size: 11, weight: FontWeight.w600)))).toList(),
               onChanged: onChanged,
             ),
           ),
@@ -273,8 +272,8 @@ class _AdminAnalyticsViewState extends State<AdminAnalyticsView> {
     switch (adminVM.analyticsMode) {
       case AnalyticsViewMode.overall:
         return _OverallAnalyticsSection(
-          onCEOClick: (uid) => adminVM.setAnalyticsMode(AnalyticsViewMode.ceoDetail, id: uid),
-          onSupplierClick: (uid) => adminVM.setAnalyticsMode(AnalyticsViewMode.supplierDetail, id: uid),
+          onCEODetailClick: (uid) => adminVM.setAnalyticsMode(AnalyticsViewMode.ceoDetail, id: uid),
+          onSupplierDetailClick: (uid) => adminVM.setAnalyticsMode(AnalyticsViewMode.supplierDetail, id: uid),
           ceoMetric: _ceoMetric,
           onCEOMetricChange: (val) => setState(() => _ceoMetric = val),
           supplierMetric: _supplierMetric,
@@ -290,8 +289,8 @@ class _AdminAnalyticsViewState extends State<AdminAnalyticsView> {
 }
 
 class _OverallAnalyticsSection extends StatelessWidget {
-  final Function(String) onCEOClick;
-  final Function(String) onSupplierClick;
+  final Function(String) onCEODetailClick;
+  final Function(String) onSupplierDetailClick;
   final String ceoMetric;
   final Function(String) onCEOMetricChange;
   final String supplierMetric;
@@ -299,8 +298,8 @@ class _OverallAnalyticsSection extends StatelessWidget {
   final String searchQuery;
 
   const _OverallAnalyticsSection({
-    required this.onCEOClick,
-    required this.onSupplierClick,
+    required this.onCEODetailClick,
+    required this.onSupplierDetailClick,
     required this.ceoMetric,
     required this.onCEOMetricChange,
     required this.supplierMetric,
@@ -327,16 +326,16 @@ class _OverallAnalyticsSection extends StatelessWidget {
       onRefresh: () => adminVM.loadAnalytics(),
       color: AdminColors.navy,
       child: SingleChildScrollView(
-        padding: EdgeInsets.all(screenWidth < 600 ? 12 : 24),
+        padding: EdgeInsets.all(screenWidth < 600 ? 12 : 20),
         physics: const AlwaysScrollableScrollPhysics(),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _buildMetricsGrid(context, stats, adminVM.timeRange),
-            const SizedBox(height: 32),
+            const SizedBox(height: 24),
             LayoutBuilder(
               builder: (context, constraints) {
-                final isWide = constraints.maxWidth >= 1100;
+                final isWide = constraints.maxWidth >= 1000;
                 return Column(
                   children: [
                     if (isWide)
@@ -345,8 +344,8 @@ class _OverallAnalyticsSection extends StatelessWidget {
                         children: [
                           Expanded(child: _buildComparisonCard(
                             context: context,
-                            title: 'CEO Matrix',
-                            subtitle: 'Enterprise throughput analysis (${adminVM.timeRange})',
+                            title: 'Companies',
+                            subtitle: 'Efficiency (${adminVM.timeRange})',
                             metric: ceoMetric,
                             options: const ['Orders', 'Completed', 'Field Users'],
                             onMetricChange: onCEOMetricChange,
@@ -354,25 +353,25 @@ class _OverallAnalyticsSection extends StatelessWidget {
                               labels: filteredCEO.map((e) => e.companyName).toList(),
                               values: filteredCEO.map((e) => _getCeoValue(e)).toList(),
                               color: AdminColors.navy,
-                              onClick: (idx) => onCEOClick(filteredCEO[idx].ceoUid),
+                              onClick: (idx) => onCEODetailClick(filteredCEO[idx].ceoUid),
                             ),
                             footer: _RankingList(
-                              title: 'ALL PARTNERS',
+                              title: 'ALL COMPANIES',
                               items: filteredCEO.map((e) => _RankData(
                                 title: e.companyName,
                                 subtitle: '${e.totalOrders} total orders',
                                 value: '${e.completionRate.toInt()}%',
                                 label: 'Efficiency',
                                 color: AdminColors.green,
-                                onClick: () => onCEOClick(e.ceoUid),
+                                onClick: () => onCEODetailClick(e.ceoUid),
                               )).toList(),
                             ),
                           )),
-                          const SizedBox(width: 24),
+                          const SizedBox(width: 16),
                           Expanded(child: _buildComparisonCard(
                             context: context,
-                            title: 'Supplier Index',
-                            subtitle: 'Vendor reliability benchmarks (${adminVM.timeRange})',
+                            title: 'Suppliers',
+                            subtitle: 'Rating & Orders (${adminVM.timeRange})',
                             metric: supplierMetric,
                             options: const ['Orders', 'Completed', 'Rating', 'Reviews'],
                             onMetricChange: onSupplierMetricChange,
@@ -380,17 +379,17 @@ class _OverallAnalyticsSection extends StatelessWidget {
                               labels: filteredSuppliers.map((e) => e.businessName).toList(),
                               values: filteredSuppliers.map((e) => _getSupplierValue(e)).toList(),
                               color: AdminColors.amber,
-                              onClick: (idx) => onSupplierClick(filteredSuppliers[idx].supplierUid),
+                              onClick: (idx) => onSupplierDetailClick(filteredSuppliers[idx].supplierUid),
                             ),
                             footer: _RankingList(
                               title: 'ALL SUPPLIERS',
                               items: filteredSuppliers.map((e) => _RankData(
                                 title: e.businessName,
-                                subtitle: '${e.totalReviews} verified reviews',
+                                subtitle: '${e.totalReviews} reviews',
                                 value: e.averageRating.toStringAsFixed(1),
                                 label: 'Score',
                                 color: AdminColors.amber,
-                                onClick: () => onSupplierClick(e.supplierUid),
+                                onClick: () => onSupplierDetailClick(e.supplierUid),
                               )).toList(),
                             ),
                           )),
@@ -399,8 +398,8 @@ class _OverallAnalyticsSection extends StatelessWidget {
                     else ...[
                       _buildComparisonCard(
                         context: context,
-                        title: 'CEO Performance Matrix',
-                        subtitle: 'Operational efficiency by tenant (${adminVM.timeRange})',
+                        title: 'Company Performance',
+                        subtitle: 'Efficiency report (${adminVM.timeRange})',
                         metric: ceoMetric,
                         options: const ['Orders', 'Completed', 'Field Users'],
                         onMetricChange: onCEOMetricChange,
@@ -408,25 +407,25 @@ class _OverallAnalyticsSection extends StatelessWidget {
                           labels: filteredCEO.map((e) => e.companyName).toList(),
                           values: filteredCEO.map((e) => _getCeoValue(e)).toList(),
                           color: AdminColors.navy,
-                          onClick: (idx) => onCEOClick(filteredCEO[idx].ceoUid),
+                          onClick: (idx) => onCEODetailClick(filteredCEO[idx].ceoUid),
                         ),
                         footer: _RankingList(
-                          title: 'ALL PARTNERS',
+                          title: 'ALL COMPANIES',
                           items: filteredCEO.map((e) => _RankData(
                             title: e.companyName,
                             subtitle: '${e.totalOrders} total orders',
                             value: '${e.completionRate.toInt()}%',
                             label: 'Efficiency',
                             color: AdminColors.green,
-                            onClick: () => onCEOClick(e.ceoUid),
+                            onClick: () => onCEODetailClick(e.ceoUid),
                           )).toList(),
                         ),
                       ),
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 16),
                       _buildComparisonCard(
                         context: context,
-                        title: 'Supplier Benchmarks',
-                        subtitle: 'Quality and volume indexes (${adminVM.timeRange})',
+                        title: 'Supplier Performance',
+                        subtitle: 'Rating and orders report (${adminVM.timeRange})',
                         metric: supplierMetric,
                         options: const ['Orders', 'Completed', 'Rating', 'Reviews'],
                         onMetricChange: onSupplierMetricChange,
@@ -434,17 +433,17 @@ class _OverallAnalyticsSection extends StatelessWidget {
                           labels: filteredSuppliers.map((e) => e.businessName).toList(),
                           values: filteredSuppliers.map((e) => _getSupplierValue(e)).toList(),
                           color: AdminColors.amber,
-                          onClick: (idx) => onSupplierClick(filteredSuppliers[idx].supplierUid),
+                          onClick: (idx) => onSupplierDetailClick(filteredSuppliers[idx].supplierUid),
                         ),
                         footer: _RankingList(
                           title: 'ALL SUPPLIERS',
                           items: filteredSuppliers.map((e) => _RankData(
                             title: e.businessName,
-                            subtitle: '${e.totalReviews} verified reviews',
+                            subtitle: '${e.totalReviews} reviews',
                             value: e.averageRating.toStringAsFixed(1),
                             label: 'Score',
                             color: AdminColors.amber,
-                            onClick: () => onSupplierClick(e.supplierUid),
+                            onClick: () => onSupplierDetailClick(e.supplierUid),
                           )).toList(),
                         ),
                       ),
@@ -480,8 +479,8 @@ class _OverallAnalyticsSection extends StatelessWidget {
 
   Widget _buildMetricsGrid(BuildContext context, AdminStats stats, String range) {
     final width = MediaQuery.of(context).size.width;
-    int cols = width > 1400 ? 4 : (width > 900 ? 2 : 1);
-    double ratio = width > 600 ? 2.5 : 3.0;
+    int cols = width > 1000 ? 3 : (width > 600 ? 2 : 1);
+    double ratio = width > 1000 ? 3.8 : (width > 600 ? 3.2 : 4.5);
 
     return GridView.count(
       crossAxisCount: cols,
@@ -491,10 +490,10 @@ class _OverallAnalyticsSection extends StatelessWidget {
       mainAxisSpacing: 16,
       childAspectRatio: ratio,
       children: [
-        _ExecutiveStatCard(label: 'Total Tenants', value: '${stats.totalCEOs}', icon: Icons.business_center_rounded, color: AdminColors.navy),
-        _ExecutiveStatCard(label: 'Net Volume ($range)', value: '${stats.totalOrders}', icon: Icons.analytics_rounded, color: AdminColors.green),
-        _ExecutiveStatCard(label: 'Active Force', value: '${stats.totalFieldUsers}', icon: Icons.engineering_rounded, color: AdminColors.amber),
-        _ExecutiveStatCard(label: 'Market Health ($range)', value: '${stats.avgSupplierRating.toStringAsFixed(1)} ★', icon: Icons.verified_rounded, color: AdminColors.purple),
+        _ExecutiveStatCard(label: 'Companies', value: '${stats.totalCEOs}', icon: Icons.business_center_rounded, color: AdminColors.navy),
+        _ExecutiveStatCard(label: 'Orders ($range)', value: '${stats.totalOrders}', icon: Icons.analytics_rounded, color: AdminColors.green),
+        _ExecutiveStatCard(label: 'Field Users', value: '${stats.totalFieldUsers}', icon: Icons.engineering_rounded, color: AdminColors.amber),
+        _ExecutiveStatCard(label: 'Avg Rating', value: stats.avgSupplierRating.toStringAsFixed(1), icon: Icons.star_rounded, color: AdminColors.purple),
       ],
     );
   }
@@ -509,22 +508,14 @@ class _OverallAnalyticsSection extends StatelessWidget {
     required Widget chart,
     required Widget footer,
   }) {
-    final double screenWidth = MediaQuery.of(context).size.width;
     return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 15, offset: const Offset(0, 4)),
-        ],
-      ),
+      decoration: AdminTheme.cardDecoration(),
       clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.all(16),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -532,8 +523,8 @@ class _OverallAnalyticsSection extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(title, style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.w800, color: AdminColors.navy)),
-                      Text(subtitle, style: AdminTheme.mutedStyle(size: 12)),
+                      Text(title, style: GoogleFonts.plusJakartaSans(fontSize: 14, fontWeight: FontWeight.w800, color: AdminColors.navy)),
+                      Text(subtitle, style: AdminTheme.mutedStyle(size: 11)),
                     ],
                   ),
                 ),
@@ -542,16 +533,16 @@ class _OverallAnalyticsSection extends StatelessWidget {
             ),
           ),
           const Divider(height: 1),
-          const SizedBox(height: 24),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
+          const SizedBox(height: 20),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
             child: SizedBox(
-              width: screenWidth < 500 ? 500 : screenWidth - 48,
-              height: 280, 
+              width: double.infinity,
+              height: 240, 
               child: chart
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 20),
           const Divider(height: 1),
           footer,
         ],
@@ -570,22 +561,21 @@ class _ExecutiveStatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final double screenWidth = MediaQuery.of(context).size.width;
+    final bool isMobile = screenWidth < 600;
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
-      ),
+      padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 16, vertical: isMobile ? 8 : 12),
+      decoration: AdminTheme.cardDecoration(),
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
               color: color.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(8),
             ),
-            child: Icon(icon, color: color, size: 22),
+            child: Icon(icon, color: color, size: isMobile ? 18 : 20),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -596,17 +586,20 @@ class _ExecutiveStatCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(label, style: AdminTheme.mutedStyle(size: 11, weight: FontWeight.w600)),
-                  const SizedBox(height: 2),
-                  Text(
-                    value,
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w800,
-                      color: AdminColors.navy,
-                      letterSpacing: -0.5,
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      value,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: isMobile ? 16 : 18,
+                        fontWeight: FontWeight.w800,
+                        color: AdminColors.navy,
+                        letterSpacing: -0.5,
+                      ),
                     ),
                   ),
+                  const SizedBox(height: 2),
+                  Text(label, style: AdminTheme.mutedStyle(size: isMobile ? 9 : 10, weight: FontWeight.w600)),
                 ],
               ),
             ),
@@ -627,13 +620,13 @@ class _ModernBarChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (values.isEmpty) return const Center(child: Text('No visualization data'));
+    if (values.isEmpty) return const Center(child: Text('No data', style: TextStyle(fontSize: 12)));
 
     final double maxVal = values.reduce((a, b) => a > b ? a : b);
     final double maxY = maxVal == 0 ? 100 : maxVal * 1.3;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 12),
       child: BarChart(
         BarChartData(
           alignment: BarChartAlignment.spaceAround,
@@ -643,9 +636,9 @@ class _ModernBarChart extends StatelessWidget {
               getTooltipColor: (_) => AdminColors.navy,
               getTooltipItem: (group, groupIndex, rod, rodIndex) => BarTooltipItem(
                 '${labels[groupIndex]}\n',
-                const TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
+                const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 10),
                 children: [
-                  TextSpan(text: rod.toY.toStringAsFixed(rod.toY < 10 && rod.toY > 0 ? 1 : 0), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 14)),
+                  TextSpan(text: rod.toY.toStringAsFixed(rod.toY < 10 && rod.toY > 0 ? 1 : 0), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 12)),
                 ],
               ),
             ),
@@ -658,13 +651,13 @@ class _ModernBarChart extends StatelessWidget {
             bottomTitles: AxisTitles(
               sideTitles: SideTitles(
                 showTitles: true,
-                reservedSize: 40,
+                reservedSize: 30,
                 getTitlesWidget: (value, meta) {
                   if (value.toInt() >= labels.length) return const SizedBox();
                   final name = labels[value.toInt()];
                   return Padding(
-                    padding: const EdgeInsets.only(top: 10),
-                    child: Text(name.length > 6 ? '${name.substring(0, 4)}..' : name, style: GoogleFonts.plusJakartaSans(fontSize: 9, fontWeight: FontWeight.w700, color: const Color(0xFF94A3B8))),
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(name.length > 5 ? '${name.substring(0, 3)}..' : name, style: GoogleFonts.plusJakartaSans(fontSize: 8, fontWeight: FontWeight.w700, color: const Color(0xFF94A3B8))),
                   );
                 },
               ),
@@ -672,8 +665,8 @@ class _ModernBarChart extends StatelessWidget {
             leftTitles: AxisTitles(
               sideTitles: SideTitles(
                 showTitles: true,
-                reservedSize: 35,
-                getTitlesWidget: (value, meta) => Text(value.toInt().toString(), style: GoogleFonts.plusJakartaSans(fontSize: 9, fontWeight: FontWeight.w700, color: const Color(0xFF94A3B8))),
+                reservedSize: 28,
+                getTitlesWidget: (value, meta) => Text(value.toInt().toString(), style: GoogleFonts.plusJakartaSans(fontSize: 8, fontWeight: FontWeight.w700, color: const Color(0xFF94A3B8))),
               ),
             ),
             topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
@@ -686,8 +679,8 @@ class _ModernBarChart extends StatelessWidget {
             barRods: [BarChartRodData(
               toY: e.value,
               gradient: LinearGradient(colors: [color, color.withValues(alpha: 0.7)], begin: Alignment.bottomCenter, end: Alignment.topCenter),
-              width: 22,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
+              width: 18,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
               backDrawRodData: BackgroundBarChartRodData(show: true, toY: maxY, color: const Color(0xFFF8FAFC)),
             )],
           )).toList(),
@@ -707,45 +700,46 @@ class _RankingList extends StatelessWidget {
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(title.toUpperCase(), style: GoogleFonts.plusJakartaSans(fontSize: 10, fontWeight: FontWeight.w900, color: const Color(0xFF94A3B8), letterSpacing: 1.0)),
-              const Icon(Icons.star_rounded, size: 14, color: AdminColors.amber),
+              Text(title.toUpperCase(), style: GoogleFonts.plusJakartaSans(fontSize: 9, fontWeight: FontWeight.w900, color: const Color(0xFF94A3B8), letterSpacing: 0.8)),
+              const Icon(Icons.star_rounded, size: 12, color: AdminColors.amber),
             ],
           ),
         ),
         if (items.isEmpty)
           const Padding(
-            padding: EdgeInsets.symmetric(vertical: 24),
-            child: Center(child: Text('No results matching criteria', style: TextStyle(fontSize: 12, color: Colors.grey))),
+            padding: EdgeInsets.symmetric(vertical: 20),
+            child: Center(child: Text('No results', style: TextStyle(fontSize: 11, color: Colors.grey))),
           )
         else
           ListView.separated(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
-            itemCount: items.length,
-            separatorBuilder: (_, __) => const Divider(height: 1, indent: 20, endIndent: 20),
+            itemCount: items.length > 5 ? 5 : items.length,
+            separatorBuilder: (_, __) => const Divider(height: 1, indent: 16, endIndent: 16, color: Color(0xFFF8FAFC)),
             itemBuilder: (context, index) {
               final item = items[index];
               return ListTile(
                 onTap: item.onClick,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-                leading: Text('${index + 1}', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, color: AdminColors.textGrey, fontSize: 12)),
-                title: Text(item.title, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, color: AdminColors.navy, fontSize: 13)),
+                dense: true,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+                leading: Text('${index + 1}', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, color: AdminColors.textGrey, fontSize: 11)),
+                title: Text(item.title, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, color: AdminColors.navy, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(item.value, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w900, color: item.color, fontSize: 14)),
-                    const SizedBox(width: 8),
-                    const Icon(Icons.arrow_forward_ios_rounded, size: 12, color: Color(0xFFCBD5E1)),
+                    Text(item.value, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w900, color: item.color, fontSize: 12)),
+                    const SizedBox(width: 6),
+                    const Icon(Icons.arrow_forward_ios_rounded, size: 10, color: Color(0xFFCBD5E1)),
                   ],
                 ),
               );
             },
           ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 8),
       ],
     );
   }
@@ -768,18 +762,18 @@ class _MetricSelector extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 34,
-      padding: const EdgeInsets.symmetric(horizontal: 10),
+      height: 30,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
       decoration: BoxDecoration(
         color: const Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(6),
         border: Border.all(color: const Color(0xFFE2E8F0)),
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
           value: value,
-          icon: const Icon(Icons.unfold_more_rounded, size: 14, color: AdminColors.navy),
-          style: GoogleFonts.plusJakartaSans(fontSize: 11, fontWeight: FontWeight.w800, color: AdminColors.navy),
+          icon: const Icon(Icons.unfold_more_rounded, size: 12, color: AdminColors.navy),
+          style: GoogleFonts.plusJakartaSans(fontSize: 10, fontWeight: FontWeight.w800, color: AdminColors.navy),
           items: options.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
           onChanged: (val) { if (val != null) onChanged(val); },
         ),
@@ -831,19 +825,20 @@ class _CEODetailSectionState extends State<_CEODetailSection> with SingleTickerP
       children: [
         Container(
           color: Colors.white,
+          height: 48,
           child: TabBar(
             controller: _tabController,
             isScrollable: true,
             labelColor: AdminColors.navy,
             unselectedLabelColor: AdminColors.textGrey,
             indicatorColor: AdminColors.green,
-            indicatorWeight: 3,
-            labelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 13),
+            indicatorWeight: 2,
+            labelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 12),
             tabs: const [
-              Tab(text: 'Operational KPI'),
-              Tab(text: 'Workforce'),
-              Tab(text: 'Transactions'),
-              Tab(text: 'History'),
+              Tab(text: 'Performance'),
+              Tab(text: 'Users'),
+              Tab(text: 'Orders'),
+              Tab(text: 'Reports'),
             ],
           ),
         ),
@@ -865,21 +860,21 @@ class _CEODetailSectionState extends State<_CEODetailSection> with SingleTickerP
   Widget _buildOverview(CompanyModel company, CEOPerformanceData stats, String range) {
     final double screenWidth = MediaQuery.of(context).size.width;
     return SingleChildScrollView(
-      padding: EdgeInsets.all(screenWidth < 600 ? 12 : 24),
+      padding: EdgeInsets.all(screenWidth < 600 ? 12 : 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           AdminCard(
-            title: 'Organization Identity',
+            title: 'Company Details',
             child: LayoutBuilder(builder: (context, constraints) {
               final isNarrow = constraints.maxWidth < 600;
               return isNarrow ? Column(
                 children: [
-                  _DetailRow(label: 'CEO Principal', value: stats.companyName),
-                  _DetailRow(label: 'Legal Entity', value: company.name),
-                  _DetailRow(label: 'Verification Status', value: company.status.toUpperCase(), valueColor: AdminColors.green),
-                  _DetailRow(label: 'Service Plan', value: (company.plan ?? 'Pro').toUpperCase()),
-                  _DetailRow(label: 'Onboarding', value: DateFormat('MMM d, yyyy').format(company.createdAt)),
+                  _DetailRow(label: 'CEO Name', value: stats.companyName),
+                  _DetailRow(label: 'Company Name', value: company.name),
+                  _DetailRow(label: 'Status', value: company.status.toUpperCase(), valueColor: AdminColors.green),
+                  _DetailRow(label: 'Plan', value: (company.plan ?? 'Free').toUpperCase()),
+                  _DetailRow(label: 'Joined', value: DateFormat('MMM d, yyyy').format(company.createdAt)),
                 ],
               ) : Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -887,18 +882,18 @@ class _CEODetailSectionState extends State<_CEODetailSection> with SingleTickerP
                   Expanded(
                     child: Column(
                       children: [
-                        _DetailRow(label: 'CEO Principal', value: stats.companyName),
-                        _DetailRow(label: 'Legal Entity', value: company.name),
-                        _DetailRow(label: 'Verification Status', value: company.status.toUpperCase(), valueColor: AdminColors.green),
+                        _DetailRow(label: 'CEO Name', value: stats.companyName),
+                        _DetailRow(label: 'Company Name', value: company.name),
+                        _DetailRow(label: 'Status', value: company.status.toUpperCase(), valueColor: AdminColors.green),
                       ],
                     ),
                   ),
-                  const SizedBox(width: 48),
+                  const SizedBox(width: 32),
                   Expanded(
                     child: Column(
                       children: [
-                        _DetailRow(label: 'Service Plan', value: (company.plan ?? 'Pro').toUpperCase()),
-                        _DetailRow(label: 'Onboarding', value: DateFormat('MMM d, yyyy').format(company.createdAt)),
+                        _DetailRow(label: 'Plan', value: (company.plan ?? 'Free').toUpperCase()),
+                        _DetailRow(label: 'Joined', value: DateFormat('MMM d, yyyy').format(company.createdAt)),
                       ],
                     ),
                   ),
@@ -906,24 +901,24 @@ class _CEODetailSectionState extends State<_CEODetailSection> with SingleTickerP
               );
             }),
           ),
-          const SizedBox(height: 24),
-          Text('Activity Overview ($range)', style: AdminTheme.titleStyle(size: 14)),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
+          Text('Statistics ($range)', style: AdminTheme.titleStyle(size: 13)),
+          const SizedBox(height: 10),
           LayoutBuilder(
             builder: (context, constraints) {
-              final cols = constraints.maxWidth > 900 ? 4 : (constraints.maxWidth > 600 ? 2 : 1);
+              final cols = constraints.maxWidth > 800 ? 4 : (constraints.maxWidth > 500 ? 2 : 1);
               return GridView.count(
                 crossAxisCount: cols,
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
-                crossAxisSpacing: 16,
-                mainAxisSpacing: 16,
-                childAspectRatio: 2.2,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                childAspectRatio: 2.8,
                 children: [
-                  _MetricTile(label: 'Total POs', value: '${stats.totalOrders}', icon: Icons.shopping_bag_rounded, color: AdminColors.navy),
-                  _MetricTile(label: 'Fulfilled', value: '${stats.completedOrders}', icon: Icons.check_circle_rounded, color: AdminColors.green),
-                  _MetricTile(label: 'In-Flight', value: '${stats.activeOrders}', icon: Icons.pending_rounded, color: AdminColors.amber),
-                  _MetricTile(label: 'Operations', value: '${stats.fieldUserCount}', icon: Icons.people_rounded, color: AdminColors.purple),
+                  _MetricTile(label: 'Total Orders', value: '${stats.totalOrders}', icon: Icons.shopping_bag_rounded, color: AdminColors.navy),
+                  _MetricTile(label: 'Completed', value: '${stats.completedOrders}', icon: Icons.check_circle_rounded, color: AdminColors.green),
+                  _MetricTile(label: 'Pending', value: '${stats.activeOrders}', icon: Icons.pending_rounded, color: AdminColors.amber),
+                  _MetricTile(label: 'Total Users', value: '${stats.fieldUserCount}', icon: Icons.people_rounded, color: AdminColors.purple),
                 ],
               );
             },
@@ -937,27 +932,29 @@ class _CEODetailSectionState extends State<_CEODetailSection> with SingleTickerP
     final users = vm.allUsers.where((u) => u.companyId == company.id && u.role == 'field_user').toList();
     final double screenWidth = MediaQuery.of(context).size.width;
     return SingleChildScrollView(
-      padding: EdgeInsets.all(screenWidth < 600 ? 12 : 24),
+      padding: EdgeInsets.all(screenWidth < 600 ? 12 : 20),
       child: AdminCard(
-        title: 'Workforce Tracking',
+        title: 'Users',
         padding: EdgeInsets.zero,
         child: users.isEmpty
-            ? const Padding(padding: EdgeInsets.all(48), child: Center(child: Text('No operational staff records')))
+            ? const Padding(padding: EdgeInsets.all(32), child: Center(child: Text('No users found.', style: TextStyle(fontSize: 12))))
             : SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: DataTable(
-                  headingTextStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, color: AdminColors.navy, fontSize: 12),
+                  headingTextStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, color: AdminColors.navy, fontSize: 11),
+                  dataRowMinHeight: 36,
+                  dataRowMaxHeight: 48,
                   columns: const [
-                    DataColumn(label: Text('Staff Member')),
-                    DataColumn(label: Text('ID Reference')),
-                    DataColumn(label: Text('Activity')),
-                    DataColumn(label: Text('Onboarded')),
+                    DataColumn(label: Text('Name')),
+                    DataColumn(label: Text('ID')),
+                    DataColumn(label: Text('Status')),
+                    DataColumn(label: Text('Joined')),
                   ],
                   rows: users.map((u) => DataRow(cells: [
-                    DataCell(Text(u.name, style: AdminTheme.bodyStyle(weight: FontWeight.w700))),
-                    DataCell(Text(u.uid.substring(0, 8), style: GoogleFonts.robotoMono(fontSize: 11))),
-                    DataCell(StatusChip(status: u.status ?? 'active')),
-                    DataCell(Text(DateFormat('MMM d, yyyy').format(u.createdAt))),
+                    DataCell(Text(u.name, style: AdminTheme.bodyStyle(weight: FontWeight.w700, size: 12))),
+                    DataCell(Text(u.uid.substring(0, 8), style: GoogleFonts.robotoMono(fontSize: 10))),
+                    DataCell(Transform.scale(scale: 0.8, child: StatusChip(status: u.status ?? 'active'))),
+                    DataCell(Text(DateFormat('MMM d, yyyy').format(u.createdAt), style: const TextStyle(fontSize: 11))),
                   ])).toList(),
                 ),
               ),
@@ -973,29 +970,31 @@ class _CEODetailSectionState extends State<_CEODetailSection> with SingleTickerP
         if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
         final orders = snapshot.data!;
         return SingleChildScrollView(
-          padding: EdgeInsets.all(screenWidth < 600 ? 12 : 24),
+          padding: EdgeInsets.all(screenWidth < 600 ? 12 : 20),
           child: AdminCard(
-            title: 'Transaction Audit Trail (${vm.timeRange})',
+            title: 'Order History (${vm.timeRange})',
             padding: EdgeInsets.zero,
             child: orders.isEmpty
-                ? const Padding(padding: EdgeInsets.all(48), child: Center(child: Text('No transactions recorded in this period')))
+                ? const Padding(padding: EdgeInsets.all(32), child: Center(child: Text('No orders found.', style: TextStyle(fontSize: 12))))
                 : SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: DataTable(
-                      headingTextStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, color: AdminColors.navy, fontSize: 12),
+                      headingTextStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, color: AdminColors.navy, fontSize: 11),
+                      dataRowMinHeight: 36,
+                      dataRowMaxHeight: 48,
                       columns: const [
-                        DataColumn(label: Text('Ref #')),
-                        DataColumn(label: Text('SKU / Material')),
-                        DataColumn(label: Text('Vendor')),
-                        DataColumn(label: Text('Total (PKR)')),
+                        DataColumn(label: Text('ID')),
+                        DataColumn(label: Text('Material')),
+                        DataColumn(label: Text('Supplier')),
+                        DataColumn(label: Text('Total (Rs)')),
                         DataColumn(label: Text('Status')),
                       ],
                       rows: orders.map((o) => DataRow(cells: [
-                        DataCell(Text(o.orderId.substring(0, 8), style: GoogleFonts.robotoMono(fontSize: 11))),
-                        DataCell(Text(o.materialName)),
-                        DataCell(Text(o.supplierName)),
-                        DataCell(Text(NumberFormat.currency(symbol: '', decimalDigits: 0).format(o.totalAmount))),
-                        DataCell(StatusChip(status: o.status)),
+                        DataCell(Text(o.orderId.substring(0, 8), style: GoogleFonts.robotoMono(fontSize: 10))),
+                        DataCell(Text(o.materialName, style: const TextStyle(fontSize: 12))),
+                        DataCell(Text(o.supplierName, style: const TextStyle(fontSize: 12))),
+                        DataCell(Text(NumberFormat.currency(symbol: '', decimalDigits: 0).format(o.totalAmount), style: const TextStyle(fontSize: 12))),
+                        DataCell(Transform.scale(scale: 0.8, child: StatusChip(status: o.status))),
                       ])).toList(),
                     ),
                   ),
@@ -1006,7 +1005,6 @@ class _CEODetailSectionState extends State<_CEODetailSection> with SingleTickerP
   }
 
   Widget _buildPerformanceGraph(AdminViewModel vm, CompanyModel company) {
-    final double screenWidth = MediaQuery.of(context).size.width;
     return FutureBuilder<List<OrderModel>>(
       future: vm.getCompanyOrders(company.id),
       builder: (context, snapshot) {
@@ -1028,48 +1026,45 @@ class _CEODetailSectionState extends State<_CEODetailSection> with SingleTickerP
         double interval = range > (86400000 * 14) ? 86400000 * 7 : 86400000;
 
         return SingleChildScrollView(
-          padding: EdgeInsets.all(screenWidth < 600 ? 12 : 24),
+          padding: const EdgeInsets.all(20),
           child: AdminCard(
-            title: 'Growth Analysis (${vm.timeRange})',
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: SizedBox(
-                width: screenWidth < 500 ? 500 : screenWidth - 48,
-                height: 400,
-                child: spots.isEmpty
-                  ? const Center(child: Text('Insufficient historical data for trend analysis'))
-                  : LineChart(LineChartData(
-                      minX: minX, maxX: maxX, minY: 0,
-                      gridData: FlGridData(show: true, drawVerticalLine: false, getDrawingHorizontalLine: (v) => FlLine(color: const Color(0xFFF1F5F9), strokeWidth: 1.5)),
-                      borderData: FlBorderData(show: false),
-                      lineTouchData: LineTouchData(
-                        touchTooltipData: LineTouchTooltipData(
-                          getTooltipColor: (_) => AdminColors.navy,
-                          getTooltipItems: (touchedSpots) => touchedSpots.map((s) => LineTooltipItem('${DateFormat('MMM d').format(DateTime.fromMillisecondsSinceEpoch(s.x.toInt()))}\n${s.y.toInt()} Orders', const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))).toList(),
-                        ),
+            title: 'Growth Report (${vm.timeRange})',
+            child: SizedBox(
+              width: double.infinity,
+              height: 300,
+              child: spots.isEmpty
+                ? const Center(child: Text('No data found.', style: TextStyle(fontSize: 12)))
+                : LineChart(LineChartData(
+                    minX: minX, maxX: maxX, minY: 0,
+                    gridData: FlGridData(show: true, drawVerticalLine: false, getDrawingHorizontalLine: (v) => FlLine(color: const Color(0xFFF1F5F9), strokeWidth: 1.5)),
+                    borderData: FlBorderData(show: false),
+                    lineTouchData: LineTouchData(
+                      touchTooltipData: LineTouchTooltipData(
+                        getTooltipColor: (_) => AdminColors.navy,
+                        getTooltipItems: (touchedSpots) => touchedSpots.map((s) => LineTooltipItem('${DateFormat('MMM d').format(DateTime.fromMillisecondsSinceEpoch(s.x.toInt()))}\n${s.y.toInt()} Orders', const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 10))).toList(),
                       ),
-                      titlesData: FlTitlesData(
-                        leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 45)),
-                        bottomTitles: AxisTitles(
-                          sideTitles: SideTitles(
-                            showTitles: true, 
-                            interval: interval, 
-                            getTitlesWidget: (val, meta) => Padding(padding: const EdgeInsets.only(top: 12), child: Text(DateFormat('MMM d').format(DateTime.fromMillisecondsSinceEpoch(val.toInt())), style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: Color(0xFF94A3B8))))
-                          )
-                        ),
-                        topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                        rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    ),
+                    titlesData: FlTitlesData(
+                      leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 32, getTitlesWidget: (v, m) => Text(v.toInt().toString(), style: const TextStyle(fontSize: 8, color: Color(0xFF94A3B8))))),
+                      bottomTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true, 
+                          interval: interval, 
+                          getTitlesWidget: (val, meta) => Padding(padding: const EdgeInsets.only(top: 8), child: Text(DateFormat('MMM d').format(DateTime.fromMillisecondsSinceEpoch(val.toInt())), style: const TextStyle(fontSize: 8, fontWeight: FontWeight.w700, color: Color(0xFF94A3B8))))
+                        )
                       ),
-                      lineBarsData: [LineChartBarData(
-                        spots: spots, 
-                        isCurved: true, 
-                        color: AdminColors.green, 
-                        barWidth: 4, 
-                        dotData: const FlDotData(show: true), 
-                        belowBarData: BarAreaData(show: true, gradient: LinearGradient(colors: [AdminColors.green.withValues(alpha: 0.2), AdminColors.green.withValues(alpha: 0)], begin: Alignment.topCenter, end: Alignment.bottomCenter))
-                      )]
-                    )),
-              ),
+                      topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                      rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    ),
+                    lineBarsData: [LineChartBarData(
+                      spots: spots, 
+                      isCurved: true, 
+                      color: AdminColors.green, 
+                      barWidth: 3, 
+                      dotData: const FlDotData(show: true, checkToShowDot: _checkToShowDot), 
+                      belowBarData: BarAreaData(show: true, gradient: LinearGradient(colors: [AdminColors.green.withValues(alpha: 0.15), AdminColors.green.withValues(alpha: 0)], begin: Alignment.topCenter, end: Alignment.bottomCenter))
+                    )]
+                  )),
             ),
           ),
         );
@@ -1077,6 +1072,8 @@ class _CEODetailSectionState extends State<_CEODetailSection> with SingleTickerP
     );
   }
 }
+
+bool _checkToShowDot(FlSpot spot, LineChartBarData barData) => spot.y > 0;
 
 class _SupplierDetailSection extends StatefulWidget {
   final String supplierUid;
@@ -1122,15 +1119,16 @@ class _SupplierDetailSectionState extends State<_SupplierDetailSection> with Sin
       children: [
         Container(
           color: Colors.white,
+          height: 48,
           child: TabBar(
             controller: _tabController,
             isScrollable: true,
             labelColor: AdminColors.navy,
             unselectedLabelColor: AdminColors.textGrey,
             indicatorColor: AdminColors.amber,
-            indicatorWeight: 3,
-            labelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 13),
-            tabs: const [Tab(text: 'Market Identity'), Tab(text: 'Supply Logs'), Tab(text: 'Sentiment'), Tab(text: 'KPI Mapping')],
+            indicatorWeight: 2,
+            labelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 12),
+            tabs: const [Tab(text: 'Details'), Tab(text: 'Orders'), Tab(text: 'Reviews'), Tab(text: 'Performance')],
           ),
         ),
         Expanded(
@@ -1151,21 +1149,21 @@ class _SupplierDetailSectionState extends State<_SupplierDetailSection> with Sin
   Widget _buildOverview(UserModel user, SupplierPerformanceData stats, String range) {
     final double screenWidth = MediaQuery.of(context).size.width;
     return SingleChildScrollView(
-      padding: EdgeInsets.all(screenWidth < 600 ? 12 : 24),
+      padding: EdgeInsets.all(screenWidth < 600 ? 12 : 20),
       child: Column(
         children: [
           AdminCard(
-            title: 'Market Identity',
+            title: 'Supplier Details',
             child: LayoutBuilder(builder: (context, constraints) {
               final isNarrow = constraints.maxWidth < 600;
               return isNarrow ? Column(
                 children: [
-                  _DetailRow(label: 'Trade Name', value: user.name),
-                  _DetailRow(label: 'Network ID', value: user.uid.substring(0, 12).toUpperCase()),
-                  _DetailRow(label: 'Compliance', value: 'VERIFIED', valueColor: AdminColors.green),
+                  _DetailRow(label: 'Business', value: user.name),
+                  _DetailRow(label: 'ID', value: user.uid.substring(0, 10).toUpperCase()),
+                  _DetailRow(label: 'Status', value: 'VERIFIED', valueColor: AdminColors.green),
                   _DetailRow(label: 'Location', value: user.city),
-                  _DetailRow(label: 'Tenure', value: DateFormat('MMM yyyy').format(user.createdAt)),
-                  _DetailRow(label: 'Primary Contact', value: user.email),
+                  _DetailRow(label: 'Joined', value: DateFormat('MMM yyyy').format(user.createdAt)),
+                  _DetailRow(label: 'Email', value: user.email),
                 ],
               ) : Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1173,19 +1171,19 @@ class _SupplierDetailSectionState extends State<_SupplierDetailSection> with Sin
                   Expanded(
                     child: Column(
                       children: [
-                        _DetailRow(label: 'Trade Name', value: user.name),
-                        _DetailRow(label: 'Network ID', value: user.uid.substring(0, 12).toUpperCase()),
-                        _DetailRow(label: 'Compliance', value: 'VERIFIED', valueColor: AdminColors.green),
+                        _DetailRow(label: 'Business', value: user.name),
+                        _DetailRow(label: 'ID', value: user.uid.substring(0, 10).toUpperCase()),
+                        _DetailRow(label: 'Status', value: 'VERIFIED', valueColor: AdminColors.green),
                       ],
                     ),
                   ),
-                  const SizedBox(width: 48),
+                  const SizedBox(width: 32),
                   Expanded(
                     child: Column(
                       children: [
                         _DetailRow(label: 'Location', value: user.city),
-                        _DetailRow(label: 'Tenure', value: DateFormat('MMM yyyy').format(user.createdAt)),
-                        _DetailRow(label: 'Primary Contact', value: user.email),
+                        _DetailRow(label: 'Joined', value: DateFormat('MMM yyyy').format(user.createdAt)),
+                        _DetailRow(label: 'Email', value: user.email),
                       ],
                     ),
                   ),
@@ -1193,24 +1191,24 @@ class _SupplierDetailSectionState extends State<_SupplierDetailSection> with Sin
               );
             }),
           ),
-          const SizedBox(height: 24),
-          Align(alignment: Alignment.centerLeft, child: Text('Supply Metrics ($range)', style: AdminTheme.titleStyle(size: 14))),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
+          Align(alignment: Alignment.centerLeft, child: Text('Statistics ($range)', style: AdminTheme.titleStyle(size: 13))),
+          const SizedBox(height: 10),
           LayoutBuilder(
             builder: (context, constraints) {
-              final cols = constraints.maxWidth > 900 ? 4 : (constraints.maxWidth > 600 ? 2 : 1);
+              final cols = constraints.maxWidth > 800 ? 4 : (constraints.maxWidth > 500 ? 2 : 1);
               return GridView.count(
                 crossAxisCount: cols,
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
-                crossAxisSpacing: 16,
-                mainAxisSpacing: 16,
-                childAspectRatio: 2.2,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                childAspectRatio: 2.8,
                 children: [
-                  _MetricTile(label: 'Supply Capacity', value: '${stats.totalOrders}', icon: Icons.local_shipping_rounded, color: AdminColors.navy),
-                  _MetricTile(label: 'Success Delta', value: '${stats.completedOrders}', icon: Icons.assignment_turned_in_rounded, color: AdminColors.green),
-                  _MetricTile(label: 'Market Score', value: stats.averageRating.toStringAsFixed(1), icon: Icons.star_rounded, color: AdminColors.amber),
-                  _MetricTile(label: 'Public Sentiment', value: '${stats.totalReviews}', icon: Icons.rate_review_rounded, color: AdminColors.purple),
+                  _MetricTile(label: 'Total Orders', value: '${stats.totalOrders}', icon: Icons.local_shipping_rounded, color: AdminColors.navy),
+                  _MetricTile(label: 'Completed', value: '${stats.completedOrders}', icon: Icons.assignment_turned_in_rounded, color: AdminColors.green),
+                  _MetricTile(label: 'Rating', value: stats.averageRating.toStringAsFixed(1), icon: Icons.star_rounded, color: AdminColors.amber),
+                  _MetricTile(label: 'Reviews', value: '${stats.totalReviews}', icon: Icons.rate_review_rounded, color: AdminColors.purple),
                 ],
               );
             },
@@ -1228,29 +1226,31 @@ class _SupplierDetailSectionState extends State<_SupplierDetailSection> with Sin
         if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
         final orders = snapshot.data!;
         return SingleChildScrollView(
-          padding: EdgeInsets.all(screenWidth < 600 ? 12 : 24),
+          padding: EdgeInsets.all(screenWidth < 600 ? 12 : 20),
           child: AdminCard(
-            title: 'Supply logs (${vm.timeRange})',
+            title: 'Order History (${vm.timeRange})',
             padding: EdgeInsets.zero,
             child: orders.isEmpty
-                ? const Padding(padding: EdgeInsets.all(48), child: Center(child: Text('No supply logs found for this period')))
+                ? const Padding(padding: EdgeInsets.all(32), child: Center(child: Text('No orders found.', style: TextStyle(fontSize: 12))))
                 : SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: DataTable(
-                      headingTextStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, color: AdminColors.navy, fontSize: 12),
+                      headingTextStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, color: AdminColors.navy, fontSize: 11),
+                      dataRowMinHeight: 36,
+                      dataRowMaxHeight: 48,
                       columns: const [
-                        DataColumn(label: Text('PO Reference')),
+                        DataColumn(label: Text('ID')),
                         DataColumn(label: Text('Material')),
-                        DataColumn(label: Text('Requester')),
-                        DataColumn(label: Text('Value (PKR)')),
+                        DataColumn(label: Text('User')),
+                        DataColumn(label: Text('Total (Rs)')),
                         DataColumn(label: Text('Status')),
                       ],
                       rows: orders.map((o) => DataRow(cells: [
-                        DataCell(Text(o.orderId.substring(0, 8), style: GoogleFonts.robotoMono(fontSize: 11))),
-                        DataCell(Text(o.materialName)),
-                        DataCell(Text(o.fieldUserName)),
-                        DataCell(Text(NumberFormat.currency(symbol: '', decimalDigits: 0).format(o.totalAmount))),
-                        DataCell(StatusChip(status: o.status)),
+                        DataCell(Text(o.orderId.substring(0, 8), style: GoogleFonts.robotoMono(fontSize: 10))),
+                        DataCell(Text(o.materialName, style: const TextStyle(fontSize: 12))),
+                        DataCell(Text(o.fieldUserName, style: const TextStyle(fontSize: 12))),
+                        DataCell(Text(NumberFormat.currency(symbol: '', decimalDigits: 0).format(o.totalAmount), style: const TextStyle(fontSize: 12))),
+                        DataCell(Transform.scale(scale: 0.8, child: StatusChip(status: o.status))),
                       ])).toList(),
                     ),
                   ),
@@ -1268,30 +1268,30 @@ class _SupplierDetailSectionState extends State<_SupplierDetailSection> with Sin
         if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
         final reviews = snapshot.data!;
         return SingleChildScrollView(
-          padding: EdgeInsets.all(screenWidth < 600 ? 12 : 24),
+          padding: EdgeInsets.all(screenWidth < 600 ? 12 : 20),
           child: AdminCard(
-            title: 'Sentiment Logs (${vm.timeRange})',
+            title: 'Reviews (${vm.timeRange})',
             padding: EdgeInsets.zero,
             child: reviews.isEmpty
-                ? const Padding(padding: EdgeInsets.all(48), child: Center(child: Text('No sentiment data collected for this period')))
+                ? const Padding(padding: EdgeInsets.all(32), child: Center(child: Text('No reviews found.', style: TextStyle(fontSize: 12))))
                 : ListView.separated(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
                     itemCount: reviews.length,
-                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFFF8FAFC)),
                     itemBuilder: (context, index) {
                       final r = reviews[index];
                       return ListTile(
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                        leading: CircleAvatar(backgroundColor: const Color(0xFFF1F5F9), child: Text(r.userName[0], style: const TextStyle(fontWeight: FontWeight.w900, color: AdminColors.navy))),
+                        dense: true,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                        leading: CircleAvatar(radius: 14, backgroundColor: const Color(0xFFF1F5F9), child: Text(r.userName.isNotEmpty ? r.userName[0] : '?', style: const TextStyle(fontWeight: FontWeight.w900, color: AdminColors.navy, fontSize: 11))),
                         title: Row(
                           children: [
-                            Text(r.userName, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 13)),
-                            const Spacer(),
-                            Row(children: List.generate(5, (i) => Icon(Icons.star_rounded, size: 14, color: i < r.rating ? AdminColors.amber : const Color(0xFFE2E8F0)))),
+                            Expanded(child: Text(r.userName, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 12), overflow: TextOverflow.ellipsis)),
+                            Row(children: List.generate(5, (i) => Icon(Icons.star_rounded, size: 10, color: i < r.rating ? AdminColors.amber : const Color(0xFFE2E8F0)))),
                           ],
                         ),
-                        subtitle: Padding(padding: const EdgeInsets.only(top: 4), child: Text(r.comment, style: AdminTheme.bodyStyle(size: 12, color: const Color(0xFF475569)))),
+                        subtitle: Padding(padding: const EdgeInsets.only(top: 2), child: Text(r.comment, style: AdminTheme.bodyStyle(size: 11, color: const Color(0xFF475569)))),
                       );
                     },
                   ),
@@ -1302,7 +1302,6 @@ class _SupplierDetailSectionState extends State<_SupplierDetailSection> with Sin
   }
 
   Widget _buildPerformanceGraph(AdminViewModel vm, UserModel user) {
-    final double screenWidth = MediaQuery.of(context).size.width;
     return FutureBuilder<List<dynamic>>(
       future: Future.wait([vm.getSupplierOrders(user.uid), vm.getSupplierRatings(user.uid)]),
       builder: (context, snapshot) {
@@ -1330,62 +1329,54 @@ class _SupplierDetailSectionState extends State<_SupplierDetailSection> with Sin
         double interval = range > (86400000 * 14) ? 86400000 * 7 : 86400000;
 
         return SingleChildScrollView(
-          padding: EdgeInsets.all(screenWidth < 600 ? 12 : 24),
+          padding: const EdgeInsets.all(20),
           child: AdminCard(
-            title: 'KPI Trend Mapping (${vm.timeRange})',
+            title: 'Performance Report (${vm.timeRange})',
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _MetricSelector(value: _performanceMetric, options: const ['Orders', 'Rating'], onChanged: (v) => setState(() => _performanceMetric = v)),
-                const SizedBox(height: 24),
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: SizedBox(
-                    width: screenWidth < 500 ? 500 : screenWidth - 48,
-                    height: 400,
-                    child: spots.isEmpty
-                      ? const Center(child: Text('Insufficient historical throughput for mapping in this period'))
-                      : LineChart(LineChartData(
-                          minX: minX, maxX: maxX, minY: 0, 
-                          maxY: _performanceMetric == 'Rating' ? 5.5 : null,
-                          gridData: FlGridData(show: true, drawVerticalLine: false, getDrawingHorizontalLine: (v) => FlLine(color: const Color(0xFFF1F5F9), strokeWidth: 1.5)),
-                          borderData: FlBorderData(show: false),
-                          lineTouchData: LineTouchData(
-                            touchTooltipData: LineTouchTooltipData(
-                              getTooltipColor: (_) => AdminColors.navy,
-                              getTooltipItems: (touchedSpots) => touchedSpots.map((s) => LineTooltipItem(
-                                '${DateFormat('MMM d').format(DateTime.fromMillisecondsSinceEpoch(s.x.toInt()))}\n${_performanceMetric == 'Rating' ? s.y.toStringAsFixed(1) : s.y.toInt()} ${_performanceMetric}',
-                                const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)
-                              )).toList(),
-                            ),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  height: 300,
+                  child: spots.isEmpty
+                    ? const Center(child: Text('No data found.', style: TextStyle(fontSize: 12)))
+                    : LineChart(LineChartData(
+                        minX: minX, maxX: maxX, minY: 0, 
+                        maxY: _performanceMetric == 'Rating' ? 5.5 : null,
+                        gridData: FlGridData(show: true, drawVerticalLine: false, getDrawingHorizontalLine: (v) => FlLine(color: const Color(0xFFF1F5F9), strokeWidth: 1.5)),
+                        borderData: FlBorderData(show: false),
+                        lineTouchData: LineTouchData(
+                          touchTooltipData: LineTouchTooltipData(
+                            getTooltipColor: (_) => AdminColors.navy,
+                            getTooltipItems: (touchedSpots) => touchedSpots.map((s) => LineTooltipItem(
+                              '${DateFormat('MMM d').format(DateTime.fromMillisecondsSinceEpoch(s.x.toInt()))}\n${_performanceMetric == 'Rating' ? s.y.toStringAsFixed(1) : s.y.toInt()} ${_performanceMetric}',
+                              const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 10)
+                            )).toList(),
                           ),
-                          titlesData: FlTitlesData(
-                            leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 45)),
-                            bottomTitles: AxisTitles(
-                              sideTitles: SideTitles(
-                                showTitles: true, 
-                                interval: interval, 
-                                getTitlesWidget: (val, meta) {
-                                  return Padding(
-                                    padding: const EdgeInsets.only(top: 12),
-                                    child: Text(DateFormat('MMM d').format(DateTime.fromMillisecondsSinceEpoch(val.toInt())), style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: Color(0xFF94A3B8)))
-                                  );
-                                }
-                              )
-                            ),
-                            topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                            rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                        ),
+                        titlesData: FlTitlesData(
+                          leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 32, getTitlesWidget: (v, m) => Text(v.toInt().toString(), style: const TextStyle(fontSize: 8, color: Color(0xFF94A3B8))))),
+                          bottomTitles: AxisTitles(
+                            sideTitles: SideTitles(
+                              showTitles: true, 
+                              interval: interval, 
+                              getTitlesWidget: (val, meta) => Padding(padding: const EdgeInsets.only(top: 8), child: Text(DateFormat('MMM d').format(DateTime.fromMillisecondsSinceEpoch(val.toInt())), style: const TextStyle(fontSize: 8, fontWeight: FontWeight.w700, color: Color(0xFF94A3B8))))
+                            )
                           ),
-                          lineBarsData: [LineChartBarData(
-                            spots: spots, 
-                            isCurved: true, 
-                            color: AdminColors.amber, 
-                            barWidth: 5, 
-                            dotData: const FlDotData(show: true), 
-                            belowBarData: BarAreaData(show: true, gradient: LinearGradient(colors: [AdminColors.amber.withValues(alpha: 0.2), AdminColors.amber.withValues(alpha: 0)], begin: Alignment.topCenter, end: Alignment.bottomCenter))
-                          )]
-                        )),
-                  ),
+                          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                        ),
+                        lineBarsData: [LineChartBarData(
+                          spots: spots, 
+                          isCurved: true, 
+                          color: AdminColors.amber, 
+                          barWidth: 3, 
+                          dotData: const FlDotData(show: true, checkToShowDot: _checkToShowDot), 
+                          belowBarData: BarAreaData(show: true, gradient: LinearGradient(colors: [AdminColors.amber.withValues(alpha: 0.15), AdminColors.amber.withValues(alpha: 0)], begin: Alignment.topCenter, end: Alignment.bottomCenter))
+                        )]
+                      )),
                 ),
               ],
             ),
@@ -1407,20 +1398,20 @@ class _MetricTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(color: const Color(0xFFF1F5F9), width: 1),
       ),
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
-            child: Icon(icon, color: color, size: 18),
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(6)),
+            child: Icon(icon, color: color, size: 14),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 10),
           Expanded(
             child: FittedBox(
               fit: BoxFit.scaleDown,
@@ -1429,9 +1420,9 @@ class _MetricTile extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(label, style: GoogleFonts.plusJakartaSans(fontSize: 10, fontWeight: FontWeight.w700, color: AdminColors.textGrey, letterSpacing: 0.5)),
-                  const SizedBox(height: 2),
-                  Text(value, style: GoogleFonts.plusJakartaSans(fontSize: 18, fontWeight: FontWeight.w900, color: AdminColors.navy, letterSpacing: -0.5)),
+                  Text(label, style: GoogleFonts.plusJakartaSans(fontSize: 9, fontWeight: FontWeight.w700, color: AdminColors.textGrey, letterSpacing: 0.5)),
+                  const SizedBox(height: 1),
+                  Text(value, style: GoogleFonts.plusJakartaSans(fontSize: 16, fontWeight: FontWeight.w900, color: AdminColors.navy, letterSpacing: -0.5)),
                 ],
               ),
             ),
@@ -1450,12 +1441,12 @@ class _DetailRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF64748B))),
-          Text(value, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, color: valueColor ?? AdminColors.navy, fontSize: 13)),
+          Text(label, style: GoogleFonts.plusJakartaSans(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF64748B))),
+          Text(value, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, color: valueColor ?? AdminColors.navy, fontSize: 12)),
         ],
       ),
     );

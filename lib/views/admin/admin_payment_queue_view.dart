@@ -59,16 +59,19 @@ class _AdminPaymentQueueViewState extends State<AdminPaymentQueueView>
       children: [
         Container(
           color: Colors.white,
-          child: TabBar(
-            controller: _tabController,
-            labelColor: AdminColors.navy,
-            unselectedLabelColor: AdminColors.textGrey,
-            indicatorColor: AdminColors.amber,
-            indicatorWeight: 3,
-            tabs: const [
-              Tab(icon: Icon(Icons.payments_rounded, size: 20), text: 'All Payments'),
-              Tab(icon: Icon(Icons.error_outline_rounded, size: 20), text: 'Failed / Incomplete'),
-            ],
+          child: Material(
+            type: MaterialType.transparency,
+            child: TabBar(
+              controller: _tabController,
+              labelColor: AdminColors.navy,
+              unselectedLabelColor: AdminColors.textGrey,
+              indicatorColor: AdminColors.amber,
+              indicatorWeight: 3,
+              tabs: const [
+                Tab(icon: Icon(Icons.payments_rounded, size: 20), text: 'All Payments'),
+                Tab(icon: Icon(Icons.error_outline_rounded, size: 20), text: 'Failed / Incomplete'),
+              ],
+            ),
           ),
         ),
         _buildFilters(),
@@ -84,7 +87,12 @@ class _AdminPaymentQueueViewState extends State<AdminPaymentQueueView>
       ],
     );
 
-    if (widget.embedded) return content;
+    if (widget.embedded) {
+      return Material(
+        color: AdminColors.screenBg,
+        child: content,
+      );
+    }
 
     return Scaffold(
       appBar: const AdminAppBar(title: 'Payments'),
@@ -98,22 +106,25 @@ class _AdminPaymentQueueViewState extends State<AdminPaymentQueueView>
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
       color: Colors.white,
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          Text('Payer', style: AdminTheme.mutedStyle(size: 11)),
-          _chip('All', _roleFilter == 'all', () => setState(() => _roleFilter = 'all')),
-          _chip('CEO', _roleFilter == 'ceo', () => setState(() => _roleFilter = 'ceo')),
-          _chip('Supplier', _roleFilter == 'supplier', () => setState(() => _roleFilter = 'supplier')),
-          const SizedBox(width: 8),
-          Text('Status', style: AdminTheme.mutedStyle(size: 11)),
-          _chip('All', _statusFilter == 'all', () => setState(() => _statusFilter = 'all')),
-          _chip('Success', _statusFilter == 'success', () => setState(() => _statusFilter = 'success')),
-          _chip('Pending', _statusFilter == 'pending', () => setState(() => _statusFilter = 'pending')),
-          _chip('Failed', _statusFilter == 'failed', () => setState(() => _statusFilter = 'failed')),
-        ],
+      child: Material(
+        type: MaterialType.transparency,
+        child: Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Text('Payer', style: AdminTheme.mutedStyle(size: 11)),
+            _chip('All', _roleFilter == 'all', () => setState(() => _roleFilter = 'all')),
+            _chip('CEO', _roleFilter == 'ceo', () => setState(() => _roleFilter = 'ceo')),
+            _chip('Supplier', _roleFilter == 'supplier', () => setState(() => _roleFilter = 'supplier')),
+            const SizedBox(width: 8),
+            Text('Status', style: AdminTheme.mutedStyle(size: 11)),
+            _chip('All', _statusFilter == 'all', () => setState(() => _statusFilter = 'all')),
+            _chip('Success', _statusFilter == 'success', () => setState(() => _statusFilter = 'success')),
+            _chip('Pending', _statusFilter == 'pending', () => setState(() => _statusFilter = 'pending')),
+            _chip('Failed', _statusFilter == 'failed', () => setState(() => _statusFilter = 'failed')),
+          ],
+        ),
       ),
     );
   }

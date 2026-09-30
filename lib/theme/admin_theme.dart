@@ -31,15 +31,15 @@ class AdminTheme {
 
   static TextStyle get _base => GoogleFonts.plusJakartaSans();
 
-  static BoxDecoration cardDecoration({Color? borderColor}) => BoxDecoration(
+  static BoxDecoration cardDecoration({Color? borderColor, double radius = 12}) => BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: borderColor ?? AdminColors.border, width: 1),
+        borderRadius: BorderRadius.circular(radius),
+        border: Border.all(color: borderColor ?? AdminColors.border, width: 0.8),
         boxShadow: [
           BoxShadow(
             color: const Color(0xFF0F172A).withValues(alpha: 0.03),
             blurRadius: 10,
-            offset: const Offset(0, 4),
+            offset: const Offset(0, 2),
           ),
         ],
       );
@@ -64,9 +64,9 @@ class AdminTheme {
         fontWeight: weight ?? FontWeight.w500,
       );
 
-  static TextStyle mutedStyle({double size = 12, FontWeight? weight}) => _base.copyWith(
+  static TextStyle mutedStyle({double size = 12, FontWeight? weight, Color? color}) => _base.copyWith(
         fontSize: size,
-        color: AdminColors.textGrey,
+        color: color ?? AdminColors.textGrey,
         fontWeight: weight ?? FontWeight.w500,
       );
 
@@ -235,13 +235,13 @@ class AdminTheme {
           elevation: 0,
           shadowColor: Colors.transparent,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-            side: const BorderSide(color: AdminColors.border, width: 1),
+            borderRadius: BorderRadius.circular(12),
+            side: const BorderSide(color: AdminColors.border, width: 0.8),
           ),
         ),
         dividerTheme: const DividerThemeData(
           color: AdminColors.border,
-          thickness: 1,
+          thickness: 0.8,
           space: 1,
         ),
         elevatedButtonTheme: ElevatedButtonThemeData(
@@ -318,7 +318,15 @@ class AdminTheme {
         ),
       );
 
-  static Widget wrap(Widget child) => Theme(data: theme, child: child);
+  /// Wraps a widget in the Admin theme and provides a solid Material ancestor.
+  /// This prevents the "yellow underlined text" issue and "No Material found" errors.
+  static Widget wrap(Widget child) => Theme(
+        data: theme,
+        child: Material(
+          color: AdminColors.screenBg,
+          child: child,
+        ),
+      );
 }
 
 /// Professional AppBar with integrated progress loading.

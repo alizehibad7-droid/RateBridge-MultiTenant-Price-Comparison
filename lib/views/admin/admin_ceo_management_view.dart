@@ -101,25 +101,35 @@ class _AdminCeoManagementViewState extends State<AdminCeoManagementView>
   Widget build(BuildContext context) {
     final adminVM = Provider.of<AdminViewModel>(context);
 
-    return Container(
-      color: AdminColors.screenBg,
-      child: Column(
-        children: [
-          if (!widget.embedded) _buildHeader(),
-          _buildTabs(),
-          Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                _buildCeoContent('pending', adminVM),
-                _buildCeoContent('active', adminVM),
-                _buildCeoContent('suspended', adminVM),
-                _buildCeoContent('rejected', adminVM),
-              ],
-            ),
+    Widget content = Column(
+      children: [
+        if (!widget.embedded) _buildHeader(),
+        _buildTabs(),
+        Expanded(
+          child: TabBarView(
+            controller: _tabController,
+            children: [
+              _buildCeoContent('pending', adminVM),
+              _buildCeoContent('active', adminVM),
+              _buildCeoContent('suspended', adminVM),
+              _buildCeoContent('rejected', adminVM),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
+    );
+
+    if (widget.embedded) {
+      return Material(
+        color: AdminColors.screenBg,
+        child: content,
+      );
+    }
+
+    return Scaffold(
+      appBar: const AdminAppBar(title: 'CEOs & Companies'),
+      backgroundColor: AdminColors.screenBg,
+      body: content,
     );
   }
 

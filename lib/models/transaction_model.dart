@@ -14,6 +14,7 @@ class TransactionModel {
   final DateTime createdAt;
   final DateTime? settledAt;
   final List<String> hiddenBy;
+  final String? stripePaymentId;
 
   const TransactionModel({
     required this.txId,
@@ -28,10 +29,11 @@ class TransactionModel {
     required this.createdAt,
     this.settledAt,
     this.hiddenBy = const [],
+    this.stripePaymentId,
   });
 
   bool get isUnsettled => status.toLowerCase() == 'unsettled' || status.toLowerCase() == 'pending';
-  bool get isSettled => status.toLowerCase() == 'settled' || status.toLowerCase() == 'confirmed';
+  bool get isSettled => status.toLowerCase() == 'settled' || status.toLowerCase() == 'confirmed' || status.toLowerCase() == 'success' || status.toLowerCase() == 'paid';
 
   factory TransactionModel.fromMap(String id, Map<String, dynamic> map) => TransactionModel(
     txId: id,
@@ -50,6 +52,7 @@ class TransactionModel {
         ? (map['settledAt'] as Timestamp).toDate()
         : DateTime.tryParse(map['settledAt']?.toString() ?? ''),
     hiddenBy: List<String>.from(map['hiddenBy'] ?? []),
+    stripePaymentId: map['stripePaymentId'],
   );
 
   Map<String, dynamic> toMap() => {
@@ -64,6 +67,7 @@ class TransactionModel {
     'createdAt': FieldValue.serverTimestamp(),
     if (settledAt != null) 'settledAt': Timestamp.fromDate(settledAt!),
     'hiddenBy': hiddenBy,
+    if (stripePaymentId != null) 'stripePaymentId': stripePaymentId,
   };
 }
 

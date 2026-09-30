@@ -112,18 +112,17 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
       ],
     );
 
-    if (!widget.embedded) {
-      return Scaffold(
-        appBar: AppBar(
-          title: const Text('Suppliers'),
-        ),
-        body: content,
+    if (widget.embedded) {
+      return Material(
+        color: AdminColors.screenBg,
+        child: content,
       );
     }
 
-    return Container(
-      color: AdminColors.screenBg,
-      child: content,
+    return Scaffold(
+      appBar: const AdminAppBar(title: 'Suppliers'),
+      backgroundColor: AdminColors.screenBg,
+      body: content,
     );
   }
 

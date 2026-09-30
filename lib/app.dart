@@ -372,7 +372,10 @@ class _RateBridgeAppState extends State<RateBridgeApp> {
                   state.extra,
                   'qualityGrade',
                 ),
-                unit: RouteNames.compareExtraString(state.extra, 'unit'),
+                unit: RouteNames.compareExtraString(
+                  state.extra,
+                  'unit',
+                ),
               ),
             );
           },
@@ -715,9 +718,11 @@ class _RateBridgeAppState extends State<RateBridgeApp> {
         ),
         GoRoute(
           path: RouteNames.adminPayments,
-          builder:
-              (context, state) =>
-                  AdminTheme.wrap(const AdminFinanceView()),
+          builder: (context, state) {
+            final tab =
+                int.tryParse(state.uri.queryParameters['tab'] ?? '0') ?? 0;
+            return AdminTheme.wrap(AdminFinanceView(initialTab: tab));
+          },
         ),
         GoRoute(
           path: RouteNames.adminSubscription,
@@ -763,8 +768,10 @@ class _RateBridgeAppState extends State<RateBridgeApp> {
 
         // 1. Role + Platform Enforcement
         final bool isWeb = kIsWeb;
-        final bool isWindows = !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
-        final bool isAndroid = !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+        final bool isWindows =
+            !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
+        final bool isAndroid =
+            !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
 
         bool platformBlocked = false;
         if (role == 'admin' || role == 'administrator') {
@@ -775,7 +782,9 @@ class _RateBridgeAppState extends State<RateBridgeApp> {
         }
 
         if (platformBlocked) {
-          return path == RouteNames.platformBlocked ? null : RouteNames.platformBlocked;
+          return path == RouteNames.platformBlocked
+              ? null
+              : RouteNames.platformBlocked;
         }
 
         if (status == 'pending') {
@@ -864,7 +873,8 @@ class _RateBridgeAppState extends State<RateBridgeApp> {
           onTap: () {
             // Global focus manager to unfocus when tapping outside
             final currentFocus = FocusScope.of(context);
-            if (!currentFocus.hasPrimaryFocus && currentFocus.focusedChild != null) {
+            if (!currentFocus.hasPrimaryFocus &&
+                currentFocus.focusedChild != null) {
               FocusManager.instance.primaryFocus?.unfocus();
             }
           },

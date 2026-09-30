@@ -9,7 +9,9 @@ import '../../theme/admin_theme.dart';
 import '../../widgets/admin/admin_widgets.dart';
 
 class AdminAppealsView extends StatefulWidget {
-  const AdminAppealsView({super.key});
+  final bool embedded;
+
+  const AdminAppealsView({this.embedded = false, super.key});
 
   @override
   State<AdminAppealsView> createState() => _AdminAppealsViewState();
@@ -37,58 +39,51 @@ class _AdminAppealsViewState extends State<AdminAppealsView> with SingleTickerPr
   @override
   Widget build(BuildContext context) {
     final bool isDesktop = _checkIsDesktop(context);
-    return Scaffold(
-      backgroundColor: AdminColors.screenBg,
-      appBar: isDesktop 
-          ? null 
-          : AppBar(
-              title: Text('Account Appeals', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 18, color: AdminColors.navy)),
-              backgroundColor: Colors.white,
-              elevation: 0,
-              bottom: TabBar(
-                controller: _tabController,
-                indicatorColor: AdminColors.amber,
-                labelColor: AdminColors.navy,
-                unselectedLabelColor: AdminColors.textGrey,
-                tabs: const [
-                  Tab(text: 'Pending'),
-                  Tab(text: 'Accepted'),
-                  Tab(text: 'Rejected'),
-                ],
-              ),
-            ),
-      body: Column(
-        children: [
-          if (isDesktop)
-            Material(
-              color: Colors.white,
-              child: TabBar(
-                controller: _tabController,
-                labelColor: AdminColors.navy,
-                unselectedLabelColor: AdminColors.textGrey,
-                indicatorColor: AdminColors.amber,
-                indicatorWeight: 3,
-                labelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 13),
-                unselectedLabelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w500, fontSize: 13),
-                tabs: const [
-                  Tab(text: 'Pending Appeals'),
-                  Tab(text: 'Accepted History'),
-                  Tab(text: 'Rejected History'),
-                ],
-              ),
-            ),
-          Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                _buildAppealContent('pending'),
-                _buildAppealContent('accepted'),
-                _buildAppealContent('rejected'),
-              ],
-            ),
+    
+    Widget content = Column(
+      children: [
+        Material(
+          color: Colors.white,
+          elevation: isDesktop ? 0 : 2,
+          child: TabBar(
+            controller: _tabController,
+            labelColor: AdminColors.navy,
+            unselectedLabelColor: AdminColors.textGrey,
+            indicatorColor: AdminColors.amber,
+            indicatorWeight: 3,
+            labelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700, fontSize: 13),
+            unselectedLabelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w500, fontSize: 13),
+            tabs: [
+              Tab(text: isDesktop ? 'Pending Appeals' : 'Pending'),
+              Tab(text: isDesktop ? 'Accepted History' : 'Accepted'),
+              Tab(text: isDesktop ? 'Rejected History' : 'Rejected'),
+            ],
           ),
-        ],
-      ),
+        ),
+        Expanded(
+          child: TabBarView(
+            controller: _tabController,
+            children: [
+              _buildAppealContent('pending'),
+              _buildAppealContent('accepted'),
+              _buildAppealContent('rejected'),
+            ],
+          ),
+        ),
+      ],
+    );
+
+    if (widget.embedded) {
+      return Material(
+        color: AdminColors.screenBg,
+        child: content,
+      );
+    }
+
+    return Scaffold(
+      appBar: const AdminAppBar(title: 'Account Appeals'),
+      backgroundColor: AdminColors.screenBg,
+      body: content,
     );
   }
 

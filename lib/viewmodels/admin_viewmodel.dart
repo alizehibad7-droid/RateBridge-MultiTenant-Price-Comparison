@@ -59,7 +59,15 @@ class AdminStats {
   final int cancelledOrders;
   final double avgSupplierRating;
   final int totalReviews;
+  
+  // Financial Metrics (Stripe-Verified)
   final double totalRevenue;
+  final double totalSubscriptionPayments;
+  final double pendingSubscriptionPayments;
+  final double totalCommission; // Sum of paid + pending commission
+  final double paidCommission;
+  final double pendingCommission;
+  final int totalPaymentsCount;
 
   AdminStats({
     this.totalUsers = 0,
@@ -74,6 +82,12 @@ class AdminStats {
     this.avgSupplierRating = 0.0,
     this.totalReviews = 0,
     this.totalRevenue = 0.0,
+    this.totalSubscriptionPayments = 0.0,
+    this.pendingSubscriptionPayments = 0.0,
+    this.totalCommission = 0.0,
+    this.paidCommission = 0.0,
+    this.pendingCommission = 0.0,
+    this.totalPaymentsCount = 0,
   });
 }
 
@@ -162,6 +176,11 @@ class AdminViewModel extends ChangeNotifier {
   List<AdminPaymentRecord> get commissionSettlementRecords =>
       _paymentRecords
           .where((r) => r.type == 'commission' && r.status == 'success')
+          .toList();
+
+  List<AdminPaymentRecord> get subscriptionPaymentRecords =>
+      _paymentRecords
+          .where((r) => r.type == 'subscription' && r.status == 'success')
           .toList();
 
   StreamSubscription? _stripeSubsSub;
@@ -557,7 +576,14 @@ class AdminViewModel extends ChangeNotifier {
     _stats = AdminStats(
       totalUsers: _allUsers.length, totalCEOs: ceos, totalFieldUsers: fieldUsers, totalSuppliers: suppliers,
       totalCompanies: companies, totalOrders: orders.length, activeOrders: active, completedOrders: completed,
-      cancelledOrders: cancelled, avgSupplierRating: avgRating, totalReviews: ratings.length, totalRevenue: _stats.totalRevenue,
+      cancelledOrders: cancelled, avgSupplierRating: avgRating, totalReviews: ratings.length, 
+      totalRevenue: _stats.totalRevenue,
+      totalSubscriptionPayments: _stats.totalSubscriptionPayments,
+      pendingSubscriptionPayments: _stats.pendingSubscriptionPayments,
+      totalCommission: _stats.totalCommission,
+      paidCommission: _stats.paidCommission,
+      pendingCommission: _stats.pendingCommission,
+      totalPaymentsCount: _stats.totalPaymentsCount,
     );
   }
 
@@ -633,7 +659,8 @@ class AdminViewModel extends ChangeNotifier {
         _db.collection('orders').where('status', isEqualTo: 'cancelled').count().get(),
         _db.collection('ratings').get(),
         _db.collection('subscriptions').get(),
-        _db.collection(FirestorePaths.transactionsCol).where('status', isEqualTo: 'settled').get(),
+        _db.collection(FirestorePaths.transactionsCol).get(),
+        _db.collection('stripe_jobs').get(),
       ]);
       final usersCount = results[0] as AggregateQuerySnapshot;
       final ceosCount = results[1] as AggregateQuerySnapshot;
@@ -646,14 +673,22 @@ class AdminViewModel extends ChangeNotifier {
       final cancelledOrdersCount = results[8] as AggregateQuerySnapshot;
       final ratingsSnap = results[9] as QuerySnapshot<Map<String, dynamic>>;
       final subsSnap = results[10] as QuerySnapshot<Map<String, dynamic>>;
-      final settledTxSnap = results[11] as QuerySnapshot<Map<String, dynamic>>;
+      final allTxSnap = results[11] as QuerySnapshot<Map<String, dynamic>>;
+      final stripeJobsSnap = results[12] as QuerySnapshot<Map<String, dynamic>>;
+
       double avgRating = ratingsSnap.docs.isEmpty ? 0.0 : ratingsSnap.docs.map((r) => (r.data()['rating'] as num?)?.toDouble() ?? 0.0).reduce((a, b) => a + b) / ratingsSnap.docs.length;
-      double totalRevenue = 0.0;
+
+      double subPaid = 0.0;
+      double subPending = 0.0;
+      int paymentsCount = 0;
+
       for (final doc in subsSnap.docs) {
         final history = doc.data()['history'] as List<dynamic>? ?? [];
         for (final raw in history) {
           if (raw is! Map) continue;
           final entry = SubscriptionHistoryEntry.fromMap(Map<String, dynamic>.from(raw));
+          if (entry.action != 'purchased') continue;
+
           final note = (entry.note ?? '').toLowerCase();
           if (note.contains('confirmed by admin') || note.contains('admin granted')) {
             continue;
@@ -662,24 +697,57 @@ class AdminViewModel extends ChangeNotifier {
           final isStripe = stripeId.isNotEmpty ||
               note.contains('stripe') ||
               ((entry.amountPaid ?? 0) > 0 && note.isEmpty);
-          if (entry.action == 'purchased' &&
-              (entry.amountPaid ?? 0) > 0 &&
-              isStripe) {
-            totalRevenue += (entry.amountPaid ?? 0).toDouble();
+          
+          if (isStripe && (entry.amountPaid ?? 0) > 0) {
+            subPaid += (entry.amountPaid ?? 0).toDouble();
+            paymentsCount++;
           }
         }
       }
-      for (final doc in settledTxSnap.docs) {
-        totalRevenue += (doc.data()['commissionAmount'] as num? ?? 0).toDouble();
+
+      double commPaid = 0.0;
+      double commPending = 0.0;
+      for (final doc in allTxSnap.docs) {
+        final data = doc.data();
+        final status = (data['status'] ?? '').toString().toLowerCase();
+        final amount = (data['commissionAmount'] as num? ?? 0).toDouble();
+        if (status == 'settled' || status == 'confirmed' || status == 'success' || status == 'paid') {
+          commPaid += amount;
+          paymentsCount++;
+        } else if (status == 'unsettled' || status == 'pending') {
+          commPending += amount;
+        }
       }
+
+      for (final doc in stripeJobsSnap.docs) {
+        final data = doc.data();
+        final status = (data['status'] ?? '').toString().toLowerCase();
+        if (status == 'pending') {
+          final type = (data['type'] ?? 'subscription').toString();
+          final amount = (data['amountPKR'] as num?)?.toDouble() ?? 0.0;
+          if (type == 'subscription') {
+            subPending += amount;
+          }
+        }
+      }
+
       _stats = AdminStats(
         totalUsers: usersCount.count ?? 0, totalCEOs: ceosCount.count ?? 0, totalFieldUsers: fieldUsersCount.count ?? 0,
         totalSuppliers: suppliersCount.count ?? 0, totalCompanies: companiesCount.count ?? 0, totalOrders: ordersCount.count ?? 0,
         activeOrders: activeOrdersCount.count ?? 0, completedOrders: completedOrdersCount.count ?? 0, cancelledOrders: cancelledOrdersCount.count ?? 0,
-        avgSupplierRating: avgRating, totalReviews: ratingsSnap.docs.length, totalRevenue: totalRevenue,
+        avgSupplierRating: avgRating, totalReviews: ratingsSnap.docs.length, 
+        totalRevenue: subPaid + commPaid,
+        totalSubscriptionPayments: subPaid,
+        pendingSubscriptionPayments: subPending,
+        totalCommission: commPaid + commPending,
+        paidCommission: commPaid,
+        pendingCommission: commPending,
+        totalPaymentsCount: paymentsCount,
       );
       notifyListeners();
-    } catch (e) {}
+    } catch (e) {
+      developer.log("Error refreshing stats: $e");
+    }
   }
 
   Future<void> loadPaymentQueue() async {
@@ -702,7 +770,6 @@ class AdminViewModel extends ChangeNotifier {
 
     _stripeTxSub = _db
         .collection(FirestorePaths.transactionsCol)
-        .where('status', isEqualTo: 'settled')
         .snapshots()
         .listen((snap) {
       _latestSettledTxs = snap.docs;
@@ -787,15 +854,20 @@ class AdminViewModel extends ChangeNotifier {
         final tx = TransactionModel.fromMap(doc.id, doc.data());
         final supplierName = await _cachedSupplierName(tx.supplierUid);
         final companyName = await _cachedCompanyName(tx.companyId);
+        
+        final statusRaw = tx.status.toLowerCase().trim();
+        final isSuccess = tx.isSettled || statusRaw == 'paid' || statusRaw == 'success' || statusRaw == 'complete' || statusRaw == 'confirmed';
+        final isFailed = statusRaw == 'failed' || statusRaw == 'error' || statusRaw == 'rejected' || statusRaw == 'cancelled';
+        
         records.add(AdminPaymentRecord(
-          id: 'tx_settle_${tx.txId}',
+          id: 'tx_${tx.txId}',
           payerId: tx.supplierUid,
           payerName: supplierName,
           payerRole: 'Supplier',
           companyId: tx.companyId,
           companyName: companyName,
           amount: tx.commissionAmount,
-          status: 'success',
+          status: isSuccess ? 'success' : (isFailed ? 'failed' : 'pending'),
           date: tx.settledAt ?? tx.createdAt,
           type: 'commission',
           relatedLabel: tx.orderId.isNotEmpty
@@ -821,6 +893,13 @@ class AdminViewModel extends ChangeNotifier {
             ? txIds.map((e) => e.toString()).join(', ')
             : (txIds?.toString() ?? '');
         final isCommission = type == 'commission';
+        
+        // Prevent double counting if it's already in transactions as pending
+        if (isCommission && txIds is List && txIds.isNotEmpty) {
+           bool exists = records.any((r) => r.type == 'commission' && txIds.contains(r.id.replaceFirst('tx_', '')));
+           if (exists && status == 'pending') continue; 
+        }
+
         final payerRole = isCommission ? 'Supplier' : 'CEO';
         final payerName = isCommission
             ? await _cachedSupplierName(uid)

@@ -64,8 +64,45 @@ function publicStripeError(error) {
   return raw.slice(0, 280);
 }
 
+/**
+ * Helper to write notification record to Firestore.
+ * Standardized to root 'notifications' collection.
+ */
+async function writeNotificationRecord(userId, notification) {
+  try {
+    const userDoc = await admin.firestore().collection('users').doc(userId).get();
+    if (!userDoc.exists) return;
+    const userData = userDoc.data();
+    
+    const notifRef = admin.firestore().collection('notifications').doc();
+    const notifData = {
+      notifId: notifRef.id,
+      recipientUserId: userId,
+      recipientRole: userData.role || '',
+      type: notification.type || 'system',
+      title: notification.title,
+      message: notification.body || notification.message || '',
+      data: notification.data || {},
+      isRead: false,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      companyId: userData.companyId || notification.companyId || null,
+    };
+    
+    await notifRef.set(notifData);
+  } catch (error) {
+    console.error(`[Firestore] Notification write failed for ${userId}:`, error);
+  }
+}
+
+async function getAdminUids() {
+  const adminQuery = await admin.firestore().collection('users')
+    .where('role', 'in', ['admin', 'Admin', 'administrator', 'Administrator', 'ADMIN'])
+    .get();
+  return adminQuery.docs.map(doc => doc.id);
+}
+
 async function applySuccessfulPayment(metadata, amountFallback, paymentRefId) {
-  const { type, companyId, plan, transactionIds, amountPKR } = metadata || {};
+  const { type, companyId, plan, transactionIds, amountPKR, supplierId } = metadata || {};
 
   if (type === "subscription") {
     if (!companyId) {
@@ -118,6 +155,9 @@ async function applySuccessfulPayment(metadata, amountFallback, paymentRefId) {
       }),
     });
 
+    const companyDoc = await admin.firestore().collection("companies").doc(companyId).get();
+    const companyName = companyDoc.data()?.name || companyDoc.data()?.companyName || "A company";
+
     await admin.firestore().collection("companies").doc(companyId).set(
       {
         plan: plan,
@@ -126,12 +166,36 @@ async function applySuccessfulPayment(metadata, amountFallback, paymentRefId) {
       },
       { merge: true }
     );
+
+    // Trigger Admin Notification
+    const adminUids = await getAdminUids();
+    for (const adminUid of adminUids) {
+      await writeNotificationRecord(adminUid, {
+        type: 'payment',
+        title: 'New Subscription Payment',
+        body: `${companyName} successfully paid for the ${plan.charAt(0).toUpperCase() + plan.slice(1)} plan.`,
+        data: {
+          companyId,
+          companyName,
+          plan,
+          amount: paidRupees,
+          stripeId: paymentRefId,
+          paymentType: 'subscription'
+        }
+      });
+    }
+
     return;
   }
 
   if (type === "commission" && transactionIds) {
     const ids = String(transactionIds).split(",").filter(Boolean);
     if (!ids.length) return;
+    
+    const paidRupees = amountPKR
+      ? Math.round(Number(amountPKR))
+      : fromStripeAmountPkr(amountFallback);
+
     const batch = admin.firestore().batch();
     ids.forEach((id) => {
       batch.set(
@@ -139,11 +203,37 @@ async function applySuccessfulPayment(metadata, amountFallback, paymentRefId) {
         {
           status: "settled",
           settledAt: admin.firestore.FieldValue.serverTimestamp(),
+          stripePaymentId: paymentRefId || "",
         },
         { merge: true }
       );
     });
     await batch.commit();
+
+    // Notify Admin of Commission Payment
+    let supplierName = "A supplier";
+    const sId = supplierId || metadata.supplierId;
+    if (sId) {
+      const sDoc = await admin.firestore().collection('suppliers').doc(sId).get();
+      supplierName = sDoc.data()?.businessName || sDoc.data()?.name || supplierName;
+    }
+
+    const adminUids = await getAdminUids();
+    for (const adminUid of adminUids) {
+      await writeNotificationRecord(adminUid, {
+        type: 'commission',
+        title: 'Commission Payment Received',
+        body: `Commission payment received from ${supplierName} for ${ids.length} order(s).`,
+        data: {
+          supplierId: sId,
+          supplierName,
+          transactionIds: String(transactionIds),
+          amount: paidRupees,
+          stripeId: paymentRefId,
+          paymentType: 'commission'
+        }
+      });
+    }
   }
 }
 

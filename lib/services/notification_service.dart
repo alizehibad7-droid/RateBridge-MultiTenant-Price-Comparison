@@ -532,6 +532,50 @@ class NotificationService {
     );
   }
 
+  /// Notifies admins of a new Stripe subscription payment.
+  Future<void> notifySubscriptionPaymentConfirmed({
+    required String companyName,
+    required String planName,
+    required double amount,
+    String? stripePaymentId,
+  }) async {
+    await notifyAllAdmins(
+      title: 'New Subscription Payment',
+      message: '$companyName successfully paid for the $planName plan.',
+      type: typePayment,
+      data: {
+        'companyName': companyName,
+        'plan': planName,
+        'amount': amount,
+        'paymentType': 'subscription',
+        if (stripePaymentId != null) 'stripeId': stripePaymentId,
+        'status': 'success',
+      },
+    );
+  }
+
+  /// Notifies admins of a new commission payment from a supplier.
+  Future<void> notifyCommissionPaymentConfirmed({
+    required String supplierName,
+    required String orderId,
+    required double amount,
+    String? stripePaymentId,
+  }) async {
+    await notifyAllAdmins(
+      title: 'Commission Payment Received',
+      message: 'Commission payment received from $supplierName for Order #$orderId.',
+      type: typeCommission,
+      data: {
+        'supplierName': supplierName,
+        'orderId': orderId,
+        'amount': amount,
+        'paymentType': 'commission',
+        if (stripePaymentId != null) 'stripeId': stripePaymentId,
+        'status': 'success',
+      },
+    );
+  }
+
   Future<void> notifySubscriptionPaymentSubmitted({
     required String adminUserId,
     required String companyName,

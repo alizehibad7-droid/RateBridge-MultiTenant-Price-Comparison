@@ -12,7 +12,8 @@ import '../../viewmodels/dispute_viewmodel.dart';
 import '../../widgets/admin/admin_widgets.dart';
 
 class AdminDisputeListView extends StatefulWidget {
-  const AdminDisputeListView({super.key});
+  final bool embedded;
+  const AdminDisputeListView({this.embedded = false, super.key});
 
   @override
   State<AdminDisputeListView> createState() => _AdminDisputeListViewState();
@@ -30,87 +31,94 @@ class _AdminDisputeListViewState extends State<AdminDisputeListView> {
     final disputeVM = context.read<DisputeViewModel>();
     final bool isDesktop = _checkIsDesktop(context);
 
-    return Scaffold(
-      backgroundColor: AdminColors.screenBg,
-      body: Column(
-        children: [
-          _buildFilterBar(),
-          Expanded(
-            child: StreamBuilder<List<DisputeModel>>(
-              key: ValueKey(_selectedStatus),
-              stream: disputeVM.watchAllDisputes(status: _selectedStatus),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (snapshot.hasError) {
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(32.0),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.error_outline_rounded, size: 48, color: AdminColors.red),
-                          const SizedBox(height: 16),
-                          Text(
-                            'Could not load disputes: ${snapshot.error}',
-                            textAlign: TextAlign.center,
-                            style: AdminTheme.mutedStyle(),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                }
-                final disputes = snapshot.data ?? [];
-
-                if (disputes.isEmpty) {
-                  return Center(
+    Widget content = Column(
+      children: [
+        _buildFilterBar(),
+        Expanded(
+          child: StreamBuilder<List<DisputeModel>>(
+            key: ValueKey(_selectedStatus),
+            stream: disputeVM.watchAllDisputes(status: _selectedStatus),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (snapshot.hasError) {
+                return Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(32.0),
                     child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Container(
-                          padding: const EdgeInsets.all(24),
-                          decoration: BoxDecoration(
-                            color: AdminColors.navy.withValues(alpha: 0.05),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.gavel_rounded,
-                            size: 64,
-                            color: AdminColors.textGrey,
-                          ),
-                        ),
+                        const Icon(Icons.error_outline_rounded, size: 48, color: AdminColors.red),
                         const SizedBox(height: 16),
                         Text(
-                          'No disputes found',
-                          style: AdminTheme.titleStyle(size: 18).copyWith(color: AdminColors.textGrey),
-                        ),
-                        Text(
-                          'Everything looks clear in this category',
+                          'Could not load disputes: ${snapshot.error}',
+                          textAlign: TextAlign.center,
                           style: AdminTheme.mutedStyle(),
                         ),
                       ],
                     ),
-                  );
-                }
-
-                if (isDesktop) {
-                  return _buildDisputeTable(disputes);
-                }
-
-                return ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: disputes.length,
-                  itemBuilder:
-                      (context, index) =>
-                          _DisputeTile(dispute: disputes[index]),
+                  ),
                 );
-              },
-            ),
+              }
+              final disputes = snapshot.data ?? [];
+
+              if (disputes.isEmpty) {
+                return Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(24),
+                        decoration: BoxDecoration(
+                          color: AdminColors.navy.withValues(alpha: 0.05),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.gavel_rounded,
+                          size: 64,
+                          color: AdminColors.textGrey,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'No disputes found',
+                        style: AdminTheme.titleStyle(size: 18).copyWith(color: AdminColors.textGrey),
+                      ),
+                      Text(
+                        'Everything looks clear in this category',
+                        style: AdminTheme.mutedStyle(),
+                      ),
+                    ],
+                  ),
+                );
+              }
+
+              if (isDesktop) {
+                return _buildDisputeTable(disputes);
+              }
+
+              return ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: disputes.length,
+                itemBuilder:
+                    (context, index) =>
+                        _DisputeTile(dispute: disputes[index]),
+              );
+            },
           ),
-        ],
-      ),
+        ),
+      ],
+    );
+
+    if (widget.embedded) {
+      return Material(color: AdminColors.screenBg, child: content);
+    }
+
+    return Scaffold(
+      appBar: const AdminAppBar(title: 'Marketplace Disputes'),
+      backgroundColor: AdminColors.screenBg,
+      body: content,
     );
   }
 

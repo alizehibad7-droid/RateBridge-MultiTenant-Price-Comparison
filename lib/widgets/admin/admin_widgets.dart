@@ -32,11 +32,11 @@ class AdminStatCard extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(10),
         child: Container(
           padding: EdgeInsets.symmetric(
-            horizontal: isMobile ? 12 : 16,
-            vertical: isMobile ? 10 : 16,
+            horizontal: isMobile ? 10 : 12,
+            vertical: isMobile ? 8 : 12,
           ),
           decoration: AdminTheme.cardDecoration(),
           child: Column(
@@ -44,27 +44,27 @@ class AdminStatCard extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
-                width: isMobile ? 28 : 36,
-                height: isMobile ? 28 : 36,
+                width: isMobile ? 24 : 32,
+                height: isMobile ? 24 : 32,
                 decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(isMobile ? 6 : 10),
+                  color: color.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                child: Icon(icon, color: color, size: isMobile ? 14 : 18),
+                child: Icon(icon, color: color, size: isMobile ? 12 : 16),
               ),
-              SizedBox(height: isMobile ? 6 : 12),
+              const SizedBox(height: 8),
               Text(
                 value,
                 style: GoogleFonts.plusJakartaSans(
-                  fontSize: isMobile ? 18 : 24,
+                  fontSize: isMobile ? 16 : 20,
                   fontWeight: FontWeight.w800,
                   color: AdminColors.navy,
                 ),
               ),
-              const SizedBox(height: 2),
+              const SizedBox(height: 1),
               Text(
                 label, 
-                style: AdminTheme.mutedStyle(size: isMobile ? 9 : 11).copyWith(fontWeight: FontWeight.w600),
+                style: AdminTheme.mutedStyle(size: isMobile ? 9 : 10).copyWith(fontWeight: FontWeight.w600),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -102,19 +102,19 @@ class AdminSectionHeader extends StatelessWidget {
         Row(
           children: [
             if (icon != null) ...[
-              Icon(icon, size: isMobile ? 18 : 20, color: AdminColors.navy),
+              Icon(icon, size: isMobile ? 16 : 18, color: AdminColors.navy),
               const SizedBox(width: 8),
             ],
-            Text(title, style: AdminTheme.titleStyle(size: isMobile ? 14 : 16)),
+            Text(title, style: AdminTheme.titleStyle(size: isMobile ? 13 : 15)),
           ],
         ),
         if (actionLabel != null)
           TextButton.icon(
             onPressed: onAction,
-            icon: Icon(Icons.arrow_forward_rounded, size: isMobile ? 12 : 14),
-            label: Text(actionLabel!, style: TextStyle(fontSize: isMobile ? 11 : 13)),
+            icon: Icon(Icons.arrow_forward_rounded, size: isMobile ? 11 : 13),
+            label: Text(actionLabel!, style: TextStyle(fontSize: isMobile ? 10 : 12)),
             style: TextButton.styleFrom(
-              padding: isMobile ? const EdgeInsets.symmetric(horizontal: 8) : null,
+              padding: isMobile ? const EdgeInsets.symmetric(horizontal: 6) : null,
               minimumSize: isMobile ? Size.zero : null,
               tapTargetSize: isMobile ? MaterialTapTargetSize.shrinkWrap : null,
             ),
@@ -143,7 +143,7 @@ class StatusChip extends StatelessWidget {
     if (status == 'rejected' || status == 'suspended' || status == 'failed') statusIcon = Icons.cancel_rounded;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         color: style.bg,
         borderRadius: BorderRadius.circular(20),
@@ -152,14 +152,14 @@ class StatusChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(statusIcon, size: 10, color: style.fg),
+          Icon(statusIcon, size: 9, color: style.fg),
           const SizedBox(width: 4),
           Flexible(
             child: Text(
               label.toUpperCase(),
               style: GoogleFonts.plusJakartaSans(
                 color: style.fg,
-                fontSize: 9,
+                fontSize: 8,
                 fontWeight: FontWeight.w800,
                 letterSpacing: 0.5,
               ),
@@ -189,29 +189,29 @@ class AdminEmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 64, horizontal: 32),
+        padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 color: AdminColors.navy.withValues(alpha: 0.05),
                 shape: BoxShape.circle,
               ),
-              child: Icon(icon, size: 48, color: AdminColors.textGrey.withValues(alpha: 0.5)),
+              child: Icon(icon, size: 40, color: AdminColors.textGrey.withValues(alpha: 0.5)),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
             Text(
               message,
-              style: AdminTheme.titleStyle(size: 18).copyWith(color: AdminColors.navy.withValues(alpha: 0.7)),
+              style: AdminTheme.titleStyle(size: 16).copyWith(color: AdminColors.navy.withValues(alpha: 0.7)),
               textAlign: TextAlign.center,
             ),
             if (subMessage != null) ...[
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
               Text(
                 subMessage!,
-                style: AdminTheme.mutedStyle(size: 13),
+                style: AdminTheme.mutedStyle(size: 12),
                 textAlign: TextAlign.center,
               ),
             ],
@@ -288,9 +288,9 @@ class ApprovalActions extends StatelessWidget {
         Expanded(
           child: OutlinedButton.icon(
             onPressed: isLoading ? null : () => _showRejectDialog(context),
-            icon: Icon(Icons.close_rounded, size: isMobile ? 16 : 18),
-            label: Text('REJECT', style: TextStyle(fontSize: isMobile ? 11 : 13)),
-            style: AdminTheme.destructiveButtonStyle(height: isMobile ? 40 : 46),
+            icon: Icon(Icons.close_rounded, size: isMobile ? 14 : 16),
+            label: Text('REJECT', style: TextStyle(fontSize: isMobile ? 10 : 12)),
+            style: AdminTheme.destructiveButtonStyle(height: isMobile ? 36 : 40),
           ),
         ),
         SizedBox(width: isMobile ? 8 : 12),
@@ -299,16 +299,16 @@ class ApprovalActions extends StatelessWidget {
             onPressed: isLoading ? null : onApprove,
             icon: isLoading
                 ? SizedBox(
-                    width: isMobile ? 14 : 18,
-                    height: isMobile ? 14 : 18,
+                    width: isMobile ? 12 : 14,
+                    height: isMobile ? 12 : 14,
                     child: const CircularProgressIndicator(
                       color: Colors.white,
                       strokeWidth: 2,
                     ),
                   )
-                : Icon(Icons.check_rounded, size: isMobile ? 16 : 18),
-            label: Text('APPROVE', style: TextStyle(fontSize: isMobile ? 11 : 13)),
-            style: AdminTheme.primaryButtonStyle(height: isMobile ? 40 : 46).copyWith(
+                : Icon(Icons.check_rounded, size: isMobile ? 14 : 16),
+            label: Text('APPROVE', style: TextStyle(fontSize: isMobile ? 10 : 12)),
+            style: AdminTheme.primaryButtonStyle(height: isMobile ? 36 : 40).copyWith(
               backgroundColor: WidgetStateProperty.all(AdminColors.green),
             ),
           ),
@@ -337,13 +337,13 @@ class AdminApprovalSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(title.toUpperCase(), style: AdminTheme.sectionHeaderStyle(size: isMobile ? 10 : 11)),
-        const SizedBox(height: 12),
+        Text(title.toUpperCase(), style: AdminTheme.sectionHeaderStyle(size: isMobile ? 9 : 10)),
+        const SizedBox(height: 8),
         Container(
-          padding: EdgeInsets.all(isMobile ? 10 : 12),
+          padding: EdgeInsets.all(isMobile ? 8 : 10),
           decoration: BoxDecoration(
             color: AdminColors.screenBg.withValues(alpha: 0.5),
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(8),
             border: Border.all(color: AdminColors.border.withValues(alpha: 0.5)),
           ),
           child: Column(children: children),
@@ -373,13 +373,13 @@ class AdminDetailRow extends StatelessWidget {
 
     final display = value.trim().isEmpty ? 'Not Provided' : value.trim();
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: isMobile ? 90 : 120,
-            child: Text(label, style: AdminTheme.mutedStyle(size: isMobile ? 10 : 11).copyWith(fontWeight: FontWeight.w600)),
+            width: isMobile ? 80 : 100,
+            child: Text(label, style: AdminTheme.mutedStyle(size: isMobile ? 9 : 10).copyWith(fontWeight: FontWeight.w600)),
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -388,7 +388,7 @@ class AdminDetailRow extends StatelessWidget {
               maxLines: maxLines,
               overflow: TextOverflow.ellipsis,
               style: GoogleFonts.plusJakartaSans(
-                fontSize: isMobile ? 11 : 12,
+                fontSize: isMobile ? 10 : 11,
                 fontWeight: FontWeight.w700,
                 color: AdminColors.navy,
               ),
@@ -417,24 +417,24 @@ class AdminChipList extends StatelessWidget {
     final bool isMobile = screenWidth < 600;
 
     if (items.isEmpty) {
-      return Text('None declared', style: AdminTheme.mutedStyle(size: isMobile ? 11 : 12).copyWith(fontStyle: FontStyle.italic));
+      return Text('None declared', style: AdminTheme.mutedStyle(size: isMobile ? 10 : 11).copyWith(fontStyle: FontStyle.italic));
     }
     final chipColor = color ?? AdminColors.navy;
     return Wrap(
-      spacing: 6,
-      runSpacing: 6,
+      spacing: 4,
+      runSpacing: 4,
       children: items.map((item) {
         return Container(
-          padding: EdgeInsets.symmetric(horizontal: isMobile ? 8 : 10, vertical: isMobile ? 3 : 4),
+          padding: EdgeInsets.symmetric(horizontal: isMobile ? 6 : 8, vertical: 2),
           decoration: BoxDecoration(
             color: chipColor.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(6),
+            borderRadius: BorderRadius.circular(4),
             border: Border.all(color: chipColor.withValues(alpha: 0.2)),
           ),
           child: Text(
             item,
             style: GoogleFonts.plusJakartaSans(
-              fontSize: isMobile ? 9 : 10,
+              fontSize: isMobile ? 8 : 9,
               fontWeight: FontWeight.w800,
               color: chipColor,
               letterSpacing: 0.3,
@@ -469,24 +469,24 @@ class AdminDocumentThumbnail extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(Icons.description_rounded, size: isMobile ? 10 : 12, color: AdminColors.textGrey),
+              Icon(Icons.description_rounded, size: isMobile ? 9 : 10, color: AdminColors.textGrey),
               const SizedBox(width: 4),
               Expanded(
                 child: Text(
                   label.toUpperCase(),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: AdminTheme.mutedStyle(size: isMobile ? 8 : 10).copyWith(fontWeight: FontWeight.w800, letterSpacing: 0.5),
+                  style: AdminTheme.mutedStyle(size: isMobile ? 7 : 8).copyWith(fontWeight: FontWeight.w800, letterSpacing: 0.5),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           AspectRatio(
             aspectRatio: 16 / 10,
             child: Material(
               color: AdminColors.screenBg,
-              borderRadius: BorderRadius.circular(isMobile ? 8 : 10),
+              borderRadius: BorderRadius.circular(8),
               clipBehavior: Clip.antiAlias,
               child: InkWell(
                 onTap: hasImage
@@ -498,7 +498,7 @@ class AdminDocumentThumbnail extends StatelessWidget {
                 child: DecoratedBox(
                   decoration: BoxDecoration(
                     border: Border.all(color: AdminColors.border),
-                    borderRadius: BorderRadius.circular(isMobile ? 8 : 10),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                   child: hasImage
                       ? Stack(
@@ -513,18 +513,18 @@ class AdminDocumentThumbnail extends StatelessWidget {
                                   progress == null ? child : const Center(child: CircularProgressIndicator(strokeWidth: 2)),
                             ),
                             Positioned(
-                              right: 6,
-                              bottom: 6,
+                              right: 4,
+                              bottom: 4,
                               child: Container(
-                                padding: const EdgeInsets.all(4),
+                                padding: const EdgeInsets.all(3),
                                 decoration: BoxDecoration(
                                   color: Colors.black54,
-                                  borderRadius: BorderRadius.circular(6),
+                                  borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: Icon(
                                   Icons.zoom_in_rounded,
                                   color: Colors.white,
-                                  size: isMobile ? 12 : 16,
+                                  size: isMobile ? 10 : 14,
                                 ),
                               ),
                             ),
@@ -554,9 +554,9 @@ class _MissingDocPlaceholder extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(Icons.image_not_supported_rounded,
-              size: isMobile ? 20 : 24, color: AdminColors.textGrey.withValues(alpha: 0.5)),
-          const SizedBox(height: 4),
-          Text('NO DOCUMENT', style: AdminTheme.mutedStyle(size: isMobile ? 8 : 9).copyWith(fontWeight: FontWeight.bold)),
+              size: isMobile ? 16 : 20, color: AdminColors.textGrey.withValues(alpha: 0.5)),
+          const SizedBox(height: 2),
+          Text('NO DOCUMENT', style: AdminTheme.mutedStyle(size: isMobile ? 7 : 8).copyWith(fontWeight: FontWeight.bold)),
         ],
       ),
     );
@@ -575,7 +575,7 @@ class AdminDocumentThumbnailRow extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         for (var i = 0; i < documents.length; i++) ...[
-          if (i > 0) const SizedBox(width: 12),
+          if (i > 0) const SizedBox(width: 8),
           AdminDocumentThumbnail(
             label: documents[i].label,
             imageUrl: documents[i].url,
@@ -608,20 +608,23 @@ class AdminCard extends StatelessWidget {
     final double screenWidth = MediaQuery.of(context).size.width;
     final bool isMobile = screenWidth < 600;
     
-    final effectivePadding = padding ?? EdgeInsets.all(isMobile ? 14 : 20);
+    final effectivePadding = padding ?? EdgeInsets.all(isMobile ? 12 : 16);
 
     return Container(
       margin: margin,
       padding: effectivePadding,
-      decoration: AdminTheme.cardDecoration().copyWith(color: color),
+      decoration: AdminTheme.cardDecoration().copyWith(
+        color: color,
+        borderRadius: BorderRadius.circular(10),
+      ),
       child: title == null
           ? child
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(title!, style: AdminTheme.titleStyle(size: isMobile ? 15 : 16)),
-                SizedBox(height: isMobile ? 12 : 16),
+                Text(title!, style: AdminTheme.titleStyle(size: isMobile ? 14 : 15)),
+                SizedBox(height: isMobile ? 10 : 12),
                 child,
               ],
             ),
