@@ -692,8 +692,9 @@ class _OrderCommissionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final status = transaction.status.toLowerCase();
-    final isSettled = status == 'settled' || status == 'paid';
+    final isSettled = transaction.isSettled;
+    final statusLabel =
+        isSettled ? 'SETTLED' : transaction.status.toUpperCase();
 
     return Container(
       decoration: SupplierTheme.cardDecoration(
@@ -760,8 +761,10 @@ class _OrderCommissionCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 4),
                       _StatusDot(
-                        label: transaction.status.toUpperCase(),
-                        color: isSettled ? FieldColors.statusSuccess : FieldColors.statusWarning,
+                        label: statusLabel,
+                        color: isSettled
+                            ? FieldColors.statusSuccess
+                            : FieldColors.statusWarning,
                       ),
                     ],
                   ),

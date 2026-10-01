@@ -90,6 +90,8 @@ class SupplierViewModel extends ChangeNotifier {
   List<OrderModel> _orders = [];
   List<RatingModel> _ratings = [];
   List<TransactionModel> _transactions = [];
+  /// Month key (`yyyy-MM`) currently shown on the earnings Orders tab.
+  String? _earningsMonthKey;
   List<TransactionModel> _allCommissions = [];
   List<InvitationModel> _invitations = [];
   
@@ -147,7 +149,29 @@ class SupplierViewModel extends ChangeNotifier {
   List<MaterialModel> get materials => _materials;
   List<OrderModel> get orders => _orders;
   List<RatingModel> get ratings => _ratings;
-  List<TransactionModel> get transactions => _transactions;
+  List<TransactionModel> get transactions {
+    final month = (_earningsMonthKey ?? '').trim();
+    Iterable<TransactionModel> source = _allCommissions;
+    if (month.isNotEmpty) {
+      try {
+        final start = DateTime.parse('$month-01');
+        final end = DateTime(
+          start.month == 12 ? start.year + 1 : start.year,
+          start.month == 12 ? 1 : start.month + 1,
+          1,
+        );
+        source = _allCommissions.where(
+          (tx) =>
+              !tx.createdAt.isBefore(start) && tx.createdAt.isBefore(end),
+        );
+      } catch (_) {
+        // Keep full list if month key is malformed.
+      }
+    }
+    return source.toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  }
+
   List<CompanyModel> get companies => _companies;
   List<CompanyModel> get companyDirectory => _companyDirectory;
   List<InvitationModel> get invitations => _invitations;
@@ -294,6 +318,7 @@ class SupplierViewModel extends ChangeNotifier {
     _orders = [];
     _allCommissions = [];
     _transactions = [];
+    _earningsMonthKey = null;
     _invitations = [];
     _allPartnershipRequests = [];
     _incomingPartnershipRequests = [];
@@ -341,6 +366,9 @@ class SupplierViewModel extends ChangeNotifier {
               .map((d) => TransactionModel.fromMap(d.id, d.data()))
               .where((tx) => !tx.hiddenBy.contains(uid))
               .toList();
+          // Keep month order cards in sync with live settlement status
+          // (e.g. after Stripe commission pay marks txs settled).
+          _refreshMonthTransactions();
           _earningsInitialized = true;
           _checkDashboardReady();
           notifyListeners();
@@ -354,6 +382,36 @@ class SupplierViewModel extends ChangeNotifier {
       debugPrint('Commission ensure job skipped: $e');
     });
     _backfillMissingCommissionTransactions(uid);
+  }
+
+  /// Rebuilds [_transactions] from live [_allCommissions] for [_earningsMonthKey].
+  void _refreshMonthTransactions() {
+    final month = (_earningsMonthKey ?? '').trim();
+    if (month.isEmpty) {
+      _transactions = List<TransactionModel>.from(_allCommissions)
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return;
+    }
+    DateTime start;
+    try {
+      start = DateTime.parse('$month-01');
+    } catch (_) {
+      _transactions = List<TransactionModel>.from(_allCommissions)
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return;
+    }
+    final end = DateTime(
+      start.month == 12 ? start.year + 1 : start.year,
+      start.month == 12 ? 1 : start.month + 1,
+      1,
+    );
+    _transactions = _allCommissions
+        .where(
+          (tx) =>
+              !tx.createdAt.isBefore(start) && tx.createdAt.isBefore(end),
+        )
+        .toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   }
 
   Future<void> _backfillMissingCommissionTransactions(String uid) async {
@@ -999,9 +1057,8 @@ class SupplierViewModel extends ChangeNotifier {
   Future<void> loadEarnings(String month) async {
     final uid = _supplierUid;
     if (uid == null) return;
-    final start = DateTime.parse('$month-01');
-    final end = DateTime(start.month == 12 ? start.year + 1 : start.year, start.month == 12 ? 1 : start.month + 1, 1);
-    _transactions = _allCommissions.where((tx) => !tx.createdAt.isBefore(start) && tx.createdAt.isBefore(end)).toList()..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    _earningsMonthKey = month;
+    _refreshMonthTransactions();
     try {
         final summary = await _transactionRepo.getMonthlyEarningsSummary(uid, 6);
         _monthlyEarnings = summary;
