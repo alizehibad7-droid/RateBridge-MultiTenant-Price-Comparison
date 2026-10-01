@@ -300,11 +300,17 @@ class _CeoSubscriptionViewState extends State<CeoSubscriptionView> {
                   const CeoSectionLabel('Available Plans'),
                 ],
               ),
+              const SizedBox(height: 8),
+              Text(
+                'Higher plans include everything below them. Scroll to compare Free, Basic, and Premium.',
+                style: CeoTheme.mutedStyle(size: 12),
+              ),
               const SizedBox(height: 16),
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 physics: const BouncingScrollPhysics(),
                 child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: kPlans.map((plan) => Padding(
                     padding: const EdgeInsets.only(right: 16),
                     child: _buildPlanOption(
@@ -483,7 +489,7 @@ class _CeoSubscriptionViewState extends State<CeoSubscriptionView> {
 
   Widget _buildPlanOption(PlanDefinition plan, bool isCurrent, bool isPending, VoidCallback? onSelect) {
     return Container(
-      width: 240, padding: const EdgeInsets.all(24),
+      width: 260, padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
@@ -510,11 +516,33 @@ class _CeoSubscriptionViewState extends State<CeoSubscriptionView> {
             padding: EdgeInsets.symmetric(vertical: 16),
             child: Divider(),
           ),
-          ...plan.features.map((f) => Padding(padding: const EdgeInsets.only(bottom: 12), child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Icon(Icons.check_circle_rounded, size: 16, color: CeoColors.green),
-            const SizedBox(width: 10),
-            Expanded(child: Text(f, style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w500, color: CeoColors.navy))),
-          ]))),
+          ...plan.features.map((f) {
+            final inherits = f.toLowerCase().startsWith('everything in');
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    inherits ? Icons.layers_rounded : Icons.check_circle_rounded,
+                    size: 16,
+                    color: inherits ? CeoColors.amber : CeoColors.green,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      f,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 12,
+                        fontWeight: inherits ? FontWeight.w700 : FontWeight.w500,
+                        color: CeoColors.navy,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
           const SizedBox(height: 16),
           if (isCurrent) 
             Container(
