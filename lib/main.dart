@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'app.dart';
 import 'viewmodels/auth_viewmodel.dart';
 import 'viewmodels/ceo_viewmodel.dart';
+import 'viewmodels/ceo_supplier_profile_viewmodel.dart';
 import 'viewmodels/admin_viewmodel.dart';
 import 'viewmodels/supplier_viewmodel.dart';
 import 'viewmodels/field_user/field_session_viewmodel.dart';
@@ -437,6 +438,21 @@ void main() async {
             update:
                 (context, mat, ord, previous) =>
                     previous ?? FieldSupplierProfileViewModel(mat, ord),
+          ),
+
+          ChangeNotifierProxyProvider2<
+            MaterialRepository,
+            OrderRepository,
+            CeoSupplierProfileViewModel
+          >(
+            create:
+                (context) => CeoSupplierProfileViewModel(
+                  context.read<MaterialRepository>(),
+                  context.read<OrderRepository>(),
+                ),
+            update:
+                (context, mat, ord, previous) =>
+                    previous ?? CeoSupplierProfileViewModel(mat, ord),
           ),
 
           ChangeNotifierProxyProvider3<

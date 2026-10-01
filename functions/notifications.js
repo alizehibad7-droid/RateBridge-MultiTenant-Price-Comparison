@@ -209,6 +209,130 @@ exports.onAppealSubmitted = functions.firestore
     return null;
   });
 
+/** Alias kept for older deploy/index references. */
+exports.onAppealCreated = exports.onAppealSubmitted;
+
+/**
+ * FCM push when a doc is written to admin_notifications (legacy/admin feed).
+ * Also mirrors into root notifications so in-app admin inbox can show it.
+ */
+exports.onAdminNotificationCreated = functions.firestore
+  .document('admin_notifications/{notifId}')
+  .onCreate(async (snap) => {
+    const notif = snap.data() || {};
+    const title = notif.title || 'Admin notification';
+    const body = notif.message || notif.body || '';
+    const type = notif.type || 'system';
+    const data = notif.data || {};
+
+    // Prefer explicit recipient; otherwise fan-out to all admins.
+    const targetUid = String(notif.recipientUserId || notif.userId || '').trim();
+    const recipients = targetUid ? [targetUid] : await getAdminUids();
+
+    for (const uid of recipients) {
+      if (!uid) continue;
+      await writeNotificationRecord(uid, {
+        type,
+        title,
+        body,
+        data: { ...data, adminNotificationId: snap.id },
+      });
+    }
+    return null;
+  });
+
+/**
+ * HTTPS callable — notify company CEO of a supplier join request.
+ */
+exports.sendJoinRequestNotification = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Must be authenticated');
+  }
+
+  const companyId = String(data?.companyId || '').trim();
+  const supplierName = String(data?.supplierName || 'A supplier').trim();
+  const reqId = String(data?.reqId || '').trim();
+
+  if (!companyId) {
+    throw new functions.https.HttpsError('invalid-argument', 'companyId is required');
+  }
+
+  let ceoUid = '';
+  const companySnap = await db.collection('companies').doc(companyId).get();
+  if (companySnap.exists) {
+    ceoUid = String(companySnap.data()?.ceoUid || '').trim();
+  }
+  if (!ceoUid) {
+    try {
+      const ceoQuery = await db
+        .collection('users')
+        .where('companyId', '==', companyId)
+        .where('role', 'in', ['CEO', 'ceo'])
+        .limit(1)
+        .get();
+      if (!ceoQuery.empty) ceoUid = ceoQuery.docs[0].id;
+    } catch (error) {
+      console.error('sendJoinRequestNotification CEO lookup failed:', error);
+    }
+  }
+
+  if (!ceoUid) {
+    throw new functions.https.HttpsError(
+      'not-found',
+      'Could not find a CEO for this company.'
+    );
+  }
+
+  await writeNotificationRecord(ceoUid, {
+    type: 'partnership',
+    title: 'New join request',
+    body: `${supplierName} wants to partner with your company. Tap to review.`,
+    data: {
+      event: 'join_request',
+      reqId,
+      companyId,
+      relatedId: reqId,
+      relatedCollection: 'joinRequests',
+      supplierName,
+    },
+  });
+
+  return { success: true };
+});
+
+/**
+ * HTTPS callable — generic order notification to a user.
+ */
+exports.sendOrderNotification = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Must be authenticated');
+  }
+
+  const toUid = String(data?.toUid || '').trim();
+  const orderId = String(data?.orderId || '').trim();
+  const type = String(data?.type || 'orderUpdate').trim();
+  const title = String(data?.title || 'Order update').trim();
+  const body = String(data?.body || data?.message || '').trim();
+
+  if (!toUid) {
+    throw new functions.https.HttpsError('invalid-argument', 'toUid is required');
+  }
+
+  await writeNotificationRecord(toUid, {
+    type,
+    title,
+    body,
+    data: {
+      orderId,
+      relatedId: orderId,
+      relatedCollection: 'orders',
+      ...(data?.data && typeof data.data === 'object' ? data.data : {}),
+    },
+  });
+
+  return { success: true };
+});
+
 exports.onDisputeCreated = functions.firestore
   .document('disputes/{disputeId}')
   .onCreate(async (snap, context) => {

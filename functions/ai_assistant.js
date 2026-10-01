@@ -3,6 +3,14 @@ const admin = require('firebase-admin');
 const axios = require('axios');
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
 
+/** Models this project's Groq key can actually call (verified via /v1/models). */
+const GROQ_MODEL_CANDIDATES = [
+  process.env.GROQ_MODEL,
+  'openai/gpt-oss-20b',
+  'qwen/qwen3.8-27b',
+  'allam-2-7b',
+].filter(Boolean);
+
 function readGroqKey() {
   if (process.env.GROQ_API_KEY) return process.env.GROQ_API_KEY;
   try {
@@ -12,11 +20,22 @@ function readGroqKey() {
   }
 }
 
-async function generateWithGroq(prompt, apiKey) {
+function isModelUnavailableError(error) {
+  const status = error?.response?.status;
+  const code = String(error?.response?.data?.error?.code || '').toLowerCase();
+  const msg = String(error?.response?.data?.error?.message || error?.message || '').toLowerCase();
+  return (
+    status === 404 ||
+    code === 'model_not_found' ||
+    (msg.includes('model') && (msg.includes('not found') || msg.includes('do not have access')))
+  );
+}
+
+async function callGroqOnce(prompt, apiKey, model) {
   const res = await axios.post(
     'https://api.groq.com/openai/v1/chat/completions',
     {
-      model: 'groq/compound-mini',
+      model,
       max_tokens: 500,
       temperature: 0.3,
       messages: [{ role: 'user', content: prompt }],
@@ -27,14 +46,52 @@ async function generateWithGroq(prompt, apiKey) {
         'Content-Type': 'application/json',
       },
       timeout: 45000,
+      validateStatus: () => true,
     },
   );
-  const content = String(
-    res.data?.choices?.[0]?.message?.content ||
-      res.data?.choices?.[0]?.message?.reasoning ||
-      '',
-  ).trim();
-  return content;
+
+  if (res.status >= 200 && res.status < 300) {
+    const content = String(
+      res.data?.choices?.[0]?.message?.content ||
+        res.data?.choices?.[0]?.message?.reasoning ||
+        '',
+    ).trim();
+    return content;
+  }
+
+  const err = new Error(
+    res.data?.error?.message || `Request failed with status code ${res.status}`,
+  );
+  err.response = {
+    status: res.status,
+    data: res.data,
+  };
+  throw err;
+}
+
+async function generateWithGroq(prompt, apiKey) {
+  let lastError;
+  const tried = [];
+
+  for (const model of GROQ_MODEL_CANDIDATES) {
+    if (tried.includes(model)) continue;
+    tried.push(model);
+    try {
+      const text = await callGroqOnce(prompt, apiKey, model);
+      console.log(`AI provider used: groq model=${model}`);
+      return text;
+    } catch (error) {
+      lastError = error;
+      const detail =
+        error?.response?.data?.error?.message || error?.message || String(error);
+      console.error(`Groq model failed (${model}): ${detail}`);
+      if (!isModelUnavailableError(error)) {
+        throw error;
+      }
+    }
+  }
+
+  throw lastError || new Error('No Groq model available for this API key.');
 }
 
 async function generateText(prompt) {
@@ -47,23 +104,33 @@ async function generateText(prompt) {
   if (!text) {
     throw new Error('AI returned an empty response.');
   }
-  console.log('AI provider used: groq');
   return text;
 }
 
 function publicAiError(error) {
-  const raw = String(error?.message || error || 'AI request failed.');
+  const status = error?.response?.status;
+  const apiMsg = error?.response?.data?.error?.message;
+  const raw = String(apiMsg || error?.message || error || 'AI request failed.');
   const lower = raw.toLowerCase();
   if (
     lower.includes('api key') ||
     lower.includes('unauthenticated') ||
     lower.includes('401') ||
+    status === 401 ||
     lower.includes('permission') ||
     lower.includes('groq_api_key')
   ) {
     return 'AI provider authentication failed. Set GROQ_API_KEY for the Cloud Function.';
   }
-  if (lower.includes('429') || lower.includes('rate limit') || lower.includes('resource exhausted')) {
+  if (isModelUnavailableError(error)) {
+    return 'AI model is unavailable for this Groq account. Check allowed models in Groq console.';
+  }
+  if (
+    status === 429 ||
+    lower.includes('429') ||
+    lower.includes('rate limit') ||
+    lower.includes('resource exhausted')
+  ) {
     return 'AI provider rate limit reached. Try again shortly.';
   }
   if (lower.includes('timeout') || lower.includes('etimedout') || lower.includes('deadline')) {
@@ -71,6 +138,9 @@ function publicAiError(error) {
   }
   if (lower.includes('empty response')) {
     return 'The assistant returned an empty response.';
+  }
+  if (lower.startsWith('request failed with status code')) {
+    return 'The AI service is temporarily unavailable. Please try again.';
   }
   return raw.slice(0, 280);
 }
@@ -100,7 +170,7 @@ exports.onAiJobCreated = functions
         completedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
     } catch (error) {
-      console.error('onAiJobCreated error:', error);
+      console.error('onAiJobCreated error:', error?.response?.data || error);
       await snap.ref.update({
         status: 'error',
         error: publicAiError(error),
@@ -129,7 +199,7 @@ exports.generateAiText = onCall(
       const text = await generateText(prompt);
       return { text };
     } catch (error) {
-      console.error('generateAiText error:', error);
+      console.error('generateAiText error:', error?.response?.data || error);
       throw new HttpsError('internal', publicAiError(error));
     }
   },

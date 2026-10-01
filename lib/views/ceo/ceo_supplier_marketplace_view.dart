@@ -7,6 +7,7 @@ import '../../viewmodels/auth_viewmodel.dart';
 import '../../models/supplier_model.dart';
 import '../../theme/ceo_theme.dart';
 import '../../widgets/ceo/ceo_widgets.dart';
+import 'ceo_supplier_profile_view.dart';
 import 'dart:async';
 
 class CeoSupplierMarketplaceView extends StatefulWidget {
@@ -436,6 +437,16 @@ class _SupplierMarketCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () => openCeoSupplierProfile(context, supplier.id),
+              icon: const Icon(Icons.person_outline_rounded, size: 18),
+              label: const Text('VIEW PROFILE'),
+              style: CeoTheme.secondaryButtonStyle(height: 44),
+            ),
+          ),
+          const SizedBox(height: 10),
           _buildActionButton(context, ceoVM, invStatus, supplier),
         ],
       ),

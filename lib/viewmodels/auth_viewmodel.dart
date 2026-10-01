@@ -203,7 +203,9 @@ class AuthViewModel extends ChangeNotifier {
     _errorMessage = null;
     notifyListeners();
     try {
-      final userCredential = await _authService.signIn(email, password);
+      final normalizedEmail = email.trim().toLowerCase();
+      final userCredential =
+          await _authService.signIn(normalizedEmail, password);
       final firebaseUser = userCredential.user;
       final uid = firebaseUser?.uid;
       if (uid == null) throw Exception("Authentication failed");
@@ -873,6 +875,7 @@ class AuthViewModel extends ChangeNotifier {
         case 'user-not-found':
         case 'wrong-password':
         case 'invalid-credential':
+        case 'INVALID_LOGIN_CREDENTIALS':
           return 'Incorrect email or password.';
         case 'invalid-email':
           return 'Please enter a valid email address.';
@@ -886,7 +889,16 @@ class AuthViewModel extends ChangeNotifier {
           return 'Please sign out and sign in again, then retry changing your password.';
         case 'too-many-requests':
           return 'Too many attempts. Please try again later.';
+        case 'network-request-failed':
+          return 'Network error. Check your connection and try again.';
         default:
+          // Prefer a clear login message over raw Firebase text.
+          final msg = (e.message ?? '').toLowerCase();
+          if (msg.contains('password') ||
+              msg.contains('credential') ||
+              msg.contains('user')) {
+            return 'Incorrect email or password.';
+          }
           return e.message ?? 'Authentication error. Please try again.';
       }
     }

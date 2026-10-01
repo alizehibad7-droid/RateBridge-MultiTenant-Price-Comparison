@@ -36,6 +36,7 @@ import 'views/ceo/ceo_invite_hub_view.dart';
 import 'views/ceo/ceo_supplier_marketplace_view.dart';
 import 'views/ceo/ceo_join_requests_view.dart';
 import 'views/ceo/ceo_my_suppliers_view.dart';
+import 'views/ceo/ceo_supplier_profile_view.dart';
 import 'views/ceo/ceo_field_users_view.dart';
 import 'views/ceo/ceo_orders_view.dart';
 import 'views/ceo/ceo_subscription_view.dart';
@@ -220,6 +221,15 @@ class _RateBridgeAppState extends State<RateBridgeApp> {
           path: RouteNames.ceoMySuppliers,
           builder:
               (context, state) => CeoTheme.wrap(const CeoMySuppliersView()),
+        ),
+        GoRoute(
+          path: RouteNames.ceoSupplierProfile,
+          builder: (context, state) {
+            final supplierUid = state.pathParameters['supplierUid'] ?? '';
+            return CeoTheme.wrap(
+              CeoSupplierProfileView(supplierUid: supplierUid),
+            );
+          },
         ),
         GoRoute(
           path: RouteNames.ceoFieldUsers,

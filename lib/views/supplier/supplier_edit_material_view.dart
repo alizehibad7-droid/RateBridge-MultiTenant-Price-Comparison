@@ -356,15 +356,6 @@ class _SupplierEditMaterialViewState extends State<SupplierEditMaterialView> {
 
                       final supplierVM = context.read<SupplierViewModel>();
                       final companyId = supplierVM.selectedCompanyId ?? '';
-                      if (companyId.isEmpty) {
-                        if (!context.mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Select a company before updating materials.'),
-                          ),
-                        );
-                        return;
-                      }
 
                       materialVM.resetSuccess();
                       await materialVM.updateMaterial(

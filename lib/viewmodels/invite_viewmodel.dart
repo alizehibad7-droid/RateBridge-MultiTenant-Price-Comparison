@@ -172,11 +172,16 @@ class InviteViewModel extends ChangeNotifier {
       final reqId = await _joinRequestRepo.createJoinRequest(
         supplierUid, companyId, supplierName, supplierCity, categories, rating, message,
       );
-      await _cloudFunctions.callFunction('sendJoinRequestNotification', {
-        'companyId': companyId,
-        'supplierName': supplierName,
-        'reqId': reqId,
-      });
+      try {
+        await _cloudFunctions.callFunction('sendJoinRequestNotification', {
+          'companyId': companyId,
+          'supplierName': supplierName,
+          'reqId': reqId,
+        });
+      } catch (notifyError) {
+        // Join request is saved — don't fail the whole action if notify CF fails.
+        debugPrint('sendJoinRequestNotification failed: $notifyError');
+      }
     } catch(e) {
       _error = e.toString();
     } finally {

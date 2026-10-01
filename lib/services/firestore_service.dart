@@ -490,7 +490,9 @@ class FirestoreService {
   }
 
   bool _isActiveSupplierLink(Map<String, dynamic> data) {
-    final status = (data['status'] as String?)?.toLowerCase() ?? 'active';
+    // Require explicit active/approved — missing/deactivated/pending must not
+    // surface materials or ordering for field users.
+    final status = (data['status'] as String?)?.trim().toLowerCase() ?? '';
     return status == 'active' || status == 'approved';
   }
 
@@ -679,11 +681,19 @@ class FirestoreService {
       return [];
     }
 
-    final snap =
-        await _db
-            .collection('materials')
-            .where('supplierId', isEqualTo: supplierId)
-            .get();
+    return getListedMaterialsForSupplier(supplierId);
+  }
+
+  /// Listed materials for a supplier (no company-link check).
+  /// Used by CEO Supplier Profile for partnership decisions / marketplace browse.
+  Future<List<MaterialModel>> getListedMaterialsForSupplier(
+    String supplierId,
+  ) async {
+    if (supplierId.isEmpty) return [];
+    final snap = await _db
+        .collection('materials')
+        .where('supplierId', isEqualTo: supplierId)
+        .get();
     return snap.docs
         .map((doc) => MaterialModel.fromMap(doc.data() as Map<String, dynamic>))
         .where((m) => m.isListed)

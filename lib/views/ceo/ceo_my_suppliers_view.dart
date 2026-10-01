@@ -13,6 +13,7 @@ import '../../viewmodels/ceo_viewmodel.dart';
 import '../../widgets/ceo_nav_bar.dart';
 import '../../widgets/ceo/ceo_widgets.dart';
 import '../../widgets/supplier_performance_scorecard.dart';
+import 'ceo_supplier_profile_view.dart';
 
 const _citiesAll = [
   'All',
@@ -396,6 +397,16 @@ class _DirectorySupplierCard extends StatelessWidget {
           const SizedBox(height: 16),
           const Divider(height: 1),
           const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () => openCeoSupplierProfile(context, supplier.id),
+              icon: const Icon(Icons.person_outline_rounded, size: 18),
+              label: const Text('VIEW PROFILE'),
+              style: CeoTheme.secondaryButtonStyle(height: 44),
+            ),
+          ),
+          const SizedBox(height: 10),
           if (isSuspended) ...[
             Container(
               width: double.infinity,

@@ -43,7 +43,7 @@ class OrderRepository {
           );
         }
         final linkStatus =
-            (link.data()?['status'] as String?)?.toLowerCase() ?? 'active';
+            (link.data()?['status'] as String?)?.trim().toLowerCase() ?? '';
         if (linkStatus != 'active' && linkStatus != 'approved') {
           throw AppException(
             'This supplier has been deactivated for your company. New orders cannot be placed.',

@@ -200,17 +200,6 @@ class _SupplierAddMaterialViewState extends State<SupplierAddMaterialView> {
     }
 
     final companyId = supplierVM.selectedCompanyId ?? '';
-    if (companyId.isEmpty) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Select a company before adding materials. Accept a company invitation if you have not yet.',
-          ),
-        ),
-      );
-      return;
-    }
 
     materialVM.resetSuccess();
     await materialVM.addMaterial(

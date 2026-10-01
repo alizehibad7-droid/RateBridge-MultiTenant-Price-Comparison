@@ -49,7 +49,7 @@ class _LoginViewState extends State<LoginView> {
     
     authVm.clearError();
     final success = await authVm.signIn(
-      _emailController.text,
+      _emailController.text.trim(),
       _passwordController.text,
     );
 

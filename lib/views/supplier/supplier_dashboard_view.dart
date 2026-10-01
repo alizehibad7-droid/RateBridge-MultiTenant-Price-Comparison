@@ -477,10 +477,7 @@ class _SupplierDashboardViewState extends State<SupplierDashboardView> {
                                 _SectionWrapper(
                                   error: viewModel.error,
                                   onRetry: () async {
-                                    final id = viewModel.selectedCompanyId;
-                                    if (id != null) {
-                                      await viewModel.loadMaterials(id);
-                                    }
+                                    await viewModel.loadMaterials();
                                   },
                                   child: viewModel.recentMaterials.isEmpty
                                       ? _AddFirstMaterialCard(

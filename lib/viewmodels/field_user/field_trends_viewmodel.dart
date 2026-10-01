@@ -162,6 +162,13 @@ class FieldTrendsViewModel extends ChangeNotifier {
         );
       }
 
+      await _enrichHistoryLabels(
+        companyId: companyId,
+        fallbackMaterialName: _materialName,
+        fallbackSupplierUid: isAggregate ? null : supplierUid,
+        fallbackSupplierName: isAggregate ? null : _supplierName,
+      );
+
       _computeTrendDirection();
       _requestAiInsight();
     } catch (e) {
@@ -170,6 +177,77 @@ class FieldTrendsViewModel extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     }
+  }
+
+  /// Attach display names to each history point without inventing data.
+  Future<void> _enrichHistoryLabels({
+    required String companyId,
+    String? fallbackMaterialName,
+    String? fallbackSupplierUid,
+    String? fallbackSupplierName,
+  }) async {
+    if (_history.isEmpty) return;
+
+    final nameByUid = <String, String>{};
+    if (fallbackSupplierUid != null &&
+        fallbackSupplierUid.isNotEmpty &&
+        (fallbackSupplierName?.trim().isNotEmpty ?? false)) {
+      nameByUid[fallbackSupplierUid] = fallbackSupplierName!.trim();
+    }
+
+    // Prefer names already known from company materials for this material label.
+    final materialLabel = (fallbackMaterialName ?? '').trim();
+    if (materialLabel.isNotEmpty) {
+      try {
+        final materials = await _materialRepo.getMaterialsByNameForCompany(
+          companyId,
+          materialLabel,
+        );
+        for (final m in materials) {
+          final sid = m.supplierId.trim();
+          final sname = m.supplierName.trim();
+          if (sid.isNotEmpty && sname.isNotEmpty) {
+            nameByUid.putIfAbsent(sid, () => sname);
+          }
+        }
+      } catch (_) {
+        // Best-effort enrichment.
+      }
+    }
+
+    final missingUids = _history
+        .map((h) => h.supplierUid.trim())
+        .where((id) => id.isNotEmpty && !nameByUid.containsKey(id))
+        .toSet();
+
+    for (final uid in missingUids) {
+      try {
+        final supplier = await _firestore.getSupplierById(uid);
+        final name = supplier?.name.trim() ?? '';
+        if (name.isNotEmpty) nameByUid[uid] = name;
+      } catch (_) {
+        // Leave unresolved — tooltip shows fallback.
+      }
+    }
+
+    _history = _history.map((h) {
+      final uid = h.supplierUid.trim().isNotEmpty
+          ? h.supplierUid.trim()
+          : (fallbackSupplierUid ?? '');
+      final resolvedName = h.supplierName?.trim().isNotEmpty == true
+          ? h.supplierName!.trim()
+          : nameByUid[uid];
+      final resolvedMaterial = h.materialName?.trim().isNotEmpty == true
+          ? h.materialName!.trim()
+          : (fallbackMaterialName?.trim().isNotEmpty == true
+              ? fallbackMaterialName!.trim()
+              : null);
+      return h.copyWith(
+        supplierUid: uid.isNotEmpty ? uid : h.supplierUid,
+        supplierName: resolvedName,
+        materialName: resolvedMaterial,
+      );
+    }).toList();
   }
 
   void _computeTrendDirection() {
@@ -246,31 +324,47 @@ Write 2 short sentences for a field user: what the trend means and whether buyin
     }
   }
 
+  /// Monthly averages kept per supplier so each chart point stays attributable.
   List<PriceHistoryModel> _monthlyAverages(List<PriceHistoryModel> entries) {
     if (entries.isEmpty) return [];
 
-    final buckets = <String, List<double>>{};
+    final buckets = <String, List<PriceHistoryModel>>{};
     for (final entry in entries) {
-      final key =
+      final month =
           '${entry.timestamp.year}-${entry.timestamp.month.toString().padLeft(2, '0')}';
-      buckets.putIfAbsent(key, () => []).add(entry.price);
+      final supplierKey =
+          entry.supplierUid.trim().isNotEmpty ? entry.supplierUid.trim() : '_';
+      final key = '$supplierKey|$month';
+      buckets.putIfAbsent(key, () => []).add(entry);
     }
 
-    return buckets.entries.map((entry) {
-      final parts = entry.key.split('-');
+    final points = buckets.entries.map((entry) {
+      final sample = entry.value.first;
+      final avg =
+          entry.value.map((e) => e.price).reduce((a, b) => a + b) /
+              entry.value.length;
+      final monthKey = entry.key.split('|').last;
+      final parts = monthKey.split('-');
       final year = int.parse(parts[0]);
       final month = int.parse(parts[1]);
-      final avg = entry.value.reduce((a, b) => a + b) / entry.value.length;
       return PriceHistoryModel(
         histId: entry.key,
-        materialId: '',
-        supplierUid: '',
-        companyId: '',
+        materialId: sample.materialId,
+        supplierUid: sample.supplierUid,
+        companyId: sample.companyId,
         price: avg,
         timestamp: DateTime(year, month, 1),
+        supplierName: sample.supplierName,
+        materialName: sample.materialName ?? _materialName,
       );
-    }).toList()
-      ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+    }).toList();
+
+    points.sort((a, b) {
+      final byTime = a.timestamp.compareTo(b.timestamp);
+      if (byTime != 0) return byTime;
+      return a.displaySupplierName.compareTo(b.displaySupplierName);
+    });
+    return points;
   }
 
   void clearError() {

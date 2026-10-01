@@ -476,9 +476,11 @@ class _AdminCeoManagementViewState extends State<AdminCeoManagementView>
         builder: (context, companySnap) {
           CompanyModel? company;
           if (companySnap.hasData && companySnap.data!.exists) {
-            company = CompanyModel.fromMap(
+            final data = Map<String, dynamic>.from(
               companySnap.data!.data() as Map<String, dynamic>,
             );
+            data['id'] = companySnap.data!.id;
+            company = CompanyModel.fromMap(data);
           }
           final double screenWidth = MediaQuery.of(context).size.width;
 
@@ -590,6 +592,17 @@ class _AdminCeoManagementViewState extends State<AdminCeoManagementView>
                             ],
                           ),
                         ],
+                      ),
+                    ],
+                    if ((company?.id ?? ceo.companyId).isNotEmpty) ...[
+                      const SizedBox(height: 24),
+                      AdminConnectedPartnersSection(
+                        title: 'Connected Suppliers',
+                        emptyMessage: 'No suppliers linked to this company yet.',
+                        future: Provider.of<AdminViewModel>(context, listen: false)
+                            .getCompanyConnectedSuppliers(
+                              (company?.id ?? ceo.companyId),
+                            ),
                       ),
                     ],
                     const SizedBox(height: 32),

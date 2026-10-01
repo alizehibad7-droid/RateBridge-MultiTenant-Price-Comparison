@@ -14,20 +14,28 @@ class FirebaseAuthService {
 
   Future<UserCredential> signIn(String email, String password) async {
     return await _auth.signInWithEmailAndPassword(
-      email: email,
+      email: _normalizeEmail(email),
       password: password,
     );
   }
 
   Future<UserCredential> createUser(String email, String password) async {
     return await _auth.createUserWithEmailAndPassword(
-      email: email,
+      email: _normalizeEmail(email),
       password: password,
     );
   }
 
   Future<void> sendPasswordReset(String email) async {
-    await _auth.sendPasswordResetEmail(email: email);
+    await _auth.sendPasswordResetEmail(email: _normalizeEmail(email));
+  }
+
+  /// Trim, lowercase, and strip invisible/paste junk Firebase rejects as invalid-email.
+  static String _normalizeEmail(String email) {
+    return email
+        .replaceAll(RegExp(r'[\u200B-\u200D\uFEFF\u00A0]'), '')
+        .trim()
+        .toLowerCase();
   }
 
   Future<void> deleteAccount() async {

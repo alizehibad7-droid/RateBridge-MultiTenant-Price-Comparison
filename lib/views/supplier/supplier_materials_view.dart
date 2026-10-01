@@ -27,16 +27,11 @@ class _SupplierMaterialsViewState extends State<SupplierMaterialsView> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final viewModel = context.read<SupplierViewModel>();
-      if (viewModel.selectedCompanyId != null) {
-        viewModel.loadMaterials(viewModel.selectedCompanyId!);
-      }
+      context.read<SupplierViewModel>().loadMaterials();
     });
   }
 
   Future<void> _confirmDelete(MaterialModel material) async {
-    final companyId = context.read<SupplierViewModel>().selectedCompanyId;
-    if (companyId == null) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -44,7 +39,7 @@ class _SupplierMaterialsViewState extends State<SupplierMaterialsView> {
         content: Text(
           material.archived
               ? '${material.name} is already removed from the marketplace.'
-              : 'Remove "${material.name}" from the marketplace? Past orders keep their details. If this material has active orders, deletion will be blocked.',
+              : 'Remove "${material.name}" from the marketplace for all partner companies? Past orders keep their details. If this material has active orders, deletion will be blocked.',
         ),
         actions: [
           TextButton(
@@ -61,7 +56,7 @@ class _SupplierMaterialsViewState extends State<SupplierMaterialsView> {
     );
     if (confirmed != true || !mounted) return;
     try {
-      await context.read<SupplierViewModel>().deleteMaterial(material.id, companyId);
+      await context.read<SupplierViewModel>().deleteMaterial(material.id);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Listing removed from the marketplace')),

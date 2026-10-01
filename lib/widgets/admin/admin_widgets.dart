@@ -2,9 +2,12 @@
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 
+import '../../models/order_model.dart';
 import '../../theme/admin_theme.dart';
 import '../../utils/chat_image_utils.dart';
+import '../../viewmodels/admin_viewmodel.dart';
 
 /// Compact stat card for the admin dashboard grid.
 class AdminStatCard extends StatelessWidget {
@@ -587,6 +590,282 @@ class AdminDocumentThumbnailRow extends StatelessWidget {
 }
 
 /// White card container matching admin panel style.
+/// Connected companies (for supplier detail) or connected suppliers (for CEO
+/// detail), with each partner's shared orders.
+class AdminConnectedPartnersSection extends StatelessWidget {
+  final String title;
+  final String emptyMessage;
+  final Future<List<AdminPartnerLink>> future;
+  final int maxOrdersShown;
+
+  const AdminConnectedPartnersSection({
+    super.key,
+    required this.title,
+    required this.future,
+    this.emptyMessage = 'No connected partners yet.',
+    this.maxOrdersShown = 5,
+  });
+
+  Color _statusColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'active':
+      case 'approved':
+        return AdminColors.green;
+      case 'pending':
+        return AdminColors.amber;
+      case 'deactivated':
+      case 'rejected':
+      case 'suspended':
+        return AdminColors.red;
+      default:
+        return AdminColors.textGrey;
+    }
+  }
+
+  Color _orderStatusColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'delivered':
+      case 'confirmed':
+      case 'accepted':
+        return AdminColors.green;
+      case 'pending':
+      case 'cancellation_requested':
+        return AdminColors.amber;
+      case 'rejected':
+      case 'cancelled':
+        return AdminColors.red;
+      default:
+        return AdminColors.textGrey;
+    }
+  }
+
+  String _formatDate(DateTime d) => DateFormat('dd MMM yyyy').format(d);
+
+  String _formatAmount(double amount) {
+    final fmt = NumberFormat.currency(symbol: 'Rs ', decimalDigits: 0);
+    return fmt.format(amount);
+  }
+
+  String _shortId(String id) {
+    if (id.length <= 8) return id;
+    return '${id.substring(0, 8)}…';
+  }
+
+  Widget _statusPill(String status, Color color, {bool compact = false}) {
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 6 : 8,
+        vertical: compact ? 2 : 3,
+      ),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        status.toUpperCase(),
+        style: GoogleFonts.plusJakartaSans(
+          fontSize: compact ? 8 : 9,
+          fontWeight: FontWeight.w700,
+          color: color,
+          letterSpacing: 0.4,
+        ),
+      ),
+    );
+  }
+
+  Widget _orderRow(OrderModel order, bool isMobile) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            flex: 3,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  order.materialName.trim().isEmpty
+                      ? 'Order ${_shortId(order.orderId)}'
+                      : order.materialName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: isMobile ? 10 : 11,
+                    fontWeight: FontWeight.w600,
+                    color: AdminColors.navy,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${_shortId(order.orderId)} · ${_formatDate(order.createdAt)}',
+                  style: AdminTheme.mutedStyle(size: isMobile ? 8 : 9),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            _formatAmount(order.totalAmount),
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: isMobile ? 10 : 11,
+              fontWeight: FontWeight.w700,
+              color: AdminColors.navy,
+            ),
+          ),
+          const SizedBox(width: 8),
+          _statusPill(order.status, _orderStatusColor(order.status), compact: true),
+        ],
+      ),
+    );
+  }
+
+  Widget _partnerCard(AdminPartnerLink link, bool isMobile) {
+    final orders = link.orders;
+    final shown = orders.take(maxOrdersShown).toList(growable: false);
+    final remaining = orders.length - shown.length;
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: EdgeInsets.all(isMobile ? 10 : 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AdminColors.border.withValues(alpha: 0.8)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      link.partnerName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: isMobile ? 12 : 13,
+                        fontWeight: FontWeight.w700,
+                        color: AdminColors.navy,
+                      ),
+                    ),
+                    if (link.subtitle.trim().isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        link.subtitle,
+                        style: AdminTheme.mutedStyle(size: isMobile ? 9 : 10),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              _statusPill(link.linkStatus, _statusColor(link.linkStatus)),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Icon(Icons.receipt_long_outlined,
+                  size: 14, color: AdminColors.textGrey),
+              const SizedBox(width: 4),
+              Text(
+                '${orders.length} order${orders.length == 1 ? '' : 's'}',
+                style: AdminTheme.mutedStyle(size: isMobile ? 9 : 10)
+                    .copyWith(fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+          if (orders.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(
+                'No orders with this partner yet.',
+                style: AdminTheme.mutedStyle(size: isMobile ? 9 : 10)
+                    .copyWith(fontStyle: FontStyle.italic),
+              ),
+            )
+          else ...[
+            const SizedBox(height: 4),
+            ...shown.map((o) => _orderRow(o, isMobile)),
+            if (remaining > 0)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
+                  '+$remaining more order${remaining == 1 ? '' : 's'}',
+                  style: AdminTheme.mutedStyle(size: isMobile ? 9 : 10)
+                      .copyWith(fontWeight: FontWeight.w600),
+                ),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final double screenWidth = MediaQuery.of(context).size.width;
+    final bool isMobile = screenWidth < 600;
+
+    return AdminApprovalSection(
+      title: title,
+      children: [
+        FutureBuilder<List<AdminPartnerLink>>(
+          future: future,
+          builder: (context, snap) {
+            if (snap.connectionState == ConnectionState.waiting) {
+              return const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: Center(
+                  child: SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                ),
+              );
+            }
+            if (snap.hasError) {
+              return Text(
+                'Could not load connections.',
+                style: AdminTheme.mutedStyle(size: isMobile ? 10 : 11)
+                    .copyWith(color: AdminColors.red),
+              );
+            }
+            final links = snap.data ?? const <AdminPartnerLink>[];
+            if (links.isEmpty) {
+              return Text(
+                emptyMessage,
+                style: AdminTheme.mutedStyle(size: isMobile ? 10 : 11)
+                    .copyWith(fontStyle: FontStyle.italic),
+              );
+            }
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(
+                    '${links.length} connected · '
+                    '${links.fold<int>(0, (s, l) => s + l.orders.length)} orders',
+                    style: AdminTheme.mutedStyle(size: isMobile ? 9 : 10)
+                        .copyWith(fontWeight: FontWeight.w600),
+                  ),
+                ),
+                ...links.map((l) => _partnerCard(l, isMobile)),
+              ],
+            );
+          },
+        ),
+      ],
+    );
+  }
+}
+
 class AdminCard extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry? padding;
@@ -611,6 +890,7 @@ class AdminCard extends StatelessWidget {
     final effectivePadding = padding ?? EdgeInsets.all(isMobile ? 12 : 16);
 
     return Container(
+      width: double.infinity,
       margin: margin,
       padding: effectivePadding,
       decoration: AdminTheme.cardDecoration().copyWith(
@@ -620,7 +900,7 @@ class AdminCard extends StatelessWidget {
       child: title == null
           ? child
           : Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(title!, style: AdminTheme.titleStyle(size: isMobile ? 14 : 15)),

@@ -47,6 +47,23 @@ class PlatformTransaction {
   });
 }
 
+/// Admin detail: a linked company↔supplier relationship with orders for that pair.
+class AdminPartnerLink {
+  final String partnerId;
+  final String partnerName;
+  final String subtitle;
+  final String linkStatus;
+  final List<OrderModel> orders;
+
+  const AdminPartnerLink({
+    required this.partnerId,
+    required this.partnerName,
+    this.subtitle = '',
+    required this.linkStatus,
+    this.orders = const [],
+  });
+}
+
 class AdminStats {
   final int totalUsers;
   final int totalCEOs;
@@ -612,6 +629,135 @@ class AdminViewModel extends ChangeNotifier {
       _supplierOrdersCache[supplierUid] = orders;
       return orders;
     } catch (e) { return []; }
+  }
+
+  /// Companies linked to [supplierId] via `suppliers/{id}/companies`, with
+  /// that pair's orders from the top-level `orders` collection.
+  Future<List<AdminPartnerLink>> getSupplierConnectedCompanies(
+    String supplierId,
+  ) async {
+    if (supplierId.isEmpty) return const [];
+    try {
+      final links = await _db
+          .collection(FirestorePaths.suppliersCol)
+          .doc(supplierId)
+          .collection('companies')
+          .get();
+      if (links.docs.isEmpty) return const [];
+
+      final allOrders = await getSupplierOrders(supplierId);
+      final results = <AdminPartnerLink>[];
+
+      for (final doc in links.docs) {
+        final linkStatus =
+            (doc.data()['status'] as String?)?.trim().toLowerCase() ?? '';
+        final companySnap =
+            await _db.collection(FirestorePaths.companiesCol).doc(doc.id).get();
+        final companyName = companySnap.exists
+            ? ((companySnap.data()?['name'] ??
+                        companySnap.data()?['companyName'] ??
+                        doc.data()['name'] ??
+                        'Company')
+                    .toString())
+            : ((doc.data()['name'] as String?)?.trim().isNotEmpty == true
+                ? doc.data()['name'].toString()
+                : 'Company ${doc.id}');
+        final city = companySnap.exists
+            ? (companySnap.data()?['city'] as String?)?.trim() ?? ''
+            : (doc.data()['city'] as String?)?.trim() ?? '';
+        final ceoName = companySnap.exists
+            ? (companySnap.data()?['ceoFullName'] as String?)?.trim() ?? ''
+            : '';
+        final subtitleParts = <String>[
+          if (ceoName.isNotEmpty) 'CEO: $ceoName',
+          if (city.isNotEmpty) city,
+        ];
+        final pairOrders = allOrders
+            .where((o) => o.companyId == doc.id)
+            .toList(growable: false);
+        results.add(
+          AdminPartnerLink(
+            partnerId: doc.id,
+            partnerName: companyName,
+            subtitle: subtitleParts.join(' · '),
+            linkStatus: linkStatus.isEmpty ? 'unknown' : linkStatus,
+            orders: pairOrders,
+          ),
+        );
+      }
+
+      results.sort((a, b) => a.partnerName.toLowerCase().compareTo(
+            b.partnerName.toLowerCase(),
+          ));
+      return results;
+    } catch (e) {
+      developer.log('getSupplierConnectedCompanies failed: $e');
+      return const [];
+    }
+  }
+
+  /// Suppliers linked to [companyId] via `companies/{id}/suppliers`, with
+  /// that pair's orders.
+  Future<List<AdminPartnerLink>> getCompanyConnectedSuppliers(
+    String companyId,
+  ) async {
+    if (companyId.isEmpty) return const [];
+    try {
+      final links = await _db
+          .collection(FirestorePaths.companiesCol)
+          .doc(companyId)
+          .collection('suppliers')
+          .get();
+      if (links.docs.isEmpty) return const [];
+
+      final allOrders = await getCompanyOrders(companyId);
+      final results = <AdminPartnerLink>[];
+
+      for (final doc in links.docs) {
+        final linkData = doc.data();
+        final linkStatus =
+            (linkData['status'] as String?)?.trim().toLowerCase() ?? '';
+        final supplierSnap =
+            await _db.collection(FirestorePaths.suppliersCol).doc(doc.id).get();
+        String partnerName = '';
+        String city = '';
+        if (supplierSnap.exists && supplierSnap.data() != null) {
+          final data = supplierSnap.data()!;
+          partnerName = (data['name'] ?? data['businessName'] ?? '').toString();
+          city = (data['city'] as String?)?.trim() ?? '';
+        }
+        if (partnerName.trim().isEmpty) {
+          partnerName = (linkData['name'] ??
+                  linkData['supplierName'] ??
+                  linkData['businessName'] ??
+                  'Supplier')
+              .toString();
+        }
+        if (city.isEmpty) {
+          city = (linkData['city'] as String?)?.trim() ?? '';
+        }
+        final pairOrders = allOrders
+            .where((o) => o.supplierId == doc.id)
+            .toList(growable: false);
+        results.add(
+          AdminPartnerLink(
+            partnerId: doc.id,
+            partnerName: partnerName,
+            subtitle: city,
+            linkStatus: linkStatus.isEmpty ? 'unknown' : linkStatus,
+            orders: pairOrders,
+          ),
+        );
+      }
+
+      results.sort((a, b) => a.partnerName.toLowerCase().compareTo(
+            b.partnerName.toLowerCase(),
+          ));
+      return results;
+    } catch (e) {
+      developer.log('getCompanyConnectedSuppliers failed: $e');
+      return const [];
+    }
   }
 
   Future<List<RatingModel>> getSupplierRatings(String supplierUid) async {

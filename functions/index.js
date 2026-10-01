@@ -1,6 +1,8 @@
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
-admin.initializeApp();
+if (!admin.apps.length) {
+  admin.initializeApp();
+}
 
 const { onOrderConfirmed, onCommissionEnsureJobCreated } = require('./commission');
 const {
@@ -16,8 +18,10 @@ const {
   onUserRegistration, 
   onPaymentProofCreated, 
   onDisputeCreated, 
-  onAppealCreated,
+  onAppealSubmitted,
   onOrderNotifySupplier,
+  sendJoinRequestNotification,
+  sendOrderNotification,
 } = require('./notifications');
 const { verifyPaymentScreenshot } = require('./payment_verification');
 const {
@@ -51,13 +55,17 @@ exports.onMessageSent = onMessageSent;
 exports.onNotificationCreated = onNotificationCreated;
 exports.onAdminNotificationCreated = onAdminNotificationCreated;
 exports.onOrderNotifySupplier = onOrderNotifySupplier;
+exports.sendJoinRequestNotification = sendJoinRequestNotification;
+exports.sendOrderNotification = sendOrderNotification;
 
 // Admin Triggers
 exports.onUserRegistration = onUserRegistration;
 // Screenshot payment proofs removed — Stripe-only payments.
 // exports.onPaymentProofCreated = onPaymentProofCreated;
 exports.onDisputeCreated = onDisputeCreated;
-exports.onAppealCreated = onAppealCreated;
+// Canonical name + alias for older deploy references.
+exports.onAppealSubmitted = onAppealSubmitted;
+exports.onAppealCreated = onAppealSubmitted;
 
 // exports.verifyPaymentScreenshot = verifyPaymentScreenshot;
 exports.createRfq = createRfq;

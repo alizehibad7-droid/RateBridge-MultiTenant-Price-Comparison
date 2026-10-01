@@ -191,15 +191,8 @@ class MaterialRepository {
     MaterialModel material,
     String companyId,
   ) async {
-    final db = _db;
-    final batch = db.batch();
-    final data = material.toMap();
-    batch.set(db.collection('materials').doc(material.id), data);
-    batch.set(
-      db.collection('companies').doc(companyId).collection('materials').doc(material.id),
-      data,
-    );
-    await batch.commit();
+    // Materials are global per supplier — companyId is ignored (kept for API compat).
+    await saveMaterial(material);
   }
 
   Future<void> updateMaterialFields(
@@ -207,16 +200,8 @@ class MaterialRepository {
     String companyId,
     Map<String, dynamic> data,
   ) async {
-    final db = _db;
-    await Future.wait([
-      db.collection('materials').doc(matId).update(data),
-      db
-          .collection('companies')
-          .doc(companyId)
-          .collection('materials')
-          .doc(matId)
-          .update(data),
-    ]);
+    // Update the global catalog only. Partner companies read from materials/.
+    await _db.collection('materials').doc(matId).update(data);
   }
 
   Future<void> removeMaterial(String id) async {
@@ -236,6 +221,26 @@ class MaterialRepository {
     String supplierId,
   ) async {
     return _firestoreService.getCompanyMaterialsBySupplier(companyId, supplierId);
+  }
+
+  /// Listed materials for [supplierId] without requiring a company partnership.
+  Future<List<MaterialModel>> getListedMaterialsForSupplier(
+    String supplierId,
+  ) async {
+    return _firestoreService.getListedMaterialsForSupplier(supplierId);
+  }
+
+  Future<({double average, int count})> getSupplierRatingStats(
+    String supplierUid,
+  ) async {
+    return _firestoreService.getSupplierRatingStats(supplierUid);
+  }
+
+  Future<Map<String, dynamic>> getSupplierOrderStats(
+    String supplierId, {
+    String? companyId,
+  }) async {
+    return _firestoreService.getSupplierStats(supplierId, companyId: companyId);
   }
 
   Future<List<MaterialModel>> getRecentCompanyMaterials(

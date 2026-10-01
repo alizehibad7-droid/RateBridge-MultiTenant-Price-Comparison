@@ -104,12 +104,7 @@ class MaterialViewModel extends ChangeNotifier {
       return;
     }
 
-    if (companyId.trim().isEmpty) {
-      _error = 'No company selected. Please select a company before adding materials.';
-      notifyListeners();
-      return;
-    }
-
+    // companyId is optional — materials are global for all partner companies.
     if (supplierUid.trim().isEmpty) {
       _error = 'Supplier account not found. Please sign in again.';
       notifyListeners();
@@ -169,7 +164,7 @@ class MaterialViewModel extends ChangeNotifier {
         createdAt: DateTime.now(),
       );
 
-      await _materialRepo.saveMaterialWithCompany(material, companyId);
+      await _materialRepo.saveMaterial(material);
       await _materialRepo.recordInitialMaterialPrice(
         materialId: material.id,
         price: material.pricePerUnit,
@@ -254,6 +249,7 @@ class MaterialViewModel extends ChangeNotifier {
         );
       }
 
+      // Global catalog update — visible to all partner companies.
       await _materialRepo.updateMaterialFields(matId, companyId, updates);
       _isSuccess = true;
     } catch (e) {

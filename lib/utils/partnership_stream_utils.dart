@@ -6,9 +6,12 @@ String partnershipCardStatus({
   required DocumentSnapshot<Map<String, dynamic>> linkSnap,
   required PartnershipRequestModel? request,
 }) {
+  // Pending request always wins over a stale/placeholder link doc.
+  if (request?.status == 'pending') return 'Request Pending';
+
   if (linkSnap.exists) {
     final linkStatus =
-        (linkSnap.data()?['status'] as String?)?.toLowerCase() ?? 'active';
+        (linkSnap.data()?['status'] as String?)?.trim().toLowerCase() ?? '';
     if (linkStatus == 'active' || linkStatus == 'approved') {
       return 'Already Partners';
     }
@@ -20,7 +23,8 @@ String partnershipCardStatus({
     case 'pending':
       return 'Request Pending';
     case 'accepted':
-      return 'Already Partners';
+      // Stale accepted request without an active link is not a partner.
+      return 'Not Invited';
     case 'rejected':
       return 'Request Rejected';
     case 'removed':

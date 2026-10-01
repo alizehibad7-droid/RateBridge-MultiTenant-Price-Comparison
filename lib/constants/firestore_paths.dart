@@ -69,8 +69,13 @@ class FirestorePaths {
     '$usersCol/$uid/notifications';
 
   // Supplier sub-collections
+  /// Linked companies for a supplier (canonical path used by app streams).
+  static String supplierCompaniesCol(String supplierUid) =>
+    '$suppliersCol/$supplierUid/companies';
+
+  /// Legacy alias — prefer [supplierCompaniesCol].
   static String supplierCompanyLinksCol(String supplierUid) =>
-    '$suppliersCol/$supplierUid/companyLinks';
+    supplierCompaniesCol(supplierUid);
 
   static String supplierEarningsCol(String supplierUid) =>
     '$suppliersCol/$supplierUid/earnings';

@@ -37,6 +37,7 @@ class RouteNames {
   static const String ceoJoinRequests = '/ceo/join-requests';
   static const String ceoInvite = '/ceo/invite';
   static const String ceoMySuppliers = '/ceo/suppliers';
+  static const String ceoSupplierProfile = '/ceo/suppliers/:supplierUid';
   static const String ceoFieldUsers = '/ceo/field-users';
   static const String ceoOrders = '/ceo/orders';
   static const String ceoSubscription = '/ceo/subscription';

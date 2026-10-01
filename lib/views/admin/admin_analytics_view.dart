@@ -821,39 +821,43 @@ class _CEODetailSectionState extends State<_CEODetailSection> with SingleTickerP
     final perf = adminVM.ceoPerformance.firstWhere((c) => c.ceoUid == widget.ceoUid, orElse: () => CEOPerformanceData(ceoUid: widget.ceoUid, companyId: '', companyName: 'Unknown'));
     final company = adminVM.companiesList.firstWhere((c) => c.ceoUid == widget.ceoUid || c.id == perf.companyId, orElse: () => CompanyModel(id: '', name: perf.companyName, registrationNumber: '', address: '', status: 'active', createdAt: DateTime.now()));
 
-    return Column(
-      children: [
-        Container(
-          color: Colors.white,
-          height: 48,
-          child: TabBar(
-            controller: _tabController,
-            isScrollable: true,
-            labelColor: AdminColors.navy,
-            unselectedLabelColor: AdminColors.textGrey,
-            indicatorColor: AdminColors.green,
-            indicatorWeight: 2,
-            labelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 12),
-            tabs: const [
-              Tab(text: 'Performance'),
-              Tab(text: 'Users'),
-              Tab(text: 'Orders'),
-              Tab(text: 'Reports'),
-            ],
+    return SizedBox(
+      width: double.infinity,
+      child: Column(
+        children: [
+          Container(
+            width: double.infinity,
+            color: Colors.white,
+            height: 48,
+            child: TabBar(
+              controller: _tabController,
+              isScrollable: true,
+              labelColor: AdminColors.navy,
+              unselectedLabelColor: AdminColors.textGrey,
+              indicatorColor: AdminColors.green,
+              indicatorWeight: 2,
+              labelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 12),
+              tabs: const [
+                Tab(text: 'Performance'),
+                Tab(text: 'Users'),
+                Tab(text: 'Orders'),
+                Tab(text: 'Reports'),
+              ],
+            ),
           ),
-        ),
-        Expanded(
-          child: TabBarView(
-            controller: _tabController,
-            children: [
-              _buildOverview(company, perf, adminVM.timeRange),
-              _buildFieldUsers(adminVM, company),
-              _buildOrders(adminVM, company),
-              _buildPerformanceGraph(adminVM, company),
-            ],
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                _buildOverview(company, perf, adminVM.timeRange),
+                _buildFieldUsers(adminVM, company),
+                _buildOrders(adminVM, company),
+                _buildPerformanceGraph(adminVM, company),
+              ],
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -1008,65 +1012,45 @@ class _CEODetailSectionState extends State<_CEODetailSection> with SingleTickerP
     return FutureBuilder<List<OrderModel>>(
       future: vm.getCompanyOrders(company.id),
       builder: (context, snapshot) {
-        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
         final orders = snapshot.data!;
         final trend = vm.getHistoricalOrderTrend(orders);
         final List<FlSpot> spots = [];
-        
+
         if (trend.isNotEmpty) {
           final sortedDates = trend.keys.toList()..sort();
-          for (var date in sortedDates) {
-            spots.add(FlSpot(date.millisecondsSinceEpoch.toDouble(), trend[date]!.toDouble()));
+          for (final date in sortedDates) {
+            spots.add(
+              FlSpot(date.millisecondsSinceEpoch.toDouble(), trend[date]!.toDouble()),
+            );
           }
         }
-        
-        double minX = spots.isEmpty ? 0 : spots.first.x;
-        double maxX = spots.isEmpty ? 0 : spots.last.x;
-        double range = maxX - minX;
-        double interval = range > (86400000 * 14) ? 86400000 * 7 : 86400000;
 
-        return SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
-          child: AdminCard(
-            title: 'Growth Report (${vm.timeRange})',
-            child: SizedBox(
-              width: double.infinity,
-              height: 300,
-              child: spots.isEmpty
-                ? const Center(child: Text('No data found.', style: TextStyle(fontSize: 12)))
-                : LineChart(LineChartData(
-                    minX: minX, maxX: maxX, minY: 0,
-                    gridData: FlGridData(show: true, drawVerticalLine: false, getDrawingHorizontalLine: (v) => FlLine(color: const Color(0xFFF1F5F9), strokeWidth: 1.5)),
-                    borderData: FlBorderData(show: false),
-                    lineTouchData: LineTouchData(
-                      touchTooltipData: LineTouchTooltipData(
-                        getTooltipColor: (_) => AdminColors.navy,
-                        getTooltipItems: (touchedSpots) => touchedSpots.map((s) => LineTooltipItem('${DateFormat('MMM d').format(DateTime.fromMillisecondsSinceEpoch(s.x.toInt()))}\n${s.y.toInt()} Orders', const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 10))).toList(),
-                      ),
-                    ),
-                    titlesData: FlTitlesData(
-                      leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 32, getTitlesWidget: (v, m) => Text(v.toInt().toString(), style: const TextStyle(fontSize: 8, color: Color(0xFF94A3B8))))),
-                      bottomTitles: AxisTitles(
-                        sideTitles: SideTitles(
-                          showTitles: true, 
-                          interval: interval, 
-                          getTitlesWidget: (val, meta) => Padding(padding: const EdgeInsets.only(top: 8), child: Text(DateFormat('MMM d').format(DateTime.fromMillisecondsSinceEpoch(val.toInt())), style: const TextStyle(fontSize: 8, fontWeight: FontWeight.w700, color: Color(0xFF94A3B8))))
-                        )
-                      ),
-                      topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                      rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    ),
-                    lineBarsData: [LineChartBarData(
-                      spots: spots, 
-                      isCurved: true, 
-                      color: AdminColors.green, 
-                      barWidth: 3, 
-                      dotData: const FlDotData(show: true, checkToShowDot: _checkToShowDot), 
-                      belowBarData: BarAreaData(show: true, gradient: LinearGradient(colors: [AdminColors.green.withValues(alpha: 0.15), AdminColors.green.withValues(alpha: 0)], begin: Alignment.topCenter, end: Alignment.bottomCenter))
-                    )]
-                  )),
-            ),
-          ),
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            final pad = MediaQuery.sizeOf(context).width < 600 ? 12.0 : 16.0;
+            return SingleChildScrollView(
+              padding: EdgeInsets.all(pad),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minWidth: 0,
+                  maxWidth: constraints.maxWidth.isFinite
+                      ? constraints.maxWidth
+                      : double.infinity,
+                ),
+                child: AdminCard(
+                  title: 'Growth Report (${vm.timeRange})',
+                  child: _ResponsiveDetailLineChart(
+                    spots: spots,
+                    color: AdminColors.green,
+                    valueLabel: (y) => '${y.toInt()} Orders',
+                  ),
+                ),
+              ),
+            );
+          },
         );
       },
     );
@@ -1074,6 +1058,174 @@ class _CEODetailSectionState extends State<_CEODetailSection> with SingleTickerP
 }
 
 bool _checkToShowDot(FlSpot spot, LineChartBarData barData) => spot.y > 0;
+
+/// Responsive detail line chart that always fits parent width (no horizontal scroll).
+class _ResponsiveDetailLineChart extends StatelessWidget {
+  final List<FlSpot> spots;
+  final Color color;
+  final String Function(double y) valueLabel;
+  final double? maxY;
+  final double height;
+
+  const _ResponsiveDetailLineChart({
+    required this.spots,
+    required this.color,
+    required this.valueLabel,
+    this.maxY,
+    this.height = 280,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (spots.isEmpty) {
+      return SizedBox(
+        height: height,
+        width: double.infinity,
+        child: const Center(
+          child: Text('No data found.', style: TextStyle(fontSize: 12)),
+        ),
+      );
+    }
+
+    var minX = spots.first.x;
+    var maxX = spots.last.x;
+    if (maxX <= minX) {
+      minX -= 86400000;
+      maxX += 86400000;
+    }
+    final range = maxX - minX;
+    final interval = range > (86400000 * 14) ? 86400000 * 7.0 : 86400000.0;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final w = constraints.maxWidth.isFinite && constraints.maxWidth > 0
+            ? constraints.maxWidth
+            : MediaQuery.sizeOf(context).width;
+        return SizedBox(
+          width: w,
+          height: height,
+          child: ClipRect(
+            child: Padding(
+              padding: const EdgeInsets.only(right: 8, top: 8, bottom: 4),
+              child: LineChart(
+                LineChartData(
+                  minX: minX,
+                  maxX: maxX,
+                  minY: 0,
+                  maxY: maxY,
+                  clipData: const FlClipData.all(),
+                  gridData: FlGridData(
+                    show: true,
+                    drawVerticalLine: false,
+                    getDrawingHorizontalLine: (v) => const FlLine(
+                      color: Color(0xFFF1F5F9),
+                      strokeWidth: 1.5,
+                    ),
+                  ),
+                  borderData: FlBorderData(show: false),
+                  lineTouchData: LineTouchData(
+                    touchTooltipData: LineTouchTooltipData(
+                      fitInsideHorizontally: true,
+                      fitInsideVertically: true,
+                      getTooltipColor: (_) => AdminColors.navy,
+                      getTooltipItems: (touchedSpots) => touchedSpots
+                          .map(
+                            (s) => LineTooltipItem(
+                              '${DateFormat('MMM d').format(DateTime.fromMillisecondsSinceEpoch(s.x.toInt()))}\n${valueLabel(s.y)}',
+                              const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 10,
+                              ),
+                            ),
+                          )
+                          .toList(),
+                    ),
+                  ),
+                  titlesData: FlTitlesData(
+                    leftTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: 28,
+                        getTitlesWidget: (v, meta) => SideTitleWidget(
+                          axisSide: meta.axisSide,
+                          space: 4,
+                          child: Text(
+                            v.toInt().toString(),
+                            style: const TextStyle(
+                              fontSize: 8,
+                              color: Color(0xFF94A3B8),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    bottomTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: 26,
+                        interval: interval,
+                        getTitlesWidget: (val, meta) {
+                          // Skip edge labels that commonly paint past the chart bounds.
+                          if (val == meta.min || val == meta.max) {
+                            return const SizedBox.shrink();
+                          }
+                          return SideTitleWidget(
+                            axisSide: meta.axisSide,
+                            space: 4,
+                            child: Text(
+                              DateFormat('MMM d').format(
+                                DateTime.fromMillisecondsSinceEpoch(val.toInt()),
+                              ),
+                              style: const TextStyle(
+                                fontSize: 8,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF94A3B8),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    topTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
+                    rightTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
+                  ),
+                  lineBarsData: [
+                    LineChartBarData(
+                      spots: spots,
+                      isCurved: true,
+                      color: color,
+                      barWidth: 3,
+                      dotData: const FlDotData(
+                        show: true,
+                        checkToShowDot: _checkToShowDot,
+                      ),
+                      belowBarData: BarAreaData(
+                        show: true,
+                        gradient: LinearGradient(
+                          colors: [
+                            color.withValues(alpha: 0.15),
+                            color.withValues(alpha: 0),
+                          ],
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
 
 class _SupplierDetailSection extends StatefulWidget {
   final String supplierUid;
@@ -1115,34 +1267,43 @@ class _SupplierDetailSectionState extends State<_SupplierDetailSection> with Sin
     final perf = adminVM.supplierPerformance.firstWhere((s) => s.supplierUid == widget.supplierUid, orElse: () => SupplierPerformanceData(supplierUid: widget.supplierUid, businessName: 'Unknown'));
     final user = adminVM.allUsers.firstWhere((u) => u.uid == widget.supplierUid, orElse: () => UserModel(uid: widget.supplierUid, email: '', name: perf.businessName, role: 'Supplier', companyId: '', phone: '', city: '', createdAt: DateTime.now()));
 
-    return Column(
-      children: [
-        Container(
-          color: Colors.white,
-          height: 48,
-          child: TabBar(
-            controller: _tabController,
-            isScrollable: true,
-            labelColor: AdminColors.navy,
-            unselectedLabelColor: AdminColors.textGrey,
-            indicatorColor: AdminColors.amber,
-            indicatorWeight: 2,
-            labelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 12),
-            tabs: const [Tab(text: 'Details'), Tab(text: 'Orders'), Tab(text: 'Reviews'), Tab(text: 'Performance')],
+    return SizedBox(
+      width: double.infinity,
+      child: Column(
+        children: [
+          Container(
+            width: double.infinity,
+            color: Colors.white,
+            height: 48,
+            child: TabBar(
+              controller: _tabController,
+              isScrollable: true,
+              labelColor: AdminColors.navy,
+              unselectedLabelColor: AdminColors.textGrey,
+              indicatorColor: AdminColors.amber,
+              indicatorWeight: 2,
+              labelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 12),
+              tabs: const [
+                Tab(text: 'Details'),
+                Tab(text: 'Orders'),
+                Tab(text: 'Reviews'),
+                Tab(text: 'Performance'),
+              ],
+            ),
           ),
-        ),
-        Expanded(
-          child: TabBarView(
-            controller: _tabController,
-            children: [
-              _buildOverview(user, perf, adminVM.timeRange),
-              _buildOrders(adminVM, user),
-              _buildReviews(adminVM, user),
-              _buildPerformanceGraph(adminVM, user),
-            ],
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                _buildOverview(user, perf, adminVM.timeRange),
+                _buildOrders(adminVM, user),
+                _buildReviews(adminVM, user),
+                _buildPerformanceGraph(adminVM, user),
+              ],
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -1303,84 +1464,72 @@ class _SupplierDetailSectionState extends State<_SupplierDetailSection> with Sin
 
   Widget _buildPerformanceGraph(AdminViewModel vm, UserModel user) {
     return FutureBuilder<List<dynamic>>(
-      future: Future.wait([vm.getSupplierOrders(user.uid), vm.getSupplierRatings(user.uid)]),
+      future: Future.wait([
+        vm.getSupplierOrders(user.uid),
+        vm.getSupplierRatings(user.uid),
+      ]),
       builder: (context, snapshot) {
-        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
         final orders = snapshot.data![0] as List<OrderModel>;
         final ratings = snapshot.data![1] as List<RatingModel>;
         final List<FlSpot> spots = [];
-        
+
         if (_performanceMetric == 'Orders') {
           final trend = vm.getHistoricalOrderTrend(orders);
           final sortedDates = trend.keys.toList()..sort();
-          for (var date in sortedDates) {
-            spots.add(FlSpot(date.millisecondsSinceEpoch.toDouble(), trend[date]!.toDouble()));
+          for (final date in sortedDates) {
+            spots.add(
+              FlSpot(date.millisecondsSinceEpoch.toDouble(), trend[date]!.toDouble()),
+            );
           }
         } else {
-          for (var r in ratings) {
-            spots.add(FlSpot(r.createdAt.millisecondsSinceEpoch.toDouble(), r.rating.toDouble()));
+          for (final r in ratings) {
+            spots.add(
+              FlSpot(r.createdAt.millisecondsSinceEpoch.toDouble(), r.rating.toDouble()),
+            );
           }
           spots.sort((a, b) => a.x.compareTo(b.x));
         }
-        
-        double minX = spots.isEmpty ? 0 : spots.first.x;
-        double maxX = spots.isEmpty ? 0 : spots.last.x;
-        double range = maxX - minX;
-        double interval = range > (86400000 * 14) ? 86400000 * 7 : 86400000;
 
-        return SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
-          child: AdminCard(
-            title: 'Performance Report (${vm.timeRange})',
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _MetricSelector(value: _performanceMetric, options: const ['Orders', 'Rating'], onChanged: (v) => setState(() => _performanceMetric = v)),
-                const SizedBox(height: 20),
-                SizedBox(
-                  width: double.infinity,
-                  height: 300,
-                  child: spots.isEmpty
-                    ? const Center(child: Text('No data found.', style: TextStyle(fontSize: 12)))
-                    : LineChart(LineChartData(
-                        minX: minX, maxX: maxX, minY: 0, 
-                        maxY: _performanceMetric == 'Rating' ? 5.5 : null,
-                        gridData: FlGridData(show: true, drawVerticalLine: false, getDrawingHorizontalLine: (v) => FlLine(color: const Color(0xFFF1F5F9), strokeWidth: 1.5)),
-                        borderData: FlBorderData(show: false),
-                        lineTouchData: LineTouchData(
-                          touchTooltipData: LineTouchTooltipData(
-                            getTooltipColor: (_) => AdminColors.navy,
-                            getTooltipItems: (touchedSpots) => touchedSpots.map((s) => LineTooltipItem(
-                              '${DateFormat('MMM d').format(DateTime.fromMillisecondsSinceEpoch(s.x.toInt()))}\n${_performanceMetric == 'Rating' ? s.y.toStringAsFixed(1) : s.y.toInt()} ${_performanceMetric}',
-                              const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 10)
-                            )).toList(),
-                          ),
-                        ),
-                        titlesData: FlTitlesData(
-                          leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 32, getTitlesWidget: (v, m) => Text(v.toInt().toString(), style: const TextStyle(fontSize: 8, color: Color(0xFF94A3B8))))),
-                          bottomTitles: AxisTitles(
-                            sideTitles: SideTitles(
-                              showTitles: true, 
-                              interval: interval, 
-                              getTitlesWidget: (val, meta) => Padding(padding: const EdgeInsets.only(top: 8), child: Text(DateFormat('MMM d').format(DateTime.fromMillisecondsSinceEpoch(val.toInt())), style: const TextStyle(fontSize: 8, fontWeight: FontWeight.w700, color: Color(0xFF94A3B8))))
-                            )
-                          ),
-                          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                        ),
-                        lineBarsData: [LineChartBarData(
-                          spots: spots, 
-                          isCurved: true, 
-                          color: AdminColors.amber, 
-                          barWidth: 3, 
-                          dotData: const FlDotData(show: true, checkToShowDot: _checkToShowDot), 
-                          belowBarData: BarAreaData(show: true, gradient: LinearGradient(colors: [AdminColors.amber.withValues(alpha: 0.15), AdminColors.amber.withValues(alpha: 0)], begin: Alignment.topCenter, end: Alignment.bottomCenter))
-                        )]
-                      )),
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            final pad = MediaQuery.sizeOf(context).width < 600 ? 12.0 : 16.0;
+            return SingleChildScrollView(
+              padding: EdgeInsets.all(pad),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minWidth: 0,
+                  maxWidth: constraints.maxWidth.isFinite
+                      ? constraints.maxWidth
+                      : double.infinity,
                 ),
-              ],
-            ),
-          ),
+                child: AdminCard(
+                  title: 'Performance Report (${vm.timeRange})',
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _MetricSelector(
+                        value: _performanceMetric,
+                        options: const ['Orders', 'Rating'],
+                        onChanged: (v) => setState(() => _performanceMetric = v),
+                      ),
+                      const SizedBox(height: 16),
+                      _ResponsiveDetailLineChart(
+                        spots: spots,
+                        color: AdminColors.amber,
+                        maxY: _performanceMetric == 'Rating' ? 5.5 : null,
+                        valueLabel: (y) => _performanceMetric == 'Rating'
+                            ? '${y.toStringAsFixed(1)} Rating'
+                            : '${y.toInt()} Orders',
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
         );
       },
     );

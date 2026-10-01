@@ -116,9 +116,12 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
               onMenuTap: () => _scaffoldKey.currentState?.openDrawer(),
             ),
             Expanded(
-              child: IndexedStack(
-                index: _tabHistory.index,
-                children: _screens,
+              child: ClipRect(
+                child: IndexedStack(
+                  index: _tabHistory.index,
+                  sizing: StackFit.expand,
+                  children: _screens,
+                ),
               ),
             ),
           ],
@@ -152,9 +155,12 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
                   onProfileTap: () => _onTabTapped(12),
                 ),
                 Expanded(
-                  child: IndexedStack(
-                    index: _tabHistory.index,
-                    children: _screens,
+                  child: ClipRect(
+                    child: IndexedStack(
+                      index: _tabHistory.index,
+                      sizing: StackFit.expand,
+                      children: _screens,
+                    ),
                   ),
                 ),
               ],
@@ -613,18 +619,21 @@ class _AdminHomeOverviewState extends State<_AdminHomeOverview> {
                   }),
                   const SizedBox(height: 20),
                   
-                  // Summary Cards - Platform Stats (3 in a row on Desktop)
+                  // Summary Cards - Platform Stats (3 compact cards per row on Desktop)
                   LayoutBuilder(
                     builder: (context, constraints) {
-                      final cols = constraints.maxWidth > 1100 ? 3 : (constraints.maxWidth > 750 ? 2 : 1);
-                      final ratio = constraints.maxWidth > 1100 ? 4.2 : (constraints.maxWidth > 400 ? 3.2 : 4.5);
-                      return GridView.count(
-                        crossAxisCount: cols,
+                      final w = constraints.maxWidth;
+                      final cols = w >= 720 ? 3 : (w >= 420 ? 2 : 1);
+                      final cardHeight = w >= 720 ? 62.0 : (w >= 420 ? 58.0 : 56.0);
+                      return GridView(
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
-                        crossAxisSpacing: 16,
-                        mainAxisSpacing: 16,
-                        childAspectRatio: ratio,
+                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: cols,
+                          mainAxisExtent: cardHeight,
+                          crossAxisSpacing: 10,
+                          mainAxisSpacing: 10,
+                        ),
                         children: [
                           _CompactStatWidget(label: 'Total Users', value: '${stats.totalUsers}', icon: Icons.people_outline, color: const Color(0xFF3B82F6), onTap: () => widget.onAction(1)),
                           _CompactStatWidget(label: 'Total Companies', value: '${stats.totalCompanies}', icon: Icons.business_outlined, color: const Color(0xFF8B5CF6), onTap: () => widget.onAction(2)),
@@ -635,20 +644,23 @@ class _AdminHomeOverviewState extends State<_AdminHomeOverview> {
                     },
                   ),
 
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
                   
-                  // Financial Summary Row (3 in a row on Desktop)
+                  // Financial Summary Row (3 compact cards per row on Desktop)
                   LayoutBuilder(
                     builder: (context, constraints) {
-                      final cols = constraints.maxWidth > 1100 ? 3 : (constraints.maxWidth > 750 ? 2 : 1);
-                      final ratio = constraints.maxWidth > 1100 ? 4.2 : (constraints.maxWidth > 400 ? 3.2 : 4.8);
-                      return GridView.count(
-                        crossAxisCount: cols,
+                      final w = constraints.maxWidth;
+                      final cols = w >= 720 ? 3 : (w >= 420 ? 2 : 1);
+                      final cardHeight = w >= 720 ? 62.0 : (w >= 420 ? 58.0 : 56.0);
+                      return GridView(
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
-                        crossAxisSpacing: 16,
-                        mainAxisSpacing: 16,
-                        childAspectRatio: ratio,
+                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: cols,
+                          mainAxisExtent: cardHeight,
+                          crossAxisSpacing: 10,
+                          mainAxisSpacing: 10,
+                        ),
                         children: [
                           _CompactStatWidget(
                             label: 'Total Revenue', 
@@ -821,54 +833,67 @@ class _CompactStatWidget extends StatelessWidget {
     final double screenWidth = MediaQuery.of(context).size.width;
     final bool isMobile = screenWidth < 600;
 
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(10),
-      child: Container(
-        padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 14, vertical: isMobile ? 8 : 10),
-        decoration: AdminTheme.cardDecoration(),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(8),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          width: double.infinity,
+          padding: EdgeInsets.symmetric(
+            horizontal: isMobile ? 10 : 12,
+            vertical: isMobile ? 6 : 8,
+          ),
+          decoration: AdminTheme.cardDecoration(),
+          child: Row(
+            children: [
+              Container(
+                width: isMobile ? 28 : 30,
+                height: isMobile ? 28 : 30,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, color: color, size: isMobile ? 14 : 15),
               ),
-              child: Icon(icon, color: color, size: isMobile ? 16 : 18),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(
-                      value,
-                      style: GoogleFonts.plusJakartaSans(
-                        fontSize: isMobile ? 15 : 16,
-                        fontWeight: FontWeight.w800,
-                        color: AdminColors.navy,
+              SizedBox(width: isMobile ? 8 : 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        value,
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: isMobile ? 14 : 15,
+                          fontWeight: FontWeight.w800,
+                          color: AdminColors.navy,
+                          height: 1.1,
+                        ),
+                        maxLines: 1,
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 1),
-                  Text(
-                    label,
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: isMobile ? 8 : 9,
-                      fontWeight: FontWeight.w600,
-                      color: const Color(0xFF64748B),
+                    const SizedBox(height: 2),
+                    Text(
+                      label,
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: isMobile ? 9 : 10,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF64748B),
+                        height: 1.1,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
+                  ],
+                ),
               ),
-            )
-          ],
+            ],
+          ),
         ),
       ),
     );

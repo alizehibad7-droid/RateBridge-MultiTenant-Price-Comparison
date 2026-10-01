@@ -94,26 +94,41 @@ exports.onInviteAccepted = functions.https.onCall(async (data, context) => {
         subscriptionDoc.exists ? subscriptionDoc.data() : null,
         supplierUid
       );
-      const linkRef = supplierRef.collection('companyLinks').doc(companyId);
+      // App watches suppliers/{uid}/companies — write that path (not companyLinks).
+      const supplierCompanyRef = supplierRef.collection('companies').doc(companyId);
+      const displayName =
+        supplierData.name || supplierData.businessName || 'Supplier';
 
-      transaction.set(linkRef, {
+      transaction.set(supplierCompanyRef, {
+        id: companyId,
+        name: companyData.name || companyData.companyName || '',
+        status: 'active',
+        joinedAt: admin.firestore.FieldValue.serverTimestamp(),
+        onboardingComplete: false,
+      }, { merge: true });
+
+      // Keep legacy companyLinks in sync for any older readers.
+      transaction.set(supplierRef.collection('companyLinks').doc(companyId), {
         companyId,
-        companyName: companyData.name,
+        companyName: companyData.name || companyData.companyName || '',
         status: 'active',
         joinedAt: admin.firestore.FieldValue.serverTimestamp(),
         companyRating: 0,
       }, { merge: true });
 
       transaction.set(capacity.mirrorRef, {
+        id: supplierUid,
         supplierUid,
-        name: supplierData.name || supplierData.businessName || 'Supplier',
-        businessName: supplierData.businessName || supplierData.name || 'Supplier',
-        supplierName: supplierData.businessName || supplierData.name || 'Supplier',
-        city: supplierData.city,
+        name: displayName,
+        businessName: supplierData.businessName || supplierData.name || displayName,
+        supplierName: supplierData.businessName || supplierData.name || displayName,
+        city: supplierData.city || '',
         categories: supplierData.categories || [],
         materialType: supplierData.materialType || supplierData.businessType || 'General',
         globalAvgRating: supplierData.globalAvgRating || 0,
+        email: supplierData.email || '',
         status: 'active',
+        linkedAt: admin.firestore.FieldValue.serverTimestamp(),
         joinedAt: admin.firestore.FieldValue.serverTimestamp(),
       }, { merge: true });
 
@@ -162,32 +177,36 @@ exports.onInviteAccepted = functions.https.onCall(async (data, context) => {
       });
     }
 
-    // f. Create notification docs
+    // f. Create root notifications (app listens on notifications/, not nested company docs)
     const notifBatch = db.batch();
-    notifBatch.set(
-      db.collection('companies').doc(companyId).collection('notifications').doc(),
-      {
-        userId: supplierUid,
-        type: 'invitation',
-        title: 'Company Link Approved',
-        body: `You are now linked to ${companyData.name}`,
-        data: { companyId },
-        isRead: false,
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      }
-    );
-    notifBatch.set(
-      db.collection('companies').doc(companyId).collection('notifications').doc(),
-      {
-        userId: ceoUid,
-        type: 'invitation',
+    const supplierNotifRef = db.collection('notifications').doc();
+    notifBatch.set(supplierNotifRef, {
+      notifId: supplierNotifRef.id,
+      recipientUserId: supplierUid,
+      recipientRole: 'Supplier',
+      type: 'partnership',
+      title: 'Company Link Approved',
+      message: `You are now linked to ${companyData.name}. Start adding materials.`,
+      data: { companyId, event: 'accepted', relatedId: companyId, relatedCollection: 'companies' },
+      isRead: false,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      companyId,
+    });
+    if (ceoUid) {
+      const ceoNotifRef = db.collection('notifications').doc();
+      notifBatch.set(ceoNotifRef, {
+        notifId: ceoNotifRef.id,
+        recipientUserId: ceoUid,
+        recipientRole: 'CEO',
+        type: 'partnership',
         title: 'New Supplier Joined',
-        body: `${supplierData.businessName} has joined your company`,
-        data: { supplierUid, companyId },
+        message: `${supplierData.businessName || supplierData.name || 'A supplier'} has joined your company.`,
+        data: { supplierUid, companyId, event: 'accepted', relatedId: supplierUid, relatedCollection: 'suppliers' },
         isRead: false,
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      }
-    );
+        companyId,
+      });
+    }
     await notifBatch.commit();
 
     return { success: true };

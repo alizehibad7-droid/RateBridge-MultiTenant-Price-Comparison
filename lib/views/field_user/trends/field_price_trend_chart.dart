@@ -110,19 +110,35 @@ class FieldPriceTrendChart extends StatelessWidget {
           ),
           borderData: FlBorderData(show: false),
           lineTouchData: LineTouchData(
+            handleBuiltInTouches: true,
             touchTooltipData: LineTouchTooltipData(
               tooltipRoundedRadius: 8,
+              fitInsideHorizontally: true,
+              fitInsideVertically: true,
               getTooltipColor: (_) => FieldColors.primaryNavy,
               getTooltipItems: (touchedSpots) {
                 return touchedSpots.map((spot) {
                   final index = spot.x.toInt().clamp(0, points.length - 1);
-                  final date = points[index].timestamp;
+                  final point = points[index];
+                  final date = point.timestamp;
+                  final hasTime =
+                      date.hour != 0 || date.minute != 0 || date.second != 0;
+                  final dateLabel = hasTime
+                      ? DateFormat('d MMM yyyy, h:mm a').format(date)
+                      : DateFormat('d MMM yyyy').format(date);
+                  final lines = [
+                    'Supplier: ${point.displaySupplierName}',
+                    'Price: Rs. ${_formatTooltipPrice(point.price)}',
+                    'Updated: $dateLabel',
+                    'Material: ${point.displayMaterialName}',
+                  ];
                   return LineTooltipItem(
-                    'Rs. ${_formatTooltipPrice(spot.y)}\n${DateFormat('d MMM yyyy').format(date)}',
+                    lines.join('\n'),
                     FieldTypography.labelSmall.copyWith(
                       color: Colors.white,
                       fontSize: 11,
                       height: 1.4,
+                      fontWeight: FontWeight.w600,
                     ),
                   );
                 }).toList();

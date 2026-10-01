@@ -61,6 +61,7 @@ class CeoViewModel extends ChangeNotifier {
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>?
       _marketplaceSuppliersSub;
   final Map<String, PartnershipRequestModel> _latestPartnershipBySupplierId = {};
+  final Map<String, String> _linkedSupplierStatusById = {};
   final Set<String> _activePartnerSupplierIds = {};
   List<PartnershipRequestModel> _receivedPartnershipRequests = [];
   List<PartnershipRequestModel> _sentPartnershipRequests = [];
@@ -366,6 +367,7 @@ class CeoViewModel extends ChangeNotifier {
           all.where((r) => r.initiatedBy == 'ceo'),
         );
         _partnershipRequestsReady = true;
+        _rebuildActivePartnerIds();
         notifyListeners();
       },
       onError: (_) {
@@ -382,15 +384,16 @@ class CeoViewModel extends ChangeNotifier {
         .snapshots()
         .listen(
       (snap) {
-        _activePartnerSupplierIds
+        _linkedSupplierStatusById
           ..clear()
-          ..addAll(
-            snap.docs.where((doc) {
+          ..addEntries(
+            snap.docs.map((doc) {
               final status =
-                  (doc.data()['status'] as String?)?.toLowerCase() ?? 'active';
-              return status == 'active' || status == 'approved';
-            }).map((doc) => doc.id),
+                  (doc.data()['status'] as String?)?.trim().toLowerCase() ?? '';
+              return MapEntry(doc.id, status);
+            }),
           );
+        _rebuildActivePartnerIds();
         _syncInactiveLinkedPartners();
         notifyListeners();
       },
@@ -400,6 +403,22 @@ class CeoViewModel extends ChangeNotifier {
     );
   }
 
+  /// Active partners only: explicit active/approved link, and no pending
+  /// partnership request still awaiting a response.
+  void _rebuildActivePartnerIds() {
+    _activePartnerSupplierIds
+      ..clear()
+      ..addAll(
+        _linkedSupplierStatusById.entries.where((entry) {
+          final status = entry.value;
+          if (status != 'active' && status != 'approved') return false;
+          final latest = _latestPartnershipBySupplierId[entry.key];
+          if (latest != null && latest.status == 'pending') return false;
+          return true;
+        }).map((entry) => entry.key),
+      );
+  }
+
   void _stopPartnershipStatusWatch() {
     _partnershipRequestsSub?.cancel();
     _linkedSuppliersSub?.cancel();
@@ -407,6 +426,7 @@ class CeoViewModel extends ChangeNotifier {
     _linkedSuppliersSub = null;
     _partnershipWatchCompanyId = null;
     _latestPartnershipBySupplierId.clear();
+    _linkedSupplierStatusById.clear();
     _activePartnerSupplierIds.clear();
     _inactiveLinkedPartners = [];
     _receivedPartnershipRequests = [];
@@ -527,10 +547,12 @@ class CeoViewModel extends ChangeNotifier {
         .get();
     if (!linkSnap.exists) return;
     final status =
-        (linkSnap.data()?['status'] as String?)?.toLowerCase() ?? 'active';
-    if (status == 'active' || status == 'approved') {
-      _activePartnerSupplierIds.add(supplierId);
-    }
+        (linkSnap.data()?['status'] as String?)?.trim().toLowerCase() ?? '';
+    if (status != 'active' && status != 'approved') return;
+    final latest = _latestPartnershipBySupplierId[supplierId];
+    if (latest != null && latest.status == 'pending') return;
+    _linkedSupplierStatusById[supplierId] = status;
+    _activePartnerSupplierIds.add(supplierId);
   }
 
   Future<SupplierModel?> _findSupplierByEmail(String email) async {
@@ -578,14 +600,44 @@ class CeoViewModel extends ChangeNotifier {
     return _db.collection('companies').doc(companyId).snapshots().asyncMap((doc) async {
       if (!doc.exists) return {};
 
-      final suppliers = await _db.collection('companies').doc(companyId).collection('suppliers').where('status', isEqualTo: 'active').get();
-      final team = await _db.collection('users').where('companyId', isEqualTo: companyId).where('role', isEqualTo: 'field_user').get();
-      final partnershipPending = await _db
+      // Team = active field users only (exclude deactivated / pending / rejected).
+      final team = await _db
+          .collection('users')
+          .where('companyId', isEqualTo: companyId)
+          .where('role', isEqualTo: 'field_user')
+          .where('status', isEqualTo: 'active')
+          .get();
+
+      // Partners = accepted/active links only. Pending partnership requests must
+      // never inflate this count (even if a stale/placeholder link doc exists).
+      final supplierLinks = await _db
+          .collection('companies')
+          .doc(companyId)
+          .collection('suppliers')
+          .get();
+      final allPendingPartnerships = await _db
           .collection('partnershipRequests')
           .where('companyId', isEqualTo: companyId)
           .where('status', isEqualTo: 'pending')
-          .where('initiatedBy', isEqualTo: 'supplier')
           .get();
+      final pendingPartnerSupplierIds = allPendingPartnerships.docs
+          .map((d) => (d.data()['supplierId'] as String?)?.trim() ?? '')
+          .where((id) => id.isNotEmpty)
+          .toSet();
+
+      final activeSupplierCount = supplierLinks.docs.where((linkDoc) {
+        final status =
+            (linkDoc.data()['status'] as String?)?.trim().toLowerCase() ?? '';
+        if (status != 'active' && status != 'approved') return false;
+        // Request sent / awaiting response → not a partner yet.
+        if (pendingPartnerSupplierIds.contains(linkDoc.id)) return false;
+        return true;
+      }).length;
+
+      final partnershipPending = allPendingPartnerships.docs
+          .where((d) =>
+              (d.data()['initiatedBy'] as String?)?.toLowerCase() == 'supplier')
+          .length;
 
       final pendingApprovals = await _db.collection('orders')
           .where('companyId', isEqualTo: companyId)
@@ -602,9 +654,9 @@ class CeoViewModel extends ChangeNotifier {
         'companyName': companyData?['name'] ?? 'Workspace',
         'inviteCode': companyData?['inviteCode'] ?? 'RB-XXXXXX',
         'plan': plan,
-        'activeSupplierCount': suppliers.docs.length,
+        'activeSupplierCount': activeSupplierCount,
         'fieldUserCount': team.docs.length,
-        'pendingJoinCount': partnershipPending.docs.length,
+        'pendingJoinCount': partnershipPending,
         'pendingOrderApprovals': pendingApprovals.docs.length,
         'expiresAt': expiresAt,
       };

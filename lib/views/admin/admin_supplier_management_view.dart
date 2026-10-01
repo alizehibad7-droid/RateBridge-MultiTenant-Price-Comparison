@@ -607,6 +607,13 @@ class _AdminSupplierManagementViewState extends State<AdminSupplierManagementVie
                         }
                       },
                     ),
+                    const SizedBox(height: 24),
+                    AdminConnectedPartnersSection(
+                      title: 'Connected Companies',
+                      emptyMessage: 'No companies linked to this supplier yet.',
+                      future: Provider.of<AdminViewModel>(context, listen: false)
+                          .getSupplierConnectedCompanies(supplier.uid),
+                    ),
                     const SizedBox(height: 32),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.end,

@@ -113,6 +113,7 @@ class SupplierViewModel extends ChangeNotifier {
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _linkedCompaniesSub;
   List<PartnershipRequestModel> _allPartnershipRequests = [];
   final Map<String, PartnershipRequestModel> _latestPartnershipByCompanyId = {};
+  final Map<String, String> _linkedCompanyStatusById = {};
   final Set<String> _activePartnerCompanyIds = {};
   List<PartnershipRequestModel> _incomingPartnershipRequests = [];
   List<PartnershipRequestModel> _outgoingPartnershipRequests = [];
@@ -298,6 +299,7 @@ class SupplierViewModel extends ChangeNotifier {
     _incomingPartnershipRequests = [];
     _outgoingPartnershipRequests = [];
     _latestPartnershipByCompanyId.clear();
+    _linkedCompanyStatusById.clear();
     _activePartnerCompanyIds.clear();
     _profile = null;
     _status = 'pending';
@@ -323,6 +325,7 @@ class SupplierViewModel extends ChangeNotifier {
     loadNotificationPreferences();
     _ensureSupplierRestrictionWatch();
     _startEarningsStreams();
+    loadMaterials();
     watchStatus();
   }
 
@@ -461,6 +464,8 @@ class SupplierViewModel extends ChangeNotifier {
             _incomingPartnershipRequests = _sortPartnershipRequestsNewest(all.where((r) => r.initiatedBy == 'ceo'));
             _outgoingPartnershipRequests = _sortPartnershipRequestsNewest(all.where((r) => r.initiatedBy == 'supplier'));
             _partnershipListsReady = true;
+            _rebuildActivePartnerCompanyIds();
+            _pruneCompaniesWithPendingRequests();
             notifyListeners();
           }, onError: (_) {
             _partnershipListsReady = true;
@@ -469,12 +474,59 @@ class SupplierViewModel extends ChangeNotifier {
           });
 
     _linkedCompaniesSub = _db.collection(FirestorePaths.suppliersCol).doc(supplierId).collection('companies').snapshots().listen((snap) {
-            _activePartnerCompanyIds..clear()..addAll(snap.docs.where((doc) {
-                      final status = (doc.data()['status'] as String?)?.toLowerCase() ?? 'active';
-                      return status == 'active' || status == 'approved';
-                    }).map((doc) => doc.id));
+            _linkedCompanyStatusById
+              ..clear()
+              ..addEntries(
+                snap.docs.map((doc) {
+                  final status =
+                      (doc.data()['status'] as String?)?.trim().toLowerCase() ??
+                          '';
+                  return MapEntry(doc.id, status);
+                }),
+              );
+            _rebuildActivePartnerCompanyIds();
             notifyListeners();
           }, onError: (_) => notifyListeners());
+  }
+
+  /// Active partners only: explicit active/approved link, no pending request.
+  void _rebuildActivePartnerCompanyIds() {
+    _activePartnerCompanyIds
+      ..clear()
+      ..addAll(
+        _linkedCompanyStatusById.entries.where((entry) {
+          final status = entry.value;
+          if (status != 'active' && status != 'approved') return false;
+          final latest = _latestPartnershipByCompanyId[entry.key];
+          if (latest != null && latest.status == 'pending') return false;
+          return true;
+        }).map((entry) => entry.key),
+      );
+  }
+
+  /// Drop companies that only have a pending request (or a deactivated link)
+  /// from the supplier Partners list.
+  void _pruneCompaniesWithPendingRequests() {
+    if (_companies.isEmpty) return;
+    final before = _companies.length;
+    _companies = _companies.where((c) {
+      final latest = _latestPartnershipByCompanyId[c.id];
+      if (latest != null && latest.status == 'pending') return false;
+      final linkStatus = _linkedCompanyStatusById[c.id];
+      if (linkStatus != null &&
+          linkStatus != 'active' &&
+          linkStatus != 'approved') {
+        return false;
+      }
+      return true;
+    }).toList();
+    if (_companies.length != before) {
+      if (_selectedCompanyId != null &&
+          !_companies.any((c) => c.id == _selectedCompanyId)) {
+        _selectedCompanyId =
+            _companies.isNotEmpty ? _companies.first.id : null;
+      }
+    }
   }
 
   List<PartnershipRequestModel> _sortPartnershipRequestsNewest(Iterable<PartnershipRequestModel> requests) {
@@ -489,7 +541,9 @@ class SupplierViewModel extends ChangeNotifier {
     if (request == null) return 'Not Requested';
     switch (request.status) {
       case 'pending': return 'Request Pending';
-      case 'accepted': return 'Already Partners';
+      case 'accepted':
+        // Stale accepted request without an active link is not a partner.
+        return 'Not Requested';
       case 'rejected': return 'Request Rejected';
       case 'removed': return 'Not Requested';
       default: return 'Not Requested';
@@ -587,12 +641,26 @@ class SupplierViewModel extends ChangeNotifier {
 
   Future<void> loadLinkedCompanies() async {
     if (_supplierUid == null) { _companiesLoaded = true; notifyListeners(); return; }
+    ensurePartnershipStatusWatch();
     _companiesSubscription?.cancel();
     _companiesLoadFailed = false;
-    _companiesSubscription = _db.collection('suppliers').doc(_supplierUid).collection('companies').where('status', isEqualTo: 'active').snapshots().listen((snap) async {
+    _companiesSubscription = _db
+        .collection('suppliers')
+        .doc(_supplierUid)
+        .collection('companies')
+        .snapshots()
+        .listen((snap) async {
             var list = <CompanyModel>[];
             for (var doc in snap.docs) {
-              try { final c = await _companyRepo.getCompanyById(doc.id); if (c != null) list.add(c); } catch (_) {}
+              final status =
+                  (doc.data()['status'] as String?)?.trim().toLowerCase() ?? '';
+              if (status != 'active' && status != 'approved') continue;
+              final latest = _latestPartnershipByCompanyId[doc.id];
+              if (latest != null && latest.status == 'pending') continue;
+              try {
+                final c = await _companyRepo.getCompanyById(doc.id);
+                if (c != null) list.add(c);
+              } catch (_) {}
             }
             _companies = list;
             _companiesLoaded = true;
@@ -618,7 +686,8 @@ class SupplierViewModel extends ChangeNotifier {
     _selectedCompanyId = companyId;
     _error = null;
     _isDashboardLoading = true;
-    loadMaterials(companyId);
+    // Materials are global — keep one catalog across companies.
+    loadMaterials();
     loadOrders(companyId, null);
     loadEarnings(monthKey());
     if (_supplierUid != null) loadRatings(_supplierUid!, companyId);
@@ -655,32 +724,63 @@ class SupplierViewModel extends ChangeNotifier {
     _isLoading = true; notifyListeners();
     try {
       String? imageUrl;
-      if (imageFile != null) imageUrl = await CloudinaryService.uploadImage(filePath: imageFile.path, folder: 'ratebridge/materials');
-      final newMat = material.copyWith(profileImageUrl: imageUrl, supplierId: _supplierUid);
-      final batch = _db.batch();
-      batch.set(_db.collection('companies').doc(companyId).collection('materials').doc(newMat.id), newMat.toMap());
-      batch.set(_db.collection('materials').doc(newMat.id), newMat.toMap());
-      await batch.commit();
-      await _materialRepo.recordInitialMaterialPrice(materialId: newMat.id, price: newMat.pricePerUnit, supplierUid: _supplierUid);
-    } catch (e) { _error = e.toString(); } finally { _isLoading = false; notifyListeners(); }
+      if (imageFile != null) {
+        imageUrl = await CloudinaryService.uploadImage(
+          filePath: imageFile.path,
+          folder: 'ratebridge/materials',
+        );
+      }
+      final newMat = material.copyWith(
+        profileImageUrl: imageUrl,
+        supplierId: _supplierUid,
+      );
+      // Global catalog — visible to every partner company automatically.
+      await _db.collection('materials').doc(newMat.id).set(newMat.toMap());
+      await _materialRepo.recordInitialMaterialPrice(
+        materialId: newMat.id,
+        price: newMat.pricePerUnit,
+        supplierUid: _supplierUid,
+      );
+    } catch (e) {
+      _error = e.toString();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
   Future<void> updateMaterial(String matId, Map<String, dynamic> data, File? imageFile, String companyId) async {
     _isLoading = true; notifyListeners();
     try {
-      if (imageFile != null) data['profileImageUrl'] = await CloudinaryService.uploadImage(filePath: imageFile.path, folder: 'ratebridge/materials');
+      if (imageFile != null) {
+        data['profileImageUrl'] = await CloudinaryService.uploadImage(
+          filePath: imageFile.path,
+          folder: 'ratebridge/materials',
+        );
+      }
       if (data.containsKey('pricePerUnit')) {
         final doc = await _db.collection('materials').doc(matId).get();
         final old = (doc.data()?['pricePerUnit'] as num?)?.toDouble() ?? 0.0;
         final newVal = (data['pricePerUnit'] as num).toDouble();
-        if (old != newVal) await _materialRepo.archiveMaterialPriceChange(materialId: matId, previousPrice: old, newPrice: newVal, supplierUid: _supplierUid);
+        if (old != newVal) {
+          await _materialRepo.archiveMaterialPriceChange(
+            materialId: matId,
+            previousPrice: old,
+            newPrice: newVal,
+            supplierUid: _supplierUid,
+          );
+        }
       }
       await _db.collection('materials').doc(matId).update(data);
-      await _db.collection('companies').doc(companyId).collection('materials').doc(matId).update(data);
-    } catch (e) { _error = e.toString(); } finally { _isLoading = false; notifyListeners(); }
+    } catch (e) {
+      _error = e.toString();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
-  Future<void> deleteMaterial(String matId, String companyId) async {
+  Future<void> deleteMaterial(String matId, [String? companyId]) async {
     _isLoading = true;
     _error = null;
     notifyListeners();
@@ -720,15 +820,18 @@ class SupplierViewModel extends ChangeNotifier {
       }
 
       await _db.collection('materials').doc(matId).delete();
-      try {
-        await _db
-            .collection('companies')
-            .doc(companyId)
-            .collection('materials')
-            .doc(matId)
-            .delete();
-      } catch (_) {}
-      
+      // Best-effort cleanup of legacy per-company copies.
+      for (final company in _companies) {
+        try {
+          await _db
+              .collection('companies')
+              .doc(company.id)
+              .collection('materials')
+              .doc(matId)
+              .delete();
+        } catch (_) {}
+      }
+
       _successMessage = 'Material deleted successfully.';
     } catch (e) {
       _error = e is AppException ? e.message : e.toString();
@@ -739,17 +842,38 @@ class SupplierViewModel extends ChangeNotifier {
     }
   }
 
-  Future<void> loadMaterials(String companyId) async {
-    if (_supplierUid == null) { _materialsInitialized = true; _checkDashboardReady(); notifyListeners(); return; }
+  /// Loads the supplier's global material catalog (shared across all partners).
+  Future<void> loadMaterials([String? companyId]) async {
+    if (_supplierUid == null) {
+      _materialsInitialized = true;
+      _checkDashboardReady();
+      notifyListeners();
+      return;
+    }
     _materialsSubscription?.cancel();
-    _materialsSubscription = _db.collection('companies').doc(companyId).collection('materials').where('supplierId', isEqualTo: _supplierUid).snapshots().listen((snap) {
-          _materials = snap.docs.map((d) {
-            final data = Map<String, dynamic>.from(d.data())..putIfAbsent('id', () => d.id);
-            final material = MaterialModel.fromMap(data);
-            return material;
-          }).toList();
-          _materialsInitialized = true; _checkDashboardReady(); notifyListeners();
-        });
+    _materialsSubscription = _db
+        .collection('materials')
+        .where('supplierId', isEqualTo: _supplierUid)
+        .snapshots()
+        .listen((snap) {
+      _materials = snap.docs.map((d) {
+        final data = Map<String, dynamic>.from(d.data())
+          ..putIfAbsent('id', () => d.id);
+        return MaterialModel.fromMap(data);
+      }).toList();
+      _materials.sort((a, b) {
+        final aDate = a.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+        final bDate = b.createdAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+        return bDate.compareTo(aDate);
+      });
+      _materialsInitialized = true;
+      _checkDashboardReady();
+      notifyListeners();
+    }, onError: (_) {
+      _materialsInitialized = true;
+      _checkDashboardReady();
+      notifyListeners();
+    });
   }
 
   Future<void> loadOrders(String companyId, String? statusFilter) async {
@@ -1123,7 +1247,7 @@ class SupplierViewModel extends ChangeNotifier {
   Future<void> loadDashboard() async {
     if (_supplierUid == null || _selectedCompanyId == null) return;
     _isDashboardLoading = true; notifyListeners();
-    await Future.wait([loadMaterials(_selectedCompanyId!), loadOrders(_selectedCompanyId!, null), loadEarnings(monthKey()), loadRatings(_supplierUid!, _selectedCompanyId!)]);
+    await Future.wait([loadMaterials(), loadOrders(_selectedCompanyId!, null), loadEarnings(monthKey()), loadRatings(_supplierUid!, _selectedCompanyId!)]);
     _isDashboardLoading = false; notifyListeners();
   }
 
@@ -1335,6 +1459,8 @@ class SupplierViewModel extends ChangeNotifier {
     _statusSubscription?.cancel(); _statusSubscription = null;
     _partnershipRequestsSub?.cancel(); _partnershipRequestsSub = null;
     _linkedCompaniesSub?.cancel(); _linkedCompaniesSub = null;
+    _linkedCompanyStatusById.clear();
+    _activePartnerCompanyIds.clear();
     _companiesSubscription?.cancel(); _companiesSubscription = null;
     _materialsSubscription?.cancel(); _materialsSubscription = null;
     _ordersSubscription?.cancel(); _ordersSubscription = null;
