@@ -1,11 +1,13 @@
 import 'dart:convert';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../models/material_listing.dart';
 import '../../repositories/material_repository.dart';
 import '../../services/firestore_service.dart';
+import '../../services/plan_limit_service.dart';
 
 enum CompareSortOption { price, rating }
 
@@ -14,6 +16,7 @@ class FieldCompareViewModel extends ChangeNotifier {
   final MaterialRepository _materialRepo;
   final FirestoreService _firestore;
   final FirebaseAuth _auth;
+  final FirebaseFirestore _db;
 
   bool _isLoading = false;
   bool _isAiLoading = false;
@@ -25,9 +28,12 @@ class FieldCompareViewModel extends ChangeNotifier {
   String? _aiSummary;
   final Map<String, String> _aiLines = {};
   int _aiGeneration = 0;
+  String _companyId = '';
+  bool _aiUnlocked = false;
 
-  FieldCompareViewModel(this._materialRepo, this._firestore, {FirebaseAuth? auth})
-      : _auth = auth ?? FirebaseAuth.instance;
+  FieldCompareViewModel(this._materialRepo, this._firestore, {FirebaseAuth? auth, FirebaseFirestore? firestore})
+      : _auth = auth ?? FirebaseAuth.instance,
+        _db = firestore ?? FirebaseFirestore.instance;
 
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
@@ -41,6 +47,10 @@ class FieldCompareViewModel extends ChangeNotifier {
   bool get isAiLoading => _isAiLoading;
   String? get aiSummary => _aiSummary;
   bool get hasCityFilter => _cityFilter != null && _cityFilter!.isNotEmpty;
+  /// Whether the company plan unlocks AI recommendations (Basic+).
+  bool get aiUnlocked => _aiUnlocked;
+  /// Show the AI upgrade gate when there is enough compare data but no AI plan.
+  bool get showAiPlanGate => !_aiUnlocked && _compareResults.length >= 2;
 
   List<String> get availableCities {
     final cities = _compareResults
@@ -107,6 +117,7 @@ class FieldCompareViewModel extends ChangeNotifier {
     String? unit,
   }) async {
     final trimmedName = materialName.trim();
+    _companyId = companyId;
     _isLoading = true;
     _errorMessage = null;
     _compareResults = [];
@@ -115,10 +126,13 @@ class FieldCompareViewModel extends ChangeNotifier {
     _aiSummary = null;
     _aiLines.clear();
     _isAiLoading = false;
+    _aiUnlocked = false;
     _aiGeneration++;
     notifyListeners();
 
     try {
+      _aiUnlocked =
+          await PlanLimitService.companyHasAiAccess(_db, companyId);
       final hasCategory = category != null && category.trim().isNotEmpty;
       final listings = trimmedName.isEmpty && !hasCategory
           ? <MaterialListing>[]
@@ -205,9 +219,29 @@ class FieldCompareViewModel extends ChangeNotifier {
       return;
     }
 
+    if (!_aiUnlocked) {
+      debugPrint('Compare AI skipped: plan does not unlock AI');
+      _aiSummary = null;
+      _aiLines.clear();
+      _isAiLoading = false;
+      notifyListeners();
+      return;
+    }
+
     final uid = _auth.currentUser?.uid;
     if (uid == null || uid.isEmpty) {
       debugPrint('Compare AI skipped: user is signed out');
+      return;
+    }
+
+    // Re-check at request time in case plan changed mid-session.
+    if (_companyId.isNotEmpty &&
+        !await PlanLimitService.companyHasAiAccess(_db, _companyId)) {
+      _aiUnlocked = false;
+      _aiSummary = null;
+      _aiLines.clear();
+      _isAiLoading = false;
+      notifyListeners();
       return;
     }
 

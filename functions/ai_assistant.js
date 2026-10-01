@@ -145,6 +145,69 @@ function publicAiError(error) {
   return raw.slice(0, 280);
 }
 
+function normalizePlan(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase();
+}
+
+/**
+ * Matches PlanLimitService.companyPlan: company.plan is the default,
+ * and a subscription plan only wins when that subscription is active.
+ */
+function effectivePlan(companyData, subscriptionData) {
+  const companyPlan = normalizePlan(companyData?.plan) || 'free';
+  if (!subscriptionData) return companyPlan;
+
+  const status = normalizePlan(subscriptionData.status);
+  const expiresAt = subscriptionData.expiresAt?.toDate?.();
+  const active =
+    (status === 'active' || status === 'admin_granted') &&
+    (!expiresAt || expiresAt.getTime() >= Date.now());
+
+  if (active && subscriptionData.plan) {
+    return normalizePlan(subscriptionData.plan) || companyPlan;
+  }
+  return companyPlan;
+}
+
+function planHasAiAccess(plan) {
+  const hierarchy = ['free', 'basic', 'premium'];
+  const planIdx = hierarchy.indexOf(normalizePlan(plan) || 'free');
+  const basicIdx = hierarchy.indexOf('basic');
+  return planIdx >= basicIdx;
+}
+
+async function assertAiAccessForUid(uid) {
+  const userId = String(uid || '').trim();
+  if (!userId) {
+    throw new Error('AI features require a signed-in user.');
+  }
+
+  const userSnap = await admin.firestore().collection('users').doc(userId).get();
+  const companyId = String(userSnap.data()?.companyId || '').trim();
+  if (!companyId) {
+    throw new Error(
+      'AI features require a company account on the Basic plan or higher.',
+    );
+  }
+
+  const [companySnap, subSnap] = await Promise.all([
+    admin.firestore().collection('companies').doc(companyId).get(),
+    admin.firestore().collection('subscriptions').doc(companyId).get(),
+  ]);
+
+  const plan = effectivePlan(
+    companySnap.data(),
+    subSnap.exists ? subSnap.data() : null,
+  );
+  if (!planHasAiAccess(plan)) {
+    throw new Error(
+      'AI features require the Basic plan or higher. Please ask your CEO to upgrade.',
+    );
+  }
+}
+
 // Firestore trigger — no public HTTP/IAM. Flutter writes ai_jobs/{id} and
 // listens for the response. This avoids the 403 on generateAiText.
 exports.onAiJobCreated = functions
@@ -163,6 +226,7 @@ exports.onAiJobCreated = functions
       return;
     }
     try {
+      await assertAiAccessForUid(data.uid);
       const text = await generateText(prompt);
       await snap.ref.update({
         status: 'complete',
@@ -196,11 +260,19 @@ exports.generateAiText = onCall(
       throw new HttpsError('invalid-argument', 'Missing prompt.');
     }
     try {
+      await assertAiAccessForUid(request.auth.uid);
       const text = await generateText(prompt);
       return { text };
     } catch (error) {
       console.error('generateAiText error:', error?.response?.data || error);
-      throw new HttpsError('internal', publicAiError(error));
+      const message = publicAiError(error);
+      if (
+        String(message).toLowerCase().includes('basic plan') ||
+        String(message).toLowerCase().includes('require')
+      ) {
+        throw new HttpsError('permission-denied', message);
+      }
+      throw new HttpsError('internal', message);
     }
   },
 );

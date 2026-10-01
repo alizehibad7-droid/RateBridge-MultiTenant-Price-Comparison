@@ -213,4 +213,27 @@ class PlanLimitService {
       return; 
     }
   }
+
+  /// True when the company's effective plan unlocks AI (Basic / Premium).
+  static Future<bool> companyHasAiAccess(
+    FirebaseFirestore db,
+    String companyId,
+  ) async {
+    if (companyId.trim().isEmpty) return false;
+    final plan = await companyPlan(db, companyId);
+    return plan.aiUnlocked;
+  }
+
+  /// Throws when the company is on Free (or unknown) and tries to use AI.
+  static Future<void> ensureAiAccess(
+    FirebaseFirestore db,
+    String companyId,
+  ) async {
+    if (await companyHasAiAccess(db, companyId)) return;
+    throw AppException(
+      'AI features require the Basic plan or higher. '
+      'Please ask your CEO to upgrade the company subscription.',
+      'plan_required',
+    );
+  }
 }

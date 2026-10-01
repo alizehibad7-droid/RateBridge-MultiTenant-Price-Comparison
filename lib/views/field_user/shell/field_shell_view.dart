@@ -1,9 +1,13 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../models/subscription_model.dart';
+import '../../../services/plan_limit_service.dart';
 import '../../../theme/field_theme.dart';
 import '../../../utils/app_navigation.dart';
 import '../../../widgets/ai_assistant_sheet.dart';
+import '../../../widgets/subscription_gate_widget.dart';
 import '../../../viewmodels/auth_viewmodel.dart';
 import '../../../viewmodels/field_user/field_chat_viewmodel.dart';
 import '../../../viewmodels/field_user/field_session_viewmodel.dart';
@@ -90,7 +94,52 @@ class _FieldShellViewState extends State<FieldShellView> {
     if (_tabHistory.select(index)) setState(() {});
   }
 
-  void _openAiAssistant(BuildContext context) {
+  Future<void> _openAiAssistant(BuildContext context) async {
+    final companyId =
+        context.read<AuthViewModel>().user?.companyId.trim() ?? '';
+    final hasAi = companyId.isNotEmpty &&
+        await PlanLimitService.companyHasAiAccess(
+          FirebaseFirestore.instance,
+          companyId,
+        );
+    if (!context.mounted) return;
+
+    if (!hasAi) {
+      showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        backgroundColor: Colors.transparent,
+        builder: (sheetContext) {
+          return Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.viewInsetsOf(sheetContext).bottom,
+            ),
+            child: Material(
+              color: FieldColors.surfaceWhite,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(20),
+              ),
+              child: SizedBox(
+                height: MediaQuery.sizeOf(sheetContext).height * 0.55,
+                child: const Padding(
+                  padding: EdgeInsets.fromLTRB(16, 20, 16, 24),
+                  child: SubscriptionGateWidget(
+                    featureName: 'AI Assistant',
+                    requiredPlan: PlanId.basic,
+                    child: SizedBox.expand(
+                      child: ColoredBox(color: Colors.white),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      );
+      return;
+    }
+
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,

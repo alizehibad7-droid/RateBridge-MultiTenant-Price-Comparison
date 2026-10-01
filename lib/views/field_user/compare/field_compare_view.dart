@@ -5,6 +5,7 @@ import 'package:shimmer/shimmer.dart';
 
 import '../../../constants/route_names.dart';
 import '../../../models/material_listing.dart';
+import '../../../models/subscription_model.dart';
 import '../../../services/ai_context_service.dart';
 import '../../../services/recently_viewed_service.dart';
 import '../../../theme/field_theme.dart';
@@ -13,6 +14,7 @@ import '../../../utils/currency_formatter.dart';
 import '../../../viewmodels/field_user/field_compare_viewmodel.dart';
 import '../../../viewmodels/field_user/field_session_viewmodel.dart';
 import '../../../widgets/rating_stars_widget.dart';
+import '../../../widgets/subscription_gate_widget.dart';
 import '../chat/field_chat_thread_args.dart';
 import '../widgets/field_material_card.dart';
 
@@ -226,13 +228,24 @@ class _FieldCompareViewState extends State<FieldCompareView> {
                                   selectedCity: vm.cityFilter,
                                   onCityChanged: vm.setCityFilter,
                                 ),
-                              if (vm.isAiLoading ||
+                              if (vm.showAiPlanGate ||
+                                  vm.isAiLoading ||
                                   (vm.aiSummary != null &&
                                       vm.aiSummary!.isNotEmpty))
-                                _CompareAiInsightBanner(
-                                  text: vm.isAiLoading
-                                      ? 'Comparing suppliers…'
-                                      : vm.aiSummary!,
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 8),
+                                  child: SubscriptionGateWidget(
+                                    featureName: 'AI Supplier Recommendations',
+                                    requiredPlan: PlanId.basic,
+                                    child: _CompareAiInsightBanner(
+                                      text: vm.isAiLoading
+                                          ? 'Comparing suppliers…'
+                                          : (vm.aiSummary != null &&
+                                                  vm.aiSummary!.isNotEmpty)
+                                              ? vm.aiSummary!
+                                              : 'AI summarizes which supplier offers the best value for this material.',
+                                    ),
+                                  ),
                                 ),
                               Expanded(
                                 child: vm.results.isEmpty

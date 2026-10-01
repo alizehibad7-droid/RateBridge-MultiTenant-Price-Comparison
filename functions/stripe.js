@@ -163,6 +163,7 @@ async function applySuccessfulPayment(metadata, amountFallback, paymentRefId) {
         plan: plan,
         planExpiry: admin.firestore.Timestamp.fromDate(expiresAt),
         status: "active",
+        aiEnabled: plan === "basic" || plan === "premium",
       },
       { merge: true }
     );

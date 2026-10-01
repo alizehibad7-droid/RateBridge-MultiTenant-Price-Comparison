@@ -1,17 +1,21 @@
 import 'dart:convert';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
 import '../services/firestore_service.dart';
+import '../services/plan_limit_service.dart';
 import '../utils/app_exception.dart';
 
 class AiViewModel extends ChangeNotifier {
   final FirestoreService _firestore;
   final FirebaseAuth _auth;
+  final FirebaseFirestore _db;
 
-  AiViewModel(this._firestore, {FirebaseAuth? auth})
-      : _auth = auth ?? FirebaseAuth.instance;
+  AiViewModel(this._firestore, {FirebaseAuth? auth, FirebaseFirestore? firestore})
+      : _auth = auth ?? FirebaseAuth.instance,
+        _db = firestore ?? FirebaseFirestore.instance;
 
   String? _result;
   bool _isLoading = false;
@@ -43,6 +47,18 @@ class AiViewModel extends ChangeNotifier {
     return uid;
   }
 
+  Future<void> _ensureCompanyAiAccess(String uid) async {
+    final user = await _firestore.getUser(uid);
+    final companyId = user?.companyId.trim() ?? '';
+    if (companyId.isEmpty) {
+      throw AppException(
+        'AI features require a company account on the Basic plan or higher.',
+        'plan_required',
+      );
+    }
+    await PlanLimitService.ensureAiAccess(_db, companyId);
+  }
+
   String _clip(String value, int max) =>
       value.length <= max ? value : value.substring(0, max);
 
@@ -64,6 +80,9 @@ class AiViewModel extends ChangeNotifier {
     required String screenName,
     Map<String, dynamic> screenData = const {},
   }) async {
+    final uid = _requireUid();
+    await _ensureCompanyAiAccess(uid);
+
     final contextBlock = _clip(_safeJson(screenData), 4000);
     final prompt = _clip(
       '''

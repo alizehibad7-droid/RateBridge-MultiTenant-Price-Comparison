@@ -9,6 +9,7 @@ import 'package:shimmer/shimmer.dart';
 import '../../../constants/route_names.dart';
 import '../../../models/material_model.dart';
 import '../../../models/price_history_model.dart';
+import '../../../models/subscription_model.dart';
 import '../../../repositories/material_repository.dart';
 import '../../../services/ai_context_service.dart';
 import '../../../theme/field_theme.dart';
@@ -17,6 +18,7 @@ import '../../../utils/currency_formatter.dart';
 import '../../../utils/firestore_seed.dart';
 import '../../../viewmodels/field_user/field_session_viewmodel.dart';
 import '../../../viewmodels/field_user/field_trends_viewmodel.dart';
+import '../../../widgets/subscription_gate_widget.dart';
 import '../widgets/field_material_card.dart';
 import 'field_price_trend_chart.dart';
 
@@ -448,6 +450,7 @@ class _FieldPriceTrendsViewState extends State<FieldPriceTrendsView> {
                                 insightText: vm.isAiLoading
                                     ? 'Analyzing this trend…'
                                     : vm.aiInsight,
+                                showAiPlanGate: vm.showAiPlanGate,
                               ),
                               _PriceStatisticsCard(
                                 stats: stats,
@@ -921,12 +924,14 @@ class _ChartCard extends StatelessWidget {
   final List<PriceHistoryModel> points;
   final bool showInsightWarning;
   final String? insightText;
+  final bool showAiPlanGate;
 
   const _ChartCard({
     required this.rangeLabel,
     required this.points,
     required this.showInsightWarning,
     this.insightText,
+    this.showAiPlanGate = false,
   });
 
   @override
@@ -977,7 +982,53 @@ class _ChartCard extends StatelessWidget {
                 ),
               ),
             ),
-          if (insightText != null &&
+          if (showAiPlanGate && points.length >= 3) ...[
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 160,
+              child: SubscriptionGateWidget(
+                featureName: 'AI Price Trend Insights',
+                requiredPlan: PlanId.basic,
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 12,
+                    horizontal: 14,
+                  ),
+                  decoration: BoxDecoration(
+                    color: FieldColors.accentAmber.withValues(alpha: 0.08),
+                    border: const Border(
+                      left: BorderSide(
+                        color: FieldColors.accentAmber,
+                        width: 3,
+                      ),
+                    ),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(
+                        Icons.auto_awesome,
+                        size: 14,
+                        color: FieldColors.accentAmber,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'AI explains this price trend and whether buying now or waiting makes sense.',
+                          style: FieldTypography.bodyMedium.copyWith(
+                            fontSize: 12,
+                            color: FieldColors.primaryNavy,
+                            height: 1.5,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ] else if (insightText != null &&
               insightText!.isNotEmpty &&
               points.length >= 3) ...[
             const SizedBox(height: 12),

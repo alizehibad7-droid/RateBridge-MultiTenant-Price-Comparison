@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -5,17 +6,20 @@ import 'package:intl/intl.dart';
 
 import '../../constants/app_constants.dart';
 import '../../models/price_history_model.dart';
-import '../../models/subscription_model.dart';
 import '../../repositories/company_repository.dart';
 import '../../repositories/material_repository.dart';
 import '../../services/firestore_service.dart';
+import '../../services/plan_limit_service.dart';
 
 /// Price history charts for field users.
 class FieldTrendsViewModel extends ChangeNotifier {
   final MaterialRepository _materialRepo;
+  // Kept for existing provider constructor wiring.
+  // ignore: unused_field
   final CompanyRepository _companyRepo;
   final FirestoreService _firestore;
   final FirebaseAuth _auth;
+  final FirebaseFirestore _db;
 
   bool _isLoading = false;
   bool _isAiLoading = false;
@@ -26,13 +30,17 @@ class FieldTrendsViewModel extends ChangeNotifier {
   String? _supplierName;
   String? _aiInsight;
   int _aiGeneration = 0;
+  String _companyId = '';
+  bool _aiUnlocked = false;
 
   FieldTrendsViewModel(
     this._materialRepo,
     this._companyRepo,
     this._firestore, {
     FirebaseAuth? auth,
-  }) : _auth = auth ?? FirebaseAuth.instance;
+    FirebaseFirestore? firestore,
+  })  : _auth = auth ?? FirebaseAuth.instance,
+        _db = firestore ?? FirebaseFirestore.instance;
 
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
@@ -45,6 +53,8 @@ class FieldTrendsViewModel extends ChangeNotifier {
       (_aiInsight != null && _aiInsight!.isNotEmpty) || _isAiLoading;
   bool get isAiLoading => _isAiLoading;
   String? get aiInsight => _aiInsight;
+  bool get aiUnlocked => _aiUnlocked;
+  bool get showAiPlanGate => !_aiUnlocked && hasEnoughDataForAi;
 
   int get distinctMonthCount => _history
       .map((h) => '${h.timestamp.year}-${h.timestamp.month.toString().padLeft(2, '0')}')
@@ -97,6 +107,7 @@ class FieldTrendsViewModel extends ChangeNotifier {
     String materialId,
     String supplierUid,
   ) async {
+    _companyId = companyId;
     _isLoading = true;
     _errorMessage = null;
     _history = [];
@@ -105,6 +116,7 @@ class FieldTrendsViewModel extends ChangeNotifier {
     _supplierName = null;
     _aiInsight = null;
     _isAiLoading = false;
+    _aiUnlocked = false;
     _aiGeneration++;
     notifyListeners();
 
@@ -113,11 +125,9 @@ class FieldTrendsViewModel extends ChangeNotifier {
           supplierUid == 'all' ||
           supplierUid.isEmpty;
 
-      // Enforce Price Trend History Depth Limit
-      final company = await _companyRepo.getCompanyById(companyId);
-      final planKey = company?.plan ?? 'free';
-      final plan = kPlans.firstWhere((p) => p.planKey == planKey,
-          orElse: () => kPlans.first);
+      // Enforce Price Trend History Depth Limit using effective subscription plan.
+      final plan = await PlanLimitService.companyPlan(_db, companyId);
+      _aiUnlocked = plan.aiUnlocked;
 
       int months = AppConstants.priceHistoryMonths;
       if (plan.priceHistoryDays != -1) {
@@ -276,9 +286,26 @@ class FieldTrendsViewModel extends ChangeNotifier {
       return;
     }
 
+    if (!_aiUnlocked) {
+      debugPrint('Trend AI skipped: plan does not unlock AI');
+      _aiInsight = null;
+      _isAiLoading = false;
+      notifyListeners();
+      return;
+    }
+
     final uid = _auth.currentUser?.uid;
     if (uid == null || uid.isEmpty) {
       debugPrint('Trend AI skipped: user is signed out');
+      return;
+    }
+
+    if (_companyId.isNotEmpty &&
+        !await PlanLimitService.companyHasAiAccess(_db, _companyId)) {
+      _aiUnlocked = false;
+      _aiInsight = null;
+      _isAiLoading = false;
+      notifyListeners();
       return;
     }
 
