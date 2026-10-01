@@ -185,11 +185,13 @@ class RejectedView extends StatelessWidget {
 
 class PlatformBlockedView extends StatelessWidget {
   final String title;
+  final String subtitle;
   final String message;
 
   const PlatformBlockedView({
     super.key,
     required this.title,
+    required this.subtitle,
     required this.message,
   });
 
@@ -212,13 +214,23 @@ class PlatformBlockedView extends StatelessWidget {
             ),
             child: const Icon(
               Icons.phonelink_erase_rounded,
-              size: 80,
+              size: 64,
               color: AppColors.navy,
             ),
           ),
           const SizedBox(height: 32),
           Text(
             title,
+            style: textTheme.headlineSmall?.copyWith(
+              fontWeight: FontWeight.w800,
+              color: AppColors.error,
+              letterSpacing: -0.5,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            subtitle,
             style: textTheme.headlineMedium?.copyWith(
               fontWeight: FontWeight.w800,
               color: AppColors.navy,
@@ -226,7 +238,7 @@ class PlatformBlockedView extends StatelessWidget {
             ),
             textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 20),
           Text(
             message,
             textAlign: TextAlign.center,
@@ -235,7 +247,7 @@ class PlatformBlockedView extends StatelessWidget {
               height: 1.5,
             ),
           ),
-          const SizedBox(height: 40),
+          const SizedBox(height: 48),
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
@@ -248,7 +260,7 @@ class PlatformBlockedView extends StatelessWidget {
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.navy,
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 16),
+                padding: const EdgeInsets.symmetric(vertical: 18),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -272,16 +284,16 @@ class PlatformBlockedView extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 40.0),
           child: isWideScreen
               ? Container(
-                  constraints: const BoxConstraints(maxWidth: 520),
-                  padding: const EdgeInsets.all(40),
+                  constraints: const BoxConstraints(maxWidth: 500),
+                  padding: const EdgeInsets.all(48),
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(24),
                     boxShadow: [
                       BoxShadow(
                         color: Colors.black.withValues(alpha: 0.04),
-                        blurRadius: 20,
-                        offset: const Offset(0, 4),
+                        blurRadius: 24,
+                        offset: const Offset(0, 8),
                       ),
                     ],
                   ),

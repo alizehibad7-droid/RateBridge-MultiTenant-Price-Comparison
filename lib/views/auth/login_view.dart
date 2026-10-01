@@ -68,23 +68,23 @@ class _LoginViewState extends State<LoginView> {
 
     // Platform detection
     final bool isWeb = kIsWeb;
-    final bool isWindows = !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
     final bool isAndroid = !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
 
     bool isAllowed = false;
 
-    // Routing logic based on Role + Platform enforcement
+    // Platform + Role Access Control
     if (role == 'admin' || role == 'administrator') {
-      if (isWeb || isWindows) {
+      // Admin -> Web Only
+      if (isWeb) {
         isAllowed = true;
       }
     } else if (role == 'ceo' || role == 'supplier' || role == 'fielduser') {
-      // TEMP: web testing access enabled for CEO/Supplier/Field User — remove before production
-      if (isAndroid || isWeb) {
+      // CEO / Supplier / Field User -> Android Only
+      if (isAndroid) {
         isAllowed = true;
       }
     } else {
-      // Handle cases with no role or unexpected role
+      // No role or unknown role
       if (mounted) {
         context.push(RouteNames.roleSelection);
       }
@@ -92,14 +92,15 @@ class _LoginViewState extends State<LoginView> {
     }
 
     if (!isAllowed) {
-      // Navigate to professional blocked screen
-      context.go(RouteNames.platformBlocked);
+      if (mounted) {
+        context.go(RouteNames.platformBlocked);
+      }
       return;
     }
 
     if (!mounted) return;
 
-    // Navigation for authorized users
+    // Navigation for authorized users based on role and status
     switch (role) {
       case 'admin':
       case 'administrator':
@@ -140,6 +141,7 @@ class _LoginViewState extends State<LoginView> {
     final authVm = context.watch<AuthViewModel>();
     final theme = Theme.of(context);
     final textTheme = theme.textTheme;
+    final size = MediaQuery.of(context).size;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: const SystemUiOverlayStyle(
@@ -163,247 +165,250 @@ class _LoginViewState extends State<LoginView> {
             ),
           ),
           child: SafeArea(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(24, 12, 24, 28),
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 440),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const SizedBox(height: 8),
-                      Container(
-                        width: 80,
-                        height: 80,
-                        decoration: const BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: AppColors.navy,
-                        ),
-                        child: const Icon(
-                          Icons.construction,
-                          color: Colors.white,
-                          size: 26,
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      Text(
-                        'RateBridge',
-                        textAlign: TextAlign.center,
-                        style: textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.navy,
-                          letterSpacing: -0.3,
-                        ),
-                      ),
-                      const SizedBox(height: 28),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.fromLTRB(30, 32, 30, 28),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(20),
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppColors.navy.withValues(alpha: 0.08),
-                              blurRadius: 24,
-                              offset: const Offset(0, 8),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                return SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 440),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const SizedBox(height: 10),
+                          // Brand Logo
+                          Container(
+                            width: 70,
+                            height: 70,
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: AppColors.navy,
                             ),
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.04),
-                              blurRadius: 6,
-                              offset: const Offset(0, 2),
+                            child: const Icon(
+                              Icons.construction,
+                              color: Colors.white,
+                              size: 28,
                             ),
-                          ],
-                        ),
-                        child: Form(
-                          key: _formKey,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              Text(
-                                'Welcome back',
-                                textAlign: TextAlign.center,
-                                style: textTheme.headlineMedium?.copyWith(
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.navy,
+                          ),
+                          const SizedBox(height: 14),
+                          Text(
+                            'RateBridge',
+                            textAlign: TextAlign.center,
+                            style: textTheme.headlineSmall?.copyWith(
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.navy,
+                              letterSpacing: -0.5,
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                          // Login Card
+                          Container(
+                            width: double.infinity,
+                            padding: EdgeInsets.symmetric(
+                              horizontal: size.width < 400 ? 20 : 30,
+                              vertical: 32,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(24),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: AppColors.navy.withValues(alpha: 0.08),
+                                  blurRadius: 24,
+                                  offset: const Offset(0, 8),
                                 ),
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                'Sign in to your account',
-                                textAlign: TextAlign.center,
-                                style: textTheme.bodyMedium,
-                              ),
-                              const SizedBox(height: 28),
-                              Text(
-                                'Email Address',
-                                style: textTheme.labelLarge?.copyWith(
-                                  color: AppColors.navy,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              TextFormField(
-                                controller: _emailController,
-                                keyboardType: TextInputType.emailAddress,
-                                textInputAction: TextInputAction.next,
-                                validator: _validateEmail,
-                                style: textTheme.bodyLarge,
-                                decoration: const InputDecoration(
-                                  hintText: 'Enter your email',
-                                  prefixIcon: Icon(
-                                    Icons.email_outlined,
-                                    size: 20,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 20),
-                              Text(
-                                'Password',
-                                style: textTheme.labelLarge?.copyWith(
-                                  color: AppColors.navy,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              TextFormField(
-                                controller: _passwordController,
-                                obscureText: _obscurePassword,
-                                textInputAction: TextInputAction.done,
-                                onFieldSubmitted: (_) => _submit(authVm),
-                                validator: _validatePassword,
-                                style: textTheme.bodyLarge,
-                                decoration: InputDecoration(
-                                  hintText: 'Enter your password',
-                                  prefixIcon: const Icon(
-                                    Icons.lock_outlined,
-                                    size: 20,
-                                  ),
-                                  suffixIcon: IconButton(
-                                    icon: Icon(
-                                      _obscurePassword
-                                          ? Icons.visibility_outlined
-                                          : Icons.visibility_off_outlined,
-                                      size: 20,
+                              ],
+                            ),
+                            child: Form(
+                              key: _formKey,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  Text(
+                                    'Welcome back',
+                                    textAlign: TextAlign.center,
+                                    style: textTheme.headlineMedium?.copyWith(
+                                      fontWeight: FontWeight.w800,
+                                      color: AppColors.navy,
                                     ),
-                                    onPressed:
-                                        () => setState(
-                                          () =>
-                                              _obscurePassword =
-                                                  !_obscurePassword,
-                                        ),
                                   ),
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-                              Align(
-                                alignment: Alignment.centerRight,
-                                child: GestureDetector(
-                                  onTap:
-                                      () => context.push(
-                                        RouteNames.forgotPassword,
-                                      ),
-                                  child: Text(
-                                    'Forgot Password?',
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Sign in to your account',
+                                    textAlign: TextAlign.center,
+                                    style: textTheme.bodyMedium?.copyWith(
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 32),
+                                  Text(
+                                    'Email Address',
                                     style: textTheme.labelLarge?.copyWith(
-                                      color: AppColors.amber,
-                                      fontWeight: FontWeight.w700,
+                                      color: AppColors.navy,
+                                      fontWeight: FontWeight.w600,
                                     ),
                                   ),
-                                ),
-                              ),
-                              const SizedBox(height: 24),
-                              if (authVm.errorMessage != null) ...[
-                                Container(
-                                  padding: const EdgeInsets.all(12),
-                                  margin: const EdgeInsets.only(bottom: 16),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.error.withValues(
-                                      alpha: 0.1,
+                                  const SizedBox(height: 8),
+                                  TextFormField(
+                                    controller: _emailController,
+                                    keyboardType: TextInputType.emailAddress,
+                                    textInputAction: TextInputAction.next,
+                                    validator: _validateEmail,
+                                    decoration: const InputDecoration(
+                                      hintText: 'name@company.com',
+                                      prefixIcon: Icon(Icons.email_outlined),
                                     ),
-                                    borderRadius: BorderRadius.circular(10),
                                   ),
-                                  child: Row(
-                                    children: [
-                                      const Icon(
-                                        Icons.error_outline,
-                                        color: AppColors.error,
-                                        size: 18,
+                                  const SizedBox(height: 20),
+                                  Text(
+                                    'Password',
+                                    style: textTheme.labelLarge?.copyWith(
+                                      color: AppColors.navy,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  TextFormField(
+                                    controller: _passwordController,
+                                    obscureText: _obscurePassword,
+                                    textInputAction: TextInputAction.done,
+                                    onFieldSubmitted: (_) => _submit(authVm),
+                                    validator: _validatePassword,
+                                    decoration: InputDecoration(
+                                      hintText: 'Enter password',
+                                      prefixIcon: const Icon(Icons.lock_outlined),
+                                      suffixIcon: IconButton(
+                                        icon: Icon(
+                                          _obscurePassword
+                                              ? Icons.visibility_outlined
+                                              : Icons.visibility_off_outlined,
+                                        ),
+                                        onPressed: () => setState(
+                                            () => _obscurePassword = !_obscurePassword),
                                       ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Align(
+                                    alignment: Alignment.centerRight,
+                                    child: TextButton(
+                                      onPressed: () =>
+                                          context.push(RouteNames.forgotPassword),
+                                      style: TextButton.styleFrom(
+                                        padding: EdgeInsets.zero,
+                                        minimumSize: const Size(50, 30),
+                                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                      ),
+                                      child: Text(
+                                        'Forgot Password?',
+                                        style: textTheme.labelLarge?.copyWith(
+                                          color: AppColors.amber,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 24),
+                                  if (authVm.errorMessage != null) ...[
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 16, vertical: 12),
+                                      margin: const EdgeInsets.only(bottom: 20),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.error.withValues(alpha: 0.08),
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(
+                                            color: AppColors.error.withValues(alpha: 0.2)),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          const Icon(Icons.error_outline,
+                                              color: AppColors.error, size: 20),
+                                          const SizedBox(width: 10),
+                                          Expanded(
+                                            child: Text(
+                                              authVm.errorMessage!,
+                                              style: textTheme.bodySmall?.copyWith(
+                                                color: AppColors.error,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                  AuthPrimaryButton(
+                                    label: 'SIGN IN',
+                                    isLoading: authVm.isLoading,
+                                    onPressed: () => _submit(authVm),
+                                  ),
+                                  const SizedBox(height: 24),
+                                  Row(
+                                    children: [
+                                      const Expanded(child: Divider()),
+                                      Padding(
+                                        padding: const EdgeInsets.symmetric(horizontal: 16),
                                         child: Text(
-                                          authVm.errorMessage!,
-                                          style: textTheme.bodySmall?.copyWith(
-                                            color: AppColors.error,
+                                          'NEW TO RATEBRIDGE?',
+                                          style: textTheme.labelSmall?.copyWith(
+                                            letterSpacing: 1,
+                                            fontWeight: FontWeight.w600,
+                                            color: AppColors.textSecondary,
                                           ),
                                         ),
                                       ),
+                                      const Expanded(child: Divider()),
                                     ],
                                   ),
-                                ),
-                              ],
-                              AuthPrimaryButton(
-                                label: 'Sign In',
-                                isLoading: authVm.isLoading,
-                                onPressed: () => _submit(authVm),
-                              ),
-                              const SizedBox(height: 16),
-                              Row(
-                                children: [
-                                  const Expanded(child: Divider()),
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 14,
+                                  const SizedBox(height: 20),
+                                  OutlinedButton(
+                                    onPressed: () =>
+                                        context.push(RouteNames.roleSelection),
+                                    style: OutlinedButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(vertical: 16),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
                                     ),
-                                    child: Text(
-                                      'or',
-                                      style: textTheme.labelSmall,
+                                    child: const Text(
+                                      'CREATE ACCOUNT',
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.w700, letterSpacing: 1),
                                     ),
                                   ),
-                                  const Expanded(child: Divider()),
                                 ],
                               ),
-                              const SizedBox(height: 14),
-                              Text(
-                                "Don't have an account?",
-                                textAlign: TextAlign.center,
-                                style: textTheme.labelSmall,
+                            ),
+                          ),
+                          const SizedBox(height: 32),
+                          // Trust Badges
+                          const Wrap(
+                            alignment: WrapAlignment.center,
+                            spacing: 24,
+                            runSpacing: 12,
+                            children: [
+                              _TrustBadge(
+                                icon: Icons.lock_outline,
+                                label: 'Secure Login',
                               ),
-                              const SizedBox(height: 8),
-                              OutlinedButton(
-                                onPressed:
-                                    () =>
-                                        context.push(RouteNames.roleSelection),
-                                child: const Text('Create Account'),
+                              _TrustBadge(
+                                icon: Icons.verified_user_outlined,
+                                label: 'Verified Access',
+                              ),
+                              _TrustBadge(
+                                icon: Icons.business_outlined,
+                                label: 'B2B Pakistan',
                               ),
                             ],
                           ),
-                        ),
-                      ),
-                      const SizedBox(height: 28),
-                      const Wrap(
-                        alignment: WrapAlignment.center,
-                        spacing: 20,
-                        runSpacing: 8,
-                        children: [
-                          _TrustBadge(
-                            icon: Icons.lock_outline,
-                            label: 'Secure Login',
-                          ),
-                          _TrustBadge(
-                            icon: Icons.verified_outlined,
-                            label: 'Verified Platform',
-                          ),
-                          _TrustBadge(
-                            icon: Icons.construction_outlined,
-                            label: 'B2B Only',
-                          ),
+                          const SizedBox(height: 20),
                         ],
                       ),
-                      const SizedBox(height: 12),
-                    ],
+                    ),
                   ),
-                ),
-              ),
+                );
+              },
             ),
           ),
         ),
@@ -424,9 +429,16 @@ class _TrustBadge extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 12, color: AppColors.textSecondary),
-        const SizedBox(width: 4),
-        Text(label, style: theme.textTheme.labelSmall?.copyWith(fontSize: 10)),
+        Icon(icon, size: 14, color: AppColors.textSecondary),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: theme.textTheme.labelSmall?.copyWith(
+            fontSize: 11,
+            color: AppColors.textSecondary,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
       ],
     );
   }

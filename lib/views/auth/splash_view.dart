@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../../constants/app_colors.dart';
 import '../../constants/route_names.dart';
@@ -105,24 +106,26 @@ class _SplashViewState extends State<SplashView>
       return;
     }
 
-    final role = authVm.user?.role.toLowerCase().replaceAll(' ', '').replaceAll('_', '');
+    final role = authVm.user?.role
+        .toLowerCase()
+        .replaceAll(' ', '')
+        .replaceAll('_', '');
     final status = (authVm.user?.status ?? 'pending').toLowerCase();
 
     // Platform detection
-    final bool isWeb = kIsWeb;
-    final bool isWindows = !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
-    final bool isAndroid = !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+    const bool isWeb = kIsWeb;
+    final bool isAndroid =
+        !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
 
     bool isAllowed = false;
 
-    // Role + Platform validation
+    // Strict Role + Platform validation
     if (role == 'admin' || role == 'administrator') {
-      if (isWeb || isWindows) {
+      if (isWeb) {
         isAllowed = true;
       }
     } else if (role == 'ceo' || role == 'supplier' || role == 'fielduser') {
-      // TEMP: web testing access enabled for CEO/Supplier/Field User — remove before production
-      if (isAndroid || isWeb) {
+      if (isAndroid) {
         isAllowed = true;
       }
     } else {
@@ -192,17 +195,11 @@ class _SplashViewState extends State<SplashView>
 
   @override
   Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-
     return Scaffold(
+      backgroundColor: AppColors.navy,
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // Background Construction Image
-          Image.asset(
-            'assets/images/construction_bg.jpg',
-            fit: BoxFit.cover,
-          ),
           AnimatedBuilder(
             animation: _controller,
             builder: (context, _) {
@@ -215,63 +212,53 @@ class _SplashViewState extends State<SplashView>
                       child: ScaleTransition(
                         scale: _logoScale,
                         child: Container(
-                          width: 160,
-                          height: 160,
+                          width: 180,
+                          height: 180,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             color: Colors.white,
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.white.withValues(alpha: 0.15),
-                                blurRadius: 24,
-                                spreadRadius: 4,
+                                color: Colors.white.withValues(alpha: 0.1),
+                                blurRadius: 40,
+                                spreadRadius: 10,
                               ),
                             ],
                           ),
                           child: const Icon(
                             Icons.construction,
                             color: AppColors.navy,
-                            size: 52,
+                            size: 64,
                           ),
                         ),
                       ),
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 48),
                     FadeTransition(
                       opacity: _titleFade,
                       child: SlideTransition(
                         position: _titleSlide,
                         child: Text(
                           'RateBridge',
-                          style: textTheme.displayMedium?.copyWith(
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 42,
+                            fontWeight: FontWeight.w800,
                             color: Colors.white,
-                            letterSpacing: 1.2,
-                            shadows: [
-                              Shadow(
-                                color: Colors.black.withValues(alpha: 0.5),
-                                offset: const Offset(0, 2),
-                                blurRadius: 4,
-                              ),
-                            ],
+                            letterSpacing: -1,
                           ),
                         ),
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 12),
                     FadeTransition(
                       opacity: _taglineFade,
                       child: Text(
                         'Smart Material Procurement',
-                        style: textTheme.bodyMedium?.copyWith(
-                          color: Colors.white,
-                          letterSpacing: 0.5,
-                          shadows: [
-                            Shadow(
-                              color: Colors.black.withValues(alpha: 0.5),
-                              offset: const Offset(0, 1),
-                              blurRadius: 2,
-                            ),
-                          ],
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.white.withValues(alpha: 0.8),
+                          letterSpacing: 0.2,
                         ),
                       ),
                     ),
@@ -283,43 +270,37 @@ class _SplashViewState extends State<SplashView>
           Positioned(
             left: 0,
             right: 0,
-            bottom: 48,
+            bottom: 60,
             child: FadeTransition(
               opacity: _loaderFade,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   SizedBox(
-                    width: 120,
-                    height: 2,
+                    width: 140,
+                    height: 3,
                     child: ClipRRect(
-                      borderRadius: BorderRadius.circular(1),
-                      child: LinearProgressIndicator(
-                        color: AppColors.amber,
-                        backgroundColor: Colors.white.withValues(alpha: 0.2),
-                        minHeight: 2,
+                      borderRadius: BorderRadius.circular(2),
+                      child: const LinearProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          AppColors.amber,
+                        ),
+                        backgroundColor: Color(0xFF2A4089),
                       ),
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 32),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 24),
                     child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Expanded(
-                          child: Text(
-                            'Pakistan\'s B2B Construction Platform',
-                            style: textTheme.labelSmall?.copyWith(
-                              fontStyle: FontStyle.italic,
-                              color: Colors.white,
-                              shadows: [
-                                Shadow(
-                                  color: Colors.black.withValues(alpha: 0.5),
-                                  offset: const Offset(0, 1),
-                                  blurRadius: 2,
-                                ),
-                              ],
-                            ),
+                        Text(
+                          'Pakistan\'s B2B Construction Platform',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 11,
+                            color: Colors.white.withValues(alpha: 0.5),
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
                         Row(
@@ -333,18 +314,13 @@ class _SplashViewState extends State<SplashView>
                                 shape: BoxShape.circle,
                               ),
                             ),
-                            const SizedBox(width: 6),
+                            const SizedBox(width: 8),
                             Text(
                               'v1.0',
-                              style: textTheme.labelSmall?.copyWith(
-                                color: Colors.white,
-                                shadows: [
-                                  Shadow(
-                                    color: Colors.black.withValues(alpha: 0.5),
-                                    offset: const Offset(0, 1),
-                                    blurRadius: 2,
-                                  ),
-                                ],
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 11,
+                                color: Colors.white.withValues(alpha: 0.5),
+                                fontWeight: FontWeight.w600,
                               ),
                             ),
                           ],

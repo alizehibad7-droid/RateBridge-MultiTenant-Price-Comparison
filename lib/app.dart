@@ -178,14 +178,19 @@ class _RateBridgeAppState extends State<RateBridgeApp> {
         GoRoute(
           path: RouteNames.platformBlocked,
           builder: (context, state) {
-            final role = Provider.of<AuthViewModel>(context, listen: false).role?.toLowerCase();
+            final role = Provider.of<AuthViewModel>(context, listen: false)
+                .role
+                ?.toLowerCase()
+                .replaceAll(' ', '')
+                .replaceAll('_', '');
             final isAdmin = role == 'admin' || role == 'administrator';
-            
+
             return PlatformBlockedView(
-              title: isAdmin ? "Desktop Access Required" : "Mobile Access Only",
-              message: isAdmin 
-                ? "Administrative management tools are restricted to Web and Windows Desktop platforms for security and data integrity."
-                : "This account is optimized for our mobile platform to facilitate on-site operations. Please use the RateBridge Android application to continue.",
+              title: "Access Restricted",
+              subtitle: isAdmin ? "Web Access Only" : "Mobile Access Only",
+              message: isAdmin
+                  ? "This account is registered for web access and cannot be used on the mobile application. Please use the RateBridge Web Admin Panel to continue."
+                  : "This account is registered for mobile access and cannot be used on the web platform. Please use the RateBridge Android application to continue.",
             );
           },
         ),
@@ -251,7 +256,7 @@ class _RateBridgeAppState extends State<RateBridgeApp> {
         GoRoute(
           path: RouteNames.ceoProfile,
           builder:
-              (context, state) => CeoTheme.wrap(const CeoCompanyProfileView()),
+              (context, state) => CeoCompanyProfileView(),
         ),
         GoRoute(
           path: RouteNames.ceoRfqs,
@@ -778,17 +783,16 @@ class _RateBridgeAppState extends State<RateBridgeApp> {
 
         // 1. Role + Platform Enforcement
         final bool isWeb = kIsWeb;
-        final bool isWindows =
-            !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
         final bool isAndroid =
             !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
 
         bool platformBlocked = false;
         if (role == 'admin' || role == 'administrator') {
-          if (!isWeb && !isWindows) platformBlocked = true;
+          // Admin -> Web Only
+          if (!isWeb) platformBlocked = true;
         } else if (role == 'ceo' || role == 'supplier' || role == 'fielduser') {
-          // TEMP: web testing access enabled for CEO/Supplier/Field User — remove before production
-          if (!isAndroid && !isWeb) platformBlocked = true;
+          // CEO / Supplier / Field User -> Android Only
+          if (!isAndroid) platformBlocked = true;
         }
 
         if (platformBlocked) {
