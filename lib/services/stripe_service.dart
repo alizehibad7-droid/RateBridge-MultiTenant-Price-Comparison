@@ -20,6 +20,7 @@ class StripeService {
   static const _prefsPlanKey = 'pending_stripe_plan';
   static const _prefsCompanyKey = 'pending_stripe_company';
   static const _prefsAmountKey = 'pending_stripe_amount';
+  static const _prefsCommissionTxKey = 'pending_stripe_commission_txs';
 
   final FirebaseFirestore _db;
   final FirebaseAuth _auth;
@@ -59,6 +60,10 @@ class StripeService {
           companyId: companyId!,
           amountPKR: amountPKR,
         );
+      } else if (type == 'commission' &&
+          transactionIds != null &&
+          transactionIds.isNotEmpty) {
+        await _savePendingCommissionTxIds(transactionIds);
       }
 
       final url = await _runJob(
@@ -135,10 +140,12 @@ class StripeService {
   }
 
   /// Unlocks a paid plan after Checkout return (Admin SDK via Cloud Function).
+  /// When [checkoutSessionId] is provided, the server verifies the session is paid.
   Future<void> claimSubscriptionActivation({
     required String companyId,
     required String plan,
     int? amountPKR,
+    String? checkoutSessionId,
   }) async {
     final uid = _auth.currentUser?.uid;
     if (uid == null || uid.isEmpty) {
@@ -149,7 +156,7 @@ class StripeService {
     }
 
     debugPrint(
-      'Stripe activate: companyId=$companyId plan=$plan amount=$amountPKR',
+      'Stripe activate: companyId=$companyId plan=$plan amount=$amountPKR session=$checkoutSessionId',
     );
 
     await _runJob(
@@ -159,11 +166,44 @@ class StripeService {
         'companyId': companyId,
         'plan': plan,
         if (amountPKR != null) 'amountPKR': amountPKR,
+        if (checkoutSessionId != null && checkoutSessionId.isNotEmpty)
+          'paymentRefId': checkoutSessionId,
       },
       resultKey: null, // completion only
     );
 
     await _clearPendingSubscription();
+  }
+
+  /// Settles commission txs after web Checkout return (Admin SDK).
+  Future<void> claimCommissionSettlement({
+    required List<String> transactionIds,
+    String? checkoutSessionId,
+    int? amountPKR,
+  }) async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null || uid.isEmpty) {
+      throw AppException('Please sign in again and retry.', 'unauthenticated');
+    }
+    final ids = transactionIds.map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+    if (ids.isEmpty) {
+      throw AppException('No commission transactions to settle.');
+    }
+
+    await _runJob(
+      collection: 'stripe_activate_jobs',
+      uid: uid,
+      payload: {
+        'type': 'commission',
+        'transactionIds': ids,
+        if (amountPKR != null) 'amountPKR': amountPKR,
+        if (checkoutSessionId != null && checkoutSessionId.isNotEmpty)
+          'paymentRefId': checkoutSessionId,
+      },
+      resultKey: null,
+    );
+
+    await clearPendingCommissionTxIds();
   }
 
   Future<({String plan, String companyId, int? amountPKR})?>
@@ -184,6 +224,17 @@ class StripeService {
     );
   }
 
+  Future<List<String>> readPendingCommissionTxIds() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_prefsCommissionTxKey)?.trim() ?? '';
+    if (raw.isEmpty) return const [];
+    return raw
+        .split(',')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList(growable: false);
+  }
+
   Future<void> _savePendingSubscription({
     required String plan,
     required String companyId,
@@ -199,7 +250,20 @@ class StripeService {
     }
   }
 
+  Future<void> _savePendingCommissionTxIds(List<String> txIds) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _prefsCommissionTxKey,
+      txIds.where((e) => e.trim().isNotEmpty).join(','),
+    );
+  }
+
   Future<void> clearPendingSubscription() => _clearPendingSubscription();
+
+  Future<void> clearPendingCommissionTxIds() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_prefsCommissionTxKey);
+  }
 
   Future<void> _clearPendingSubscription() async {
     final prefs = await SharedPreferences.getInstance();
@@ -261,14 +325,23 @@ class StripeService {
     String? plan,
   }) {
     final normalized = path.startsWith('/') ? path : '/$path';
-    final params = <String, String>{
-      'stripe': status,
-      if (plan != null && plan.isNotEmpty) 'plan': plan,
-    };
-    final query = params.entries
-        .map((e) =>
-            '${Uri.encodeQueryComponent(e.key)}=${Uri.encodeQueryComponent(e.value)}')
-        .join('&');
-    return '${Uri.base.origin}/#$normalized?$query';
+    // Keep Stripe's `{CHECKOUT_SESSION_ID}` literal unencoded so Stripe can
+    // replace it. Encode other values normally.
+    final parts = <String>[
+      'stripe=${Uri.encodeQueryComponent(status)}',
+      if (plan != null && plan.isNotEmpty)
+        'plan=${Uri.encodeQueryComponent(plan)}',
+      'session_id={CHECKOUT_SESSION_ID}',
+    ];
+    final query = parts.join('&');
+
+    // Match how the app is currently routed (hash vs path).
+    final href = Uri.base.toString();
+    final hashMode = href.contains('/#/') ||
+        (Uri.base.fragment.isNotEmpty && Uri.base.fragment.startsWith('/'));
+    if (hashMode) {
+      return '${Uri.base.origin}/#$normalized?$query';
+    }
+    return '${Uri.base.origin}$normalized?$query';
   }
 }

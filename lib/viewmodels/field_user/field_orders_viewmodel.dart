@@ -235,10 +235,21 @@ class FieldOrdersViewModel extends ChangeNotifier {
     _errorMessage = null;
     notifyListeners();
     try {
+      if (material.supplierId.trim().isEmpty) {
+        throw AppException(
+          'This listing is missing supplier details. Try another supplier.',
+        );
+      }
+
       // Fetch supplier to ensure they are still active (same check as reorder)
       final supplier = await _orderRepo.getSupplierById(material.supplierId);
       if (supplier == null || supplier.status.toLowerCase() != 'active') {
         throw AppException('The supplier is no longer active on the platform.');
+      }
+      if (supplier.commissionRestricted) {
+        throw AppException(
+          'This supplier is temporarily unavailable for new orders.',
+        );
       }
 
       final totalAmount = quantity * material.pricePerUnit;

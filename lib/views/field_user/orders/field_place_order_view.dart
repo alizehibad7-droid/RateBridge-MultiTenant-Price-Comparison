@@ -148,10 +148,26 @@ class _FieldPlaceOrderViewState extends State<FieldPlaceOrderView> {
     setState(() => _submitError = null);
 
     final session = context.read<FieldSessionViewModel>();
-    final uid = session.user?.uid;
-    final companyId = session.companyId;
+    final uid = session.user?.uid.trim() ?? '';
+    final companyId = (session.companyId ?? '').trim();
     final userName = session.user?.name ?? 'Field User';
-    if (uid == null || companyId == null) return;
+    if (uid.isEmpty || companyId.isEmpty) {
+      const msg =
+          'Your company session is missing. Please sign out and sign in again.';
+      setState(() => _submitError = msg);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text(msg)),
+      );
+      return;
+    }
+    if (widget.material.supplierId.trim().isEmpty) {
+      const msg = 'This listing is missing supplier details. Try another supplier.';
+      setState(() => _submitError = msg);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text(msg)),
+      );
+      return;
+    }
 
     final success =
         await context.read<FieldOrdersViewModel>().placeOrderFromListing(

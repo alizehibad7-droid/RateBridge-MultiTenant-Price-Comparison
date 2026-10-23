@@ -70,7 +70,8 @@ class _CommissionPaymentViewState extends State<CommissionPaymentView> {
       );
 
       if (outcome == StripePayOutcome.redirected) {
-        // Web Checkout — settlement via Stripe webhook after pay.
+        // Web Checkout — earnings screen settles on stripe=success return
+        // (with webhook as backup).
         return;
       }
 

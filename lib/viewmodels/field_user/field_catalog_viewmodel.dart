@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../models/material_model.dart';
 import '../../models/category_model.dart';
 import '../../repositories/material_repository.dart';
+import '../../utils/category_match.dart';
 
 enum CatalogSortOption {
   priceAsc('price_asc', 'Price: Low to High'),
@@ -311,7 +312,7 @@ class FieldCatalogViewModel extends ChangeNotifier {
 
     if (_categoryFilter != null && _categoryFilter!.isNotEmpty) {
       results = results
-          .where((m) => m.category.toLowerCase() == _categoryFilter!.toLowerCase())
+          .where((m) => categoriesMatch(m.category, _categoryFilter!))
           .toList();
     }
 

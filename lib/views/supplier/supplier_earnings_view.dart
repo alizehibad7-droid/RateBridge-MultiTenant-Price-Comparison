@@ -1,12 +1,16 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../constants/route_names.dart';
 import '../../models/transaction_model.dart';
+import '../../repositories/transaction_repository.dart';
+import '../../services/stripe_service.dart';
 import '../../theme/supplier_theme.dart';
 import '../../utils/app_theme.dart';
 import '../../utils/currency_formatter.dart';
+import '../../viewmodels/auth_viewmodel.dart';
 import '../../viewmodels/supplier_viewmodel.dart';
 import '../../widgets/app_network_image.dart';
 import '../../utils/app_navigation.dart';
@@ -24,6 +28,7 @@ class SupplierEarningsView extends StatefulWidget {
 class _SupplierEarningsViewState extends State<SupplierEarningsView> {
   DateTime _currentMonth = DateTime.now();
   int _historyIndex = 0;
+  bool _handlingStripeReturn = false;
 
   bool _isSelectionMode = false;
   final Set<String> _selectedIds = {};
@@ -34,9 +39,84 @@ class _SupplierEarningsViewState extends State<SupplierEarningsView> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _handleStripeReturnIfNeeded();
+      if (!mounted) return;
       context.read<SupplierViewModel>().loadEarnings(_monthKey);
     });
+  }
+
+  /// Supports ?stripe= on the URI and hash routes (#/path?stripe=&plan=).
+  String? _queryFromUrl(String key) {
+    final direct = Uri.base.queryParameters[key];
+    if (direct != null && direct.isNotEmpty) return direct;
+
+    final fragment = Uri.base.fragment;
+    final q = fragment.indexOf('?');
+    if (q < 0) return null;
+    return Uri.splitQueryString(fragment.substring(q + 1))[key];
+  }
+
+  Future<void> _handleStripeReturnIfNeeded() async {
+    if (_handlingStripeReturn || !kIsWeb) return;
+    final stripeStatus = _queryFromUrl('stripe');
+    if (stripeStatus == null || stripeStatus.isEmpty) return;
+
+    _handlingStripeReturn = true;
+    final stripe = context.read<StripeService>();
+    final sessionId = _queryFromUrl('session_id');
+
+    if (stripeStatus == 'cancel') {
+      await stripe.clearPendingCommissionTxIds();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Payment cancelled.')),
+        );
+      }
+      return;
+    }
+
+    if (stripeStatus != 'success') return;
+
+    final pendingIds = await stripe.readPendingCommissionTxIds();
+    if (pendingIds.isEmpty) return;
+
+    try {
+      // Prefer server settle (can verify Checkout Session when session_id present).
+      await stripe.claimCommissionSettlement(
+        transactionIds: pendingIds,
+        checkoutSessionId: sessionId,
+      );
+    } catch (e) {
+      debugPrint('Commission settle job failed, trying client settle: $e');
+      try {
+        if (!mounted) return;
+        final uid = context.read<AuthViewModel>().user?.uid ?? '';
+        final txRepo = context.read<TransactionRepository>();
+        if (uid.isNotEmpty) {
+          await txRepo.settleSupplierCommissions(uid, pendingIds);
+        }
+        await stripe.clearPendingCommissionTxIds();
+      } catch (e2) {
+        debugPrint('Client commission settle also failed: $e2');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Payment received, but settlement is still processing. Refresh shortly.',
+              ),
+            ),
+          );
+        }
+        return;
+      }
+    }
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Commission payment settled.')),
+      );
+    }
   }
 
   Future<void> _selectMonth() async {

@@ -77,6 +77,8 @@ function buildResolver(catalogNames) {
     electrical: 'Electrical Wire & Cable',
     wire: 'Electrical Wire & Cable',
     cable: 'Electrical Wire & Cable',
+    brick: 'Bricks',
+    bricks: 'Bricks',
   };
 
   return (rawCategory) => {

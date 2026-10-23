@@ -65,10 +65,24 @@ class _CeoSubscriptionViewState extends State<CeoSubscriptionView> {
     final stripe = context.read<StripeService>();
     final stripeStatus = _queryFromUrl('stripe');
     final urlPlan = _queryFromUrl('plan');
+    final sessionId = _queryFromUrl('session_id');
     final pending = await stripe.readPendingSubscription();
 
-    final shouldActivate = stripeStatus == 'success' || pending != null;
-    if (shouldActivate) {
+    // Cancelled checkout must never activate — clear the pending marker first.
+    if (stripeStatus == 'cancel') {
+      await stripe.clearPendingSubscription();
+      await subVm.loadSubscription(companyId, fromServer: true);
+      subVm.setBusyMessage(null);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Payment cancelled.')),
+        );
+      }
+      return;
+    }
+
+    // Only activate after an explicit Stripe success return (not pending alone).
+    if (stripeStatus == 'success') {
       _handlingPaymentReturn = true;
       final planKey = (urlPlan != null && urlPlan.isNotEmpty)
           ? urlPlan
@@ -83,6 +97,7 @@ class _CeoSubscriptionViewState extends State<CeoSubscriptionView> {
       );
 
       if (plan.id == PlanId.free) {
+        await stripe.clearPendingSubscription();
         await subVm.loadSubscription(companyId, fromServer: true);
         subVm.setBusyMessage(null);
         _handlingPaymentReturn = false;
@@ -93,6 +108,7 @@ class _CeoSubscriptionViewState extends State<CeoSubscriptionView> {
         companyId: activateCompanyId,
         plan: plan,
         amountPKR: amount ?? plan.priceRs,
+        checkoutSessionId: sessionId,
       );
       _handlingPaymentReturn = false;
       return;
@@ -100,37 +116,47 @@ class _CeoSubscriptionViewState extends State<CeoSubscriptionView> {
 
     await subVm.loadSubscription(companyId, fromServer: true);
     subVm.setBusyMessage(null);
-    if (stripeStatus == 'cancel' && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Payment cancelled.')),
-      );
-    }
   }
 
   Future<void> _activatePaidPlan({
     required String companyId,
     required PlanDefinition plan,
     required int amountPKR,
+    String? checkoutSessionId,
   }) async {
     final subVm = context.read<SubscriptionViewModel>();
     final stripe = context.read<StripeService>();
 
-    // 1) Instant UI — never wait for restart / Cloud Function.
-    subVm.applyLocalPlan(
-      companyId: companyId,
-      plan: plan,
-      amountPaid: amountPKR,
-    );
-    _activationDone = true;
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${plan.name} plan is now active.')),
+    // Prefer server activation that can verify the Checkout Session when present.
+    subVm.setBusyMessage('Finalizing payment…');
+    try {
+      await stripe.claimSubscriptionActivation(
+        companyId: companyId,
+        plan: plan.planKey,
+        amountPKR: amountPKR,
+        checkoutSessionId: checkoutSessionId,
       );
+      await subVm.loadSubscription(companyId, fromServer: true);
+      _activationDone = true;
+      subVm.setBusyMessage(null);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${plan.name} plan is now active.')),
+        );
+      }
+      return;
+    } catch (e, st) {
+      debugPrint('Admin activate failed, trying client write: $e\n$st');
     }
 
-    // 2) Persist quickly via client write (source of truth for this screen).
+    // Fallback: client write (webhook may still apply the plan).
     subVm.setBusyMessage('Saving your plan…');
     try {
+      subVm.applyLocalPlan(
+        companyId: companyId,
+        plan: plan,
+        amountPaid: amountPKR,
+      );
       await subVm.activateSubscription(
         companyId: companyId,
         plan: plan,
@@ -138,23 +164,24 @@ class _CeoSubscriptionViewState extends State<CeoSubscriptionView> {
         amountPaid: amountPKR,
       );
       await stripe.clearPendingSubscription();
+      _activationDone = true;
       subVm.setBusyMessage(null);
-    } catch (e, st) {
-      debugPrint('Client activate failed, trying admin job: $e\n$st');
-      // 3) Fallback: Admin SDK job (slower, but reliable).
-      subVm.setBusyMessage('Finalizing payment…');
-      try {
-        await stripe.claimSubscriptionActivation(
-          companyId: companyId,
-          plan: plan.planKey,
-          amountPKR: amountPKR,
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${plan.name} plan is now active.')),
         );
-        await subVm.loadSubscription(companyId, fromServer: true);
-        subVm.setBusyMessage(null);
-      } catch (e2) {
-        subVm.setBusyMessage(null);
-        debugPrint('Admin activate also failed: $e2');
-        // Keep local plan on screen; data may still sync via Stripe webhook.
+      }
+    } catch (e2) {
+      subVm.setBusyMessage(null);
+      debugPrint('Client activate also failed: $e2');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Payment received, but plan activation is still processing. Refresh in a moment.',
+            ),
+          ),
+        );
       }
     }
   }

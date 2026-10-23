@@ -22,6 +22,7 @@ import '../models/notification_model.dart';
 import '../models/category_model.dart';
 import '../utils/seed_data_guard.dart';
 import '../utils/app_exception.dart';
+import '../utils/category_match.dart';
 
 class FirestoreService {
   final FirebaseFirestore _db;
@@ -566,8 +567,7 @@ class FirestoreService {
   String _normalizeMaterialName(String value) =>
       value.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
 
-  String _normalizeCategory(String value) =>
-      value.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+  String _normalizeCategory(String value) => normalizeCategoryKey(value);
 
   /// Materials matching [materialName] from suppliers linked to [companyId].
   Future<List<MaterialModel>> getCompanyMaterialsByName(
@@ -599,8 +599,8 @@ class FirestoreService {
     String? unit,
   }) async {
     final nameLower = _normalizeMaterialName(name);
-    final categoryKey = _normalizeCategory(category ?? '');
-    if (nameLower.isEmpty && categoryKey.isEmpty) return [];
+    final categoryRaw = (category ?? '').trim();
+    if (nameLower.isEmpty && categoryRaw.isEmpty) return [];
 
     final supplierIds = await filterUnrestrictedSupplierIds(
       await getCompanyLinkedSupplierIds(companyId),
@@ -621,8 +621,8 @@ class FirestoreService {
 
     bool matches(MaterialModel material) {
       if (!material.isListed) return false;
-      if (categoryKey.isNotEmpty) {
-        return _normalizeCategory(material.category) == categoryKey;
+      if (categoryRaw.isNotEmpty) {
+        return categoriesMatch(material.category, categoryRaw);
       }
       return _normalizeMaterialName(material.name) == nameLower;
     }

@@ -508,12 +508,24 @@ class _MarketplaceMaterialCard extends StatelessWidget {
                       compact: true,
                     ),
                   ),
+                  // Keep discount off the content column so ratings/Compare
+                  // are never clipped by the fixed grid cell height.
+                  if (material.bulkDiscountAvailable == true)
+                    const Positioned(
+                      bottom: 6,
+                      left: 6,
+                      right: 6,
+                      child: _CardBadge(
+                        label: 'Bulk Discount',
+                        background: FieldColors.statusSuccess,
+                      ),
+                    ),
               ],
             ),
           ),
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.all(10),
+              padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -577,24 +589,6 @@ class _MarketplaceMaterialCard extends StatelessWidget {
                       ),
                     ],
                   ),
-                  if (material.bulkDiscountAvailable == true) ...[
-                    const SizedBox(height: 4),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: FieldColors.statusSuccess.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        'Bulk Discount Available',
-                        style: FieldTypography.labelSmall.copyWith(
-                          color: FieldColors.statusSuccess,
-                          fontSize: 9,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ],
                   const SizedBox(height: 8),
                   Row(
                     children: [
@@ -687,6 +681,8 @@ class _CardBadge extends StatelessWidget {
       ),
       child: Text(
         label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
         style: TextStyle(
           color: Colors.white,
           fontSize: compact ? 11 : 10,

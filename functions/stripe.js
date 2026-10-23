@@ -106,15 +106,12 @@ async function applySuccessfulPayment(metadata, amountFallback, paymentRefId) {
 
   if (type === "subscription") {
     if (!companyId) {
-      console.error(
-        "Subscription payment missing companyId in metadata",
-        metadata
+      throw new Error(
+        "Subscription payment missing companyId in metadata"
       );
-      return;
     }
     if (!plan || !SUBSCRIPTION_PLANS_PKR[plan]) {
-      console.error("Subscription payment missing/invalid plan", metadata);
-      return;
+      throw new Error("Subscription payment missing/invalid plan");
     }
     const subRef = admin.firestore().collection("subscriptions").doc(companyId);
     const existing = await subRef.get();
@@ -189,9 +186,14 @@ async function applySuccessfulPayment(metadata, amountFallback, paymentRefId) {
     return;
   }
 
-  if (type === "commission" && transactionIds) {
+  if (type === "commission") {
+    if (!transactionIds) {
+      throw new Error("Commission payment missing transactionIds in metadata");
+    }
     const ids = String(transactionIds).split(",").filter(Boolean);
-    if (!ids.length) return;
+    if (!ids.length) {
+      throw new Error("Commission payment has empty transactionIds");
+    }
     
     const paidRupees = amountPKR
       ? Math.round(Number(amountPKR))
@@ -445,8 +447,29 @@ exports.onStripeJobCreated = functions
   });
 
 /**
+ * Verifies a Checkout Session is paid when the client returns session_id=cs_...
+ * Returns metadata + amount from Stripe (source of truth).
+ */
+async function verifyCheckoutSessionIfPresent(paymentRefId) {
+  const ref = typeof paymentRefId === "string" ? paymentRefId.trim() : "";
+  if (!ref.startsWith("cs_")) return null;
+
+  const stripe = getStripe();
+  const session = await stripe.checkout.sessions.retrieve(ref);
+  if (!session || session.payment_status !== "paid") {
+    throw new Error("Checkout payment is not completed yet.");
+  }
+  return {
+    metadata: session.metadata || {},
+    amountTotal: session.amount_total,
+    paymentRef: session.payment_intent || session.id,
+  };
+}
+
+/**
  * Client writes stripe_activate_jobs after Checkout success.
- * Admin SDK applies the plan — bypasses client Firestore permission issues.
+ * Admin SDK applies the plan / commission settle — bypasses client permission issues.
+ * Supports type=subscription (default) and type=commission.
  */
 exports.onStripeActivateJobCreated = functions
   .region("us-central1")
@@ -455,36 +478,93 @@ exports.onStripeActivateJobCreated = functions
   .onCreate(async (snap) => {
     const data = snap.data() || {};
     const uid = typeof data.uid === "string" ? data.uid : "";
-    const companyId =
-      typeof data.companyId === "string" ? data.companyId.trim() : "";
-    const plan = typeof data.plan === "string" ? data.plan.trim() : "";
-    const amountPKR = data.amountPKR;
+    const type = data.type === "commission" ? "commission" : "subscription";
+    const paymentRefRaw =
+      typeof data.paymentRefId === "string" ? data.paymentRefId.trim() : "";
 
-    if (!uid || !companyId || !SUBSCRIPTION_PLANS_PKR[plan]) {
+    if (!uid) {
       await snap.ref.update({
         status: "error",
-        error: "uid, companyId, and a valid plan are required.",
+        error: "uid is required.",
       });
       return;
     }
 
     try {
-      const paymentRef =
-        typeof data.paymentRefId === "string" && data.paymentRefId
-          ? data.paymentRefId
-          : `activate_${snap.id}`;
-      await applySuccessfulPayment(
-        {
-          type: "subscription",
-          companyId,
-          plan,
-          amountPKR: String(
-            amountPKR != null ? amountPKR : SUBSCRIPTION_PLANS_PKR[plan]
-          ),
-        },
-        toStripeAmountPkr(SUBSCRIPTION_PLANS_PKR[plan]),
-        paymentRef
-      );
+      const verified = await verifyCheckoutSessionIfPresent(paymentRefRaw);
+
+      if (type === "commission") {
+        const ids = Array.isArray(data.transactionIds)
+          ? data.transactionIds
+          : String(data.transactionIds || "")
+              .split(",")
+              .map((v) => String(v || "").trim())
+              .filter(Boolean);
+        if (!ids.length) {
+          throw new Error("transactionIds are required for commission settle.");
+        }
+
+        const meta = verified?.metadata || {};
+        await applySuccessfulPayment(
+          {
+            type: "commission",
+            supplierId: meta.supplierId || uid,
+            transactionIds: meta.transactionIds || ids.join(","),
+            amountPKR:
+              meta.amountPKR ||
+              (data.amountPKR != null ? String(data.amountPKR) : ""),
+          },
+          verified?.amountTotal ||
+            toStripeAmountPkr(data.amountPKR || 0),
+          verified?.paymentRef || paymentRefRaw || `activate_${snap.id}`
+        );
+      } else {
+        const companyId =
+          typeof data.companyId === "string" ? data.companyId.trim() : "";
+        const plan = typeof data.plan === "string" ? data.plan.trim() : "";
+        const amountPKR = data.amountPKR;
+
+        const meta = verified?.metadata || {};
+        const effectiveCompanyId = meta.companyId || companyId;
+        const effectivePlan = meta.plan || plan;
+
+        if (!effectiveCompanyId || !SUBSCRIPTION_PLANS_PKR[effectivePlan]) {
+          throw new Error(
+            "companyId and a valid plan are required for subscription activation."
+          );
+        }
+
+        // When a Checkout Session is present, require metadata to match the job.
+        if (verified) {
+          if (
+            meta.companyId &&
+            meta.companyId !== effectiveCompanyId
+          ) {
+            throw new Error("Checkout company does not match activation request.");
+          }
+          if (meta.plan && meta.plan !== effectivePlan) {
+            throw new Error("Checkout plan does not match activation request.");
+          }
+        }
+
+        await applySuccessfulPayment(
+          {
+            type: "subscription",
+            companyId: effectiveCompanyId,
+            plan: effectivePlan,
+            amountPKR: String(
+              meta.amountPKR ||
+                (amountPKR != null
+                  ? amountPKR
+                  : SUBSCRIPTION_PLANS_PKR[effectivePlan])
+            ),
+          },
+          verified?.amountTotal ||
+            toStripeAmountPkr(SUBSCRIPTION_PLANS_PKR[effectivePlan]),
+          verified?.paymentRef || paymentRefRaw || `activate_${snap.id}`
+        );
+      }
+
       await snap.ref.update({
         status: "complete",
         completedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -533,9 +613,10 @@ exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
         );
       }
     }
+    res.json({ received: true });
   } catch (err) {
+    // Return 5xx so Stripe retries instead of silently dropping the update.
     console.error("Error updating Firestore after payment:", err);
+    res.status(500).send("Webhook handler failed");
   }
-
-  res.json({ received: true });
 });
