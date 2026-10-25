@@ -218,7 +218,9 @@ exports.onInviteAccepted = functions.https.onCall(async (data, context) => {
   }
 });
 
-exports.acceptPartnershipRequest = functions.https.onCall(async (data, context) => {
+exports.acceptPartnershipRequest = functions
+  .region('us-central1')
+  .https.onCall(async (data, context) => {
   if (!context.auth) {
     throw new functions.https.HttpsError('unauthenticated', 'Must be authenticated');
   }
@@ -228,7 +230,13 @@ exports.acceptPartnershipRequest = functions.https.onCall(async (data, context) 
     throw new functions.https.HttpsError('invalid-argument', 'requestId is required');
   }
 
+  const uid = context.auth.uid;
+
   try {
+    let companyData;
+    let supplierData;
+    let request;
+
     await db.runTransaction(async (transaction) => {
       const requestRef = db.collection('partnershipRequests').doc(requestId);
       const requestDoc = await transaction.get(requestRef);
@@ -236,7 +244,7 @@ exports.acceptPartnershipRequest = functions.https.onCall(async (data, context) 
         throw new functions.https.HttpsError('not-found', 'Partnership request not found.');
       }
 
-      const request = requestDoc.data();
+      request = requestDoc.data() || {};
       if (String(request.status || '').toLowerCase() !== 'pending') {
         throw new functions.https.HttpsError(
           'failed-precondition',
@@ -244,12 +252,21 @@ exports.acceptPartnershipRequest = functions.https.onCall(async (data, context) 
         );
       }
 
-      const companyRef = db.collection('companies').doc(request.companyId);
-      const supplierRef = db.collection('suppliers').doc(request.supplierId);
+      const companyId = String(request.companyId || '').trim();
+      const supplierId = String(request.supplierId || '').trim();
+      if (!companyId || !supplierId) {
+        throw new functions.https.HttpsError(
+          'failed-precondition',
+          'Partnership request is missing company or supplier.'
+        );
+      }
+
+      const companyRef = db.collection('companies').doc(companyId);
+      const supplierRef = db.collection('suppliers').doc(supplierId);
       const companyDoc = await transaction.get(companyRef);
       const supplierDoc = await transaction.get(supplierRef);
       const subscriptionDoc = await transaction.get(
-        db.collection('subscriptions').doc(request.companyId)
+        db.collection('subscriptions').doc(companyId)
       );
       if (!companyDoc.exists) {
         throw new functions.https.HttpsError('not-found', 'Company not found');
@@ -258,41 +275,79 @@ exports.acceptPartnershipRequest = functions.https.onCall(async (data, context) 
         throw new functions.https.HttpsError('not-found', 'Supplier not found');
       }
 
-      const companyData = companyDoc.data();
-      const supplierData = supplierDoc.data();
+      companyData = companyDoc.data() || {};
+      supplierData = supplierDoc.data() || {};
+
+      const initiatedBy = String(request.initiatedBy || '').toLowerCase();
+      const ceoUid = String(companyData.ceoUid || '').trim();
+      const userDoc = await transaction.get(db.collection('users').doc(uid));
+      const userCompanyId = String(userDoc.data()?.companyId || '').trim();
+      const userRole = String(userDoc.data()?.role || '').toLowerCase();
+      const isCompanyCeo =
+        (ceoUid && uid === ceoUid) ||
+        (userRole === 'ceo' && userCompanyId === companyId);
+
+      // CEO invite → supplier accepts. Supplier request → CEO accepts.
+      if (initiatedBy === 'ceo' || initiatedBy === 'company') {
+        if (uid !== supplierId) {
+          throw new functions.https.HttpsError(
+            'permission-denied',
+            'Only the invited supplier can accept this partnership invite.'
+          );
+        }
+      } else if (!isCompanyCeo) {
+        throw new functions.https.HttpsError(
+          'permission-denied',
+          'Only the company CEO can accept this partnership request.'
+        );
+      }
+
       const capacity = await assertSupplierCapacity(
         transaction,
         companyRef,
         companyData,
         subscriptionDoc.exists ? subscriptionDoc.data() : null,
-        request.supplierId
+        supplierId
       );
-      const supplierCompanyRef = supplierRef
-        .collection('companies')
-        .doc(request.companyId);
+      const supplierCompanyRef = supplierRef.collection('companies').doc(companyId);
       const displayName =
         supplierData.name || supplierData.businessName || 'Supplier';
+      const companyName =
+        companyData.name || companyData.companyName || '';
 
       transaction.update(requestRef, {
         status: 'accepted',
         respondedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
       transaction.set(capacity.mirrorRef, {
-        id: request.supplierId,
+        id: supplierId,
+        supplierUid: supplierId,
         name: displayName,
         businessName: supplierData.businessName || supplierData.name || displayName,
+        supplierName: supplierData.businessName || supplierData.name || displayName,
         city: supplierData.city || '',
+        categories: supplierData.categories || [],
         materialType: supplierData.materialType || supplierData.businessType || 'General',
+        globalAvgRating: supplierData.globalAvgRating || 0,
         email: supplierData.email || '',
         status: 'active',
         linkedAt: admin.firestore.FieldValue.serverTimestamp(),
         joinedAt: admin.firestore.FieldValue.serverTimestamp(),
       }, { merge: true });
       transaction.set(supplierCompanyRef, {
-        id: request.companyId,
+        id: companyId,
+        name: companyName,
         status: 'active',
         joinedAt: admin.firestore.FieldValue.serverTimestamp(),
         onboardingComplete: false,
+      }, { merge: true });
+      // Keep legacy companyLinks in sync.
+      transaction.set(supplierRef.collection('companyLinks').doc(companyId), {
+        companyId,
+        companyName,
+        status: 'active',
+        joinedAt: admin.firestore.FieldValue.serverTimestamp(),
+        companyRating: 0,
       }, { merge: true });
       if (!capacity.alreadyLinked) {
         transaction.set(supplierRef, {
@@ -305,6 +360,6 @@ exports.acceptPartnershipRequest = functions.https.onCall(async (data, context) 
   } catch (error) {
     console.error('acceptPartnershipRequest error:', error);
     if (error instanceof functions.https.HttpsError) throw error;
-    throw new functions.https.HttpsError('internal', error.message);
+    throw new functions.https.HttpsError('internal', error.message || String(error));
   }
 });

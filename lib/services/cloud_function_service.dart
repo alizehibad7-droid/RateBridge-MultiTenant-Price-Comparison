@@ -44,7 +44,8 @@ class CloudFunctionService {
   final FirebaseFunctions _functions;
 
   CloudFunctionService({FirebaseFunctions? functions})
-      : _functions = functions ?? FirebaseFunctions.instance;
+      : _functions = functions ??
+            FirebaseFunctions.instanceFor(region: 'us-central1');
 
   Future<dynamic> callFunction(String name, Map<String, dynamic> data) async {
     try {

@@ -359,6 +359,17 @@ class _CeoJoinRequestsViewState extends State<CeoJoinRequestsView>
             onPressed: () async {
               Navigator.pop(context);
               await viewModel.acceptPartnershipRequest(req.requestId);
+              if (!mounted) return;
+              final err = viewModel.errorMessage;
+              final ok = viewModel.successMessage;
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  behavior: SnackBarBehavior.floating,
+                  backgroundColor:
+                      err != null ? CeoColors.red : CeoColors.green,
+                  content: Text(err ?? ok ?? 'Partnership accepted.'),
+                ),
+              );
             },
             icon: const Icon(Icons.check_rounded, size: 18),
             label: const Text('CONFIRM'),
@@ -400,6 +411,17 @@ class _CeoJoinRequestsViewState extends State<CeoJoinRequestsView>
               Navigator.pop(context);
               await viewModel.rejectPartnershipRequest(
                   req.requestId, reasonController.text.trim());
+              if (!mounted) return;
+              final err = viewModel.errorMessage;
+              final ok = viewModel.successMessage;
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  behavior: SnackBarBehavior.floating,
+                  backgroundColor:
+                      err != null ? CeoColors.red : CeoColors.green,
+                  content: Text(err ?? ok ?? 'Request declined.'),
+                ),
+              );
             },
             icon: const Icon(Icons.close_rounded, size: 18),
             label: const Text('DECLINE'),

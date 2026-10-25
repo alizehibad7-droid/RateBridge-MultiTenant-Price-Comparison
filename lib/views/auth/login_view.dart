@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../constants/app_colors.dart';
+import '../../constants/app_constants.dart';
 import '../../constants/route_names.dart';
 import '../../viewmodels/auth_viewmodel.dart';
 import '../../widgets/auth/auth_widgets.dart';
@@ -79,8 +80,8 @@ class _LoginViewState extends State<LoginView> {
         isAllowed = true;
       }
     } else if (role == 'ceo' || role == 'supplier' || role == 'fielduser') {
-      // CEO / Supplier / Field User -> Android Only
-      if (isAndroid) {
+      // CEO / Supplier / Field User -> Android only when enforced
+      if (!AppConstants.enforcePhoneOnlyRoles || isAndroid) {
         isAllowed = true;
       }
     } else {

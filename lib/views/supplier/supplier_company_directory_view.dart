@@ -444,11 +444,17 @@ class _DirectoryActionButton extends StatelessWidget {
                       company.id,
                       message: msg.isEmpty ? null : msg,
                     );
-                    if (context.mounted && ok) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Partnership request sent.')),
-                      );
-                    }
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          ok
+                              ? 'Partnership request sent.'
+                              : (vm.error ??
+                                  'Failed to send partnership request.'),
+                        ),
+                      ),
+                    );
                   },
                   child: const Text('Send Request'),
                 ),

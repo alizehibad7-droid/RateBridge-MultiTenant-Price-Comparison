@@ -703,13 +703,14 @@ class _RelationshipActions extends StatelessWidget {
                 );
                 if (!context.mounted) return;
                 final error = ceoVM.errorMessage;
+                final ok = ceoVM.successMessage;
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     behavior: SnackBarBehavior.floating,
                     backgroundColor:
-                        error == null ? CeoColors.green : CeoColors.red,
+                        error != null ? CeoColors.red : CeoColors.green,
                     content: Text(
-                      error ?? 'Request sent to ${supplier.name}',
+                      error ?? ok ?? 'Request sent to ${supplier.name}',
                     ),
                   ),
                 );

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 // Constants & Models
+import 'constants/app_constants.dart';
 import 'constants/route_names.dart';
 import 'theme/ratebridge_theme.dart';
 import 'models/material_model.dart';
@@ -791,8 +792,10 @@ class _RateBridgeAppState extends State<RateBridgeApp> {
           // Admin -> Web Only
           if (!isWeb) platformBlocked = true;
         } else if (role == 'ceo' || role == 'supplier' || role == 'fielduser') {
-          // CEO / Supplier / Field User -> Android Only
-          if (!isAndroid) platformBlocked = true;
+          // CEO / Supplier / Field User -> Android only when enforced
+          if (AppConstants.enforcePhoneOnlyRoles && !isAndroid) {
+            platformBlocked = true;
+          }
         }
 
         if (platformBlocked) {

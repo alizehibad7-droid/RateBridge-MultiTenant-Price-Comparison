@@ -18,6 +18,7 @@ import '../repositories/company_repository.dart';
 import '../repositories/invitation_repository.dart';
 import '../services/cloud_function_service.dart';
 import '../services/notification_service.dart';
+import '../services/plan_limit_service.dart';
 import '../services/storage_service.dart';
 import '../services/cloudinary_service.dart';
 import '../constants/app_constants.dart';
@@ -361,16 +362,20 @@ class CeoViewModel extends ChangeNotifier {
         }
 
         _receivedPartnershipRequests = _sortPartnershipRequestsNewest(
-          all.where((r) => r.initiatedBy == 'supplier'),
+          all.where((r) => r.isSupplierInitiated),
         );
         _sentPartnershipRequests = _sortPartnershipRequestsNewest(
-          all.where((r) => r.initiatedBy == 'ceo'),
+          all.where((r) => r.isCeoInitiated),
         );
         _partnershipRequestsReady = true;
         _rebuildActivePartnerIds();
         notifyListeners();
       },
-      onError: (_) {
+      onError: (e) {
+        debugPrint('CEO partnership watch failed: $e');
+        _partnershipRequestsSub?.cancel();
+        _partnershipRequestsSub = null;
+        _partnershipWatchCompanyId = null;
         _partnershipRequestsReady = true;
         _errorMessage = 'Failed to load partnership requests.';
         notifyListeners();
@@ -1037,73 +1042,121 @@ class CeoViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> sendPartnershipRequest(
+  /// Returns `true` when the partnership request document was created.
+  Future<bool> sendPartnershipRequest(
     String supplierId, {
     String? message,
   }) async {
-    final company = _company;
-    if (company == null || supplierId.isEmpty) return;
+    _errorMessage = null;
+    _successMessage = null;
 
-    final plan = kPlans.firstWhere((p) => p.planKey == company.plan,
-        orElse: () => kPlans.first);
+    var company = _company;
+    if (company == null || supplierId.isEmpty) {
+      _errorMessage = 'Company or supplier is missing. Please refresh and retry.';
+      notifyListeners();
+      return false;
+    }
+
+    // Re-resolve company so partnershipRequests always use the Firestore doc id.
+    final freshCompany = await _companyRepo.getCompanyById(company.id);
+    if (freshCompany != null) {
+      company = freshCompany;
+      _company = freshCompany;
+      ensurePartnershipStatusWatch(freshCompany.id);
+    }
+
+    final plan = await PlanLimitService.companyPlan(
+      _db,
+      company.id,
+      planKey: company.plan,
+    );
     if (plan.maxSuppliers != -1 &&
         _activePartnerSupplierIds.length >= plan.maxSuppliers) {
       _errorMessage =
           'Supplier limit reached for your ${plan.name} plan (${plan.maxSuppliers}). Please upgrade for more connections.';
       notifyListeners();
-      return;
+      return false;
     }
 
     try {
       final supplierDoc =
           await _db.collection('suppliers').doc(supplierId).get();
-      if (!supplierDoc.exists) return;
+      if (!supplierDoc.exists) {
+        _errorMessage = 'Supplier not found. Please refresh and try again.';
+        notifyListeners();
+        return false;
+      }
       final supplierData = supplierDoc.data()!;
+      final canonicalSupplierId = supplierDoc.id;
       final supplierStatus =
           (supplierData['status'] as String?)?.trim().toLowerCase() ?? '';
       if (supplierStatus != 'active') {
         _errorMessage =
             'This supplier is currently unavailable for partnerships.';
         notifyListeners();
-        return;
+        return false;
       }
       if (supplierData['commissionRestricted'] == true) {
         _errorMessage =
             'This supplier is temporarily unavailable for partnerships.';
         notifyListeners();
-        return;
+        return false;
       }
 
+      final categoriesRaw = supplierData['categories'];
+      final categories = <String>[];
+      if (categoriesRaw is List) {
+        for (final item in categoriesRaw) {
+          final value = item?.toString().trim() ?? '';
+          if (value.isNotEmpty) categories.add(value);
+        }
+      }
+
+      debugPrint(
+        'Creating partnership request company=${company.id} '
+        'supplier=$canonicalSupplierId',
+      );
       final requestId = await _partnershipRepo.createRequest(
         companyId: company.id,
         companyName: company.name,
-        supplierId: supplierId,
+        supplierId: canonicalSupplierId,
         supplierName:
             supplierData['name'] ?? supplierData['businessName'] ?? 'Supplier',
         initiatedBy: 'ceo',
         message: message,
         supplierEmail: supplierData['email'] as String?,
         supplierCity: supplierData['city'] as String?,
-        supplierCategories: supplierData['categories'] is List
-            ? List<String>.from(supplierData['categories'])
-            : const [],
+        supplierCategories: categories,
         supplierRating: (supplierData['rating'] as num? ?? 0).toDouble(),
       );
+      debugPrint('Partnership request created: $requestId');
 
-      await _notificationService.notifyPartnershipInvitation(
-        recipientUserId: supplierId,
-        companyName: company.name,
-        requestId: requestId,
-        companyId: company.id,
-      );
+      try {
+        await _notificationService.notifyPartnershipInvitation(
+          recipientUserId: canonicalSupplierId,
+          companyName: company.name,
+          requestId: requestId,
+          companyId: company.id,
+        );
+      } catch (notifyError) {
+        // Request is already saved — do not fail the send on notification errors.
+        debugPrint('Partnership invite notification failed: $notifyError');
+      }
 
       _successMessage = 'Partnership request sent successfully.';
+      notifyListeners();
+      return true;
     } on AppException catch (e) {
+      debugPrint('sendPartnershipRequest AppException: ${e.message}');
       _errorMessage = e.message;
+      notifyListeners();
+      return false;
     } catch (e) {
+      debugPrint('sendPartnershipRequest failed: $e');
       _errorMessage = 'Failed to send partnership request. Please try again.';
+      notifyListeners();
+      return false;
     }
-    notifyListeners();
   }
 
   @Deprecated('Use sendPartnershipRequest')
@@ -1131,10 +1184,16 @@ class CeoViewModel extends ChangeNotifier {
       watchPartnershipRequests(companyId, type);
 
   Future<void> acceptPartnershipRequest(String reqId) async {
+    _errorMessage = null;
+    _successMessage = null;
+
     final company = _company;
     if (company != null) {
-      final plan = kPlans.firstWhere((p) => p.planKey == company.plan,
-          orElse: () => kPlans.first);
+      final plan = await PlanLimitService.companyPlan(
+        _db,
+        company.id,
+        planKey: company.plan,
+      );
       if (plan.maxSuppliers != -1 &&
           _activePartnerSupplierIds.length >= plan.maxSuppliers) {
         _errorMessage =
@@ -1171,7 +1230,8 @@ class CeoViewModel extends ChangeNotifier {
       _successMessage = 'Partnership accepted.';
     } on AppException catch (e) {
       _errorMessage = e.message;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('acceptPartnershipRequest failed: $e');
       _errorMessage = 'Failed to accept partnership. Please try again.';
     }
     notifyListeners();

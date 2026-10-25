@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:flutter/foundation.dart';
 
 import '../constants/firestore_paths.dart';
 import '../models/partnership_request_model.dart';
@@ -17,7 +18,8 @@ class PartnershipRequestRepository {
     FirebaseFirestore? firestore,
     FirebaseFunctions? functions,
   })  : _db = firestore ?? FirebaseFirestore.instance,
-        _functions = functions ?? FirebaseFunctions.instance;
+        _functions = functions ??
+            FirebaseFunctions.instanceFor(region: 'us-central1');
 
   Future<bool> _hasBlockingRequest({
     required String companyId,
@@ -48,20 +50,47 @@ class PartnershipRequestRepository {
     double supplierRating = 0,
   }) async {
     try {
+      // Resolve canonical Firestore document IDs so CEO/supplier watches match.
+      final companySnap =
+          await _db.collection(FirestorePaths.companiesCol).doc(companyId).get();
+      if (!companySnap.exists) {
+        throw AppException('Company not found. Please refresh and try again.');
+      }
+      final canonicalCompanyId = companySnap.id;
+      final resolvedCompanyName = (companySnap.data()?['name'] ??
+              companySnap.data()?['companyName'] ??
+              companyName)
+          .toString();
+
+      final supplierSnap =
+          await _db.collection(FirestorePaths.suppliersCol).doc(supplierId).get();
+      if (!supplierSnap.exists) {
+        throw AppException('Supplier not found. Please refresh and try again.');
+      }
+      final canonicalSupplierId = supplierSnap.id;
+      final resolvedSupplierName = (supplierSnap.data()?['name'] ??
+              supplierSnap.data()?['businessName'] ??
+              supplierName)
+          .toString();
+
+      final by = initiatedBy.toLowerCase() == 'company'
+          ? 'ceo'
+          : initiatedBy.toLowerCase();
+
       // A CEO-initiated request is an invitation, so reject it before sending
       // when the company has no supplier capacity. Supplier-initiated requests
       // are checked authoritatively when they are accepted.
-      if (initiatedBy.toLowerCase() == 'ceo') {
+      if (by == 'ceo') {
         await PlanLimitService.ensureSupplierCapacity(
           _db,
-          companyId,
-          supplierId: supplierId,
+          canonicalCompanyId,
+          supplierId: canonicalSupplierId,
         );
       }
 
       if (await _hasBlockingRequest(
-        companyId: companyId,
-        supplierId: supplierId,
+        companyId: canonicalCompanyId,
+        supplierId: canonicalSupplierId,
       )) {
         throw AppException(
           'A partnership request already exists for this company and supplier.',
@@ -71,11 +100,11 @@ class PartnershipRequestRepository {
       final ref = _db.collection(FirestorePaths.partnershipRequestsCol).doc();
       await ref.set({
         'requestId': ref.id,
-        'companyId': companyId,
-        'companyName': companyName,
-        'supplierId': supplierId,
-        'supplierName': supplierName,
-        'initiatedBy': initiatedBy,
+        'companyId': canonicalCompanyId,
+        'companyName': resolvedCompanyName,
+        'supplierId': canonicalSupplierId,
+        'supplierName': resolvedSupplierName,
+        'initiatedBy': by == 'ceo' ? 'ceo' : 'supplier',
         'status': 'pending',
         'message': message,
         'rejectionReason': null,
@@ -156,20 +185,39 @@ class PartnershipRequestRepository {
     }
 
     try {
-      // Attempt to call the cloud function for notifications and audit logging.
       await _functions
           .httpsCallable('acceptPartnershipRequest')
           .call(<String, dynamic>{'requestId': requestId});
+      // Cloud Function already updates the request + link docs.
+      return;
+    } on FirebaseFunctionsException catch (e) {
+      final code = e.code.toLowerCase();
+      // Real business errors — do not fake-accept on the client.
+      if (code == 'resource-exhausted' ||
+          code == 'failed-precondition' ||
+          code == 'permission-denied' ||
+          code == 'unauthenticated' ||
+          code == 'not-found' ||
+          code == 'invalid-argument') {
+        throw AppException(
+          (e.message ?? '').trim().isNotEmpty
+              ? e.message!.trim()
+              : 'Could not accept partnership request.',
+          e.code,
+        );
+      }
+      // Transport / cold-start style failures — fall back to client link write.
+      debugPrint(
+        'acceptPartnershipRequest CF failed (${e.code}): ${e.message} — client fallback',
+      );
     } catch (e) {
-      // If the cloud function is not deployed or fails, we proceed with manual
-      // status update and enrichment to ensure the partnership is still created.
-      await reqRef.update({
-        'status': 'accepted',
-        'respondedAt': FieldValue.serverTimestamp(),
-      });
+      debugPrint('acceptPartnershipRequest CF failed: $e — client fallback');
     }
 
-    // Ensure link documents are created/updated on both sides.
+    await reqRef.update({
+      'status': 'accepted',
+      'respondedAt': FieldValue.serverTimestamp(),
+    });
     await enrichAcceptedLinkDocs(
       companyId: req.companyId,
       supplierId: req.supplierId,
@@ -271,8 +319,15 @@ class PartnershipRequestRepository {
   }) async {
     final supplierSnap =
         await _db.collection(FirestorePaths.suppliersCol).doc(supplierId).get();
-    if (!supplierSnap.exists) return;
+    if (!supplierSnap.exists) {
+      throw AppException(
+        'Supplier profile not found. Partnership could not be linked.',
+      );
+    }
     final supplierData = supplierSnap.data()!;
+    final displayName =
+        (supplierData['name'] ?? supplierData['businessName'] ?? 'Supplier')
+            .toString();
 
     await _db
         .collection(FirestorePaths.companiesCol)
@@ -280,16 +335,32 @@ class PartnershipRequestRepository {
         .collection('suppliers')
         .doc(supplierId)
         .set({
-      'name': supplierData['name'] ?? supplierData['businessName'] ?? 'Supplier',
+      'id': supplierId,
+      'supplierUid': supplierId,
+      'name': displayName,
+      'businessName':
+          supplierData['businessName'] ?? supplierData['name'] ?? displayName,
       'city': supplierData['city'] ?? '',
       'materialType':
-          supplierData['businessType'] ?? supplierData['materialType'] ?? 'General',
+          supplierData['businessType'] ??
+          supplierData['materialType'] ??
+          'General',
+      'email': supplierData['email'] ?? '',
       'status': 'active',
+      'linkedAt': FieldValue.serverTimestamp(),
+      'joinedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
 
     final companySnap =
         await _db.collection(FirestorePaths.companiesCol).doc(companyId).get();
-    if (!companySnap.exists) return;
+    if (!companySnap.exists) {
+      throw AppException(
+        'Company profile not found. Partnership could not be linked.',
+      );
+    }
+    final companyName =
+        (companySnap.data()?['name'] ?? companySnap.data()?['companyName'] ?? '')
+            .toString();
 
     await _db
         .collection(FirestorePaths.suppliersCol)
@@ -297,8 +368,11 @@ class PartnershipRequestRepository {
         .collection('companies')
         .doc(companyId)
         .set({
-      'name': companySnap.data()?['name'] ?? companySnap.data()?['companyName'],
+      'id': companyId,
+      'name': companyName,
       'status': 'active',
+      'joinedAt': FieldValue.serverTimestamp(),
+      'onboardingComplete': false,
     }, SetOptions(merge: true));
   }
 }

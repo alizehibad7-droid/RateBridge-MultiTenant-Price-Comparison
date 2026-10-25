@@ -3,9 +3,12 @@ const admin = require("firebase-admin");
 
 /**
  * Lazy Stripe init — functions.config().stripe.secret_key must match
- * the Flutter publishable key (same Stripe account).
+ * the Flutter publishable key (same Stripe account / pk_test_51UDAH2...).
+ * Do NOT fall back to stripe.secret (different test account).
  */
+let cachedStripe = null;
 function getStripe() {
+  if (cachedStripe) return cachedStripe;
   const secretKey =
     process.env.STRIPE_SECRET_KEY || functions.config().stripe?.secret_key;
   if (!secretKey) {
@@ -13,7 +16,8 @@ function getStripe() {
       "STRIPE_SECRET_KEY is not configured. Use firebase functions:config:set stripe.secret_key=\"sk_...\""
     );
   }
-  return require("stripe")(secretKey);
+  cachedStripe = require("stripe")(secretKey);
+  return cachedStripe;
 }
 
 const SUBSCRIPTION_PLANS_PKR = {
@@ -367,20 +371,29 @@ async function createCommissionPaymentIntent({
 
 /**
  * Firestore job trigger — same pattern as onAiJobCreated.
- * Avoids HTTPS callable 403/CORS on Flutter Web (Cloud Run IAM).
- *
- * Client writes stripe_jobs/{id} with status=pending, then listens until
- * status is complete|error.
+ * Client writes stripe_jobs/{id} with status=pending, then waits until
+ * status is complete|error. 512MB / 120s reduces cold-start timeouts.
  */
 exports.onStripeJobCreated = functions
   .region("us-central1")
-  .runWith({ timeoutSeconds: 60, memory: "256MB" })
+  .runWith({ timeoutSeconds: 120, memory: "512MB" })
   .firestore.document("stripe_jobs/{jobId}")
   .onCreate(async (snap) => {
     const data = snap.data() || {};
     const uid = typeof data.uid === "string" ? data.uid : "";
     const mode = data.mode === "payment_sheet" ? "payment_sheet" : "checkout";
     const type = data.type === "commission" ? "commission" : "subscription";
+
+    // Mark processing immediately so the client knows the trigger fired
+    // (and so cold starts are visible vs a silent hang).
+    try {
+      await snap.ref.update({
+        status: "processing",
+        startedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      console.warn("Could not mark stripe job processing:", e.message || e);
+    }
 
     if (!uid) {
       await snap.ref.update({
@@ -473,7 +486,7 @@ async function verifyCheckoutSessionIfPresent(paymentRefId) {
  */
 exports.onStripeActivateJobCreated = functions
   .region("us-central1")
-  .runWith({ timeoutSeconds: 60, memory: "256MB" })
+  .runWith({ timeoutSeconds: 120, memory: "512MB" })
   .firestore.document("stripe_activate_jobs/{jobId}")
   .onCreate(async (snap) => {
     const data = snap.data() || {};
@@ -481,6 +494,13 @@ exports.onStripeActivateJobCreated = functions
     const type = data.type === "commission" ? "commission" : "subscription";
     const paymentRefRaw =
       typeof data.paymentRefId === "string" ? data.paymentRefId.trim() : "";
+
+    try {
+      await snap.ref.update({
+        status: "processing",
+        startedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    } catch (_) {}
 
     if (!uid) {
       await snap.ref.update({
@@ -579,44 +599,47 @@ exports.onStripeActivateJobCreated = functions
   });
 
 /** HTTP webhook — Stripe → Firestore activation / settlement. */
-exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
-  const sig = req.headers["stripe-signature"];
-  const webhookSecret =
-    process.env.STRIPE_WEBHOOK_SECRET ||
-    functions.config().stripe?.webhook_secret;
+exports.stripeWebhook = functions
+  .region("us-central1")
+  .runWith({ timeoutSeconds: 60, memory: "512MB" })
+  .https.onRequest(async (req, res) => {
+    const sig = req.headers["stripe-signature"];
+    const webhookSecret =
+      process.env.STRIPE_WEBHOOK_SECRET ||
+      functions.config().stripe?.webhook_secret;
 
-  if (!webhookSecret) {
-    console.error("Missing STRIPE_WEBHOOK_SECRET configuration");
-    return res.status(500).send("Webhook configuration missing");
-  }
-
-  let event;
-  try {
-    const stripe = getStripe();
-    event = stripe.webhooks.constructEvent(req.rawBody, sig, webhookSecret);
-  } catch (err) {
-    console.error("Webhook signature verification failed:", err.message);
-    return res.status(400).send(`Webhook Error: ${err.message}`);
-  }
-
-  try {
-    if (event.type === "payment_intent.succeeded") {
-      const intent = event.data.object;
-      await applySuccessfulPayment(intent.metadata, intent.amount, intent.id);
-    } else if (event.type === "checkout.session.completed") {
-      const session = event.data.object;
-      if (session.payment_status === "paid") {
-        await applySuccessfulPayment(
-          session.metadata,
-          session.amount_total,
-          session.payment_intent || session.id
-        );
-      }
+    if (!webhookSecret) {
+      console.error("Missing STRIPE_WEBHOOK_SECRET configuration");
+      return res.status(500).send("Webhook configuration missing");
     }
-    res.json({ received: true });
-  } catch (err) {
-    // Return 5xx so Stripe retries instead of silently dropping the update.
-    console.error("Error updating Firestore after payment:", err);
-    res.status(500).send("Webhook handler failed");
-  }
-});
+
+    let event;
+    try {
+      const stripe = getStripe();
+      event = stripe.webhooks.constructEvent(req.rawBody, sig, webhookSecret);
+    } catch (err) {
+      console.error("Webhook signature verification failed:", err.message);
+      return res.status(400).send(`Webhook Error: ${err.message}`);
+    }
+
+    try {
+      if (event.type === "payment_intent.succeeded") {
+        const intent = event.data.object;
+        await applySuccessfulPayment(intent.metadata, intent.amount, intent.id);
+      } else if (event.type === "checkout.session.completed") {
+        const session = event.data.object;
+        if (session.payment_status === "paid") {
+          await applySuccessfulPayment(
+            session.metadata,
+            session.amount_total,
+            session.payment_intent || session.id
+          );
+        }
+      }
+      res.json({ received: true });
+    } catch (err) {
+      // Return 5xx so Stripe retries instead of silently dropping the update.
+      console.error("Error updating Firestore after payment:", err);
+      res.status(500).send("Webhook handler failed");
+    }
+  });

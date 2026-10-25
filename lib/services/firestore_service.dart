@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
 import '../models/rfq_model.dart';
 import '../models/rfq_bid_model.dart';
@@ -20,6 +21,7 @@ import '../models/invitation_model.dart';
 import '../models/join_request_model.dart';
 import '../models/notification_model.dart';
 import '../models/category_model.dart';
+import '../constants/app_constants.dart';
 import '../utils/seed_data_guard.dart';
 import '../utils/app_exception.dart';
 import '../utils/category_match.dart';
@@ -97,8 +99,17 @@ class FirestoreService {
     final doc = await _db.collection('companies').doc(companyId).get();
     if (doc.exists && doc.data() != null) {
       final data = _requireDocData(doc);
-      if (data['id'] == null || (data['id'] as String).isEmpty) {
-        data['id'] = doc.id;
+      // Always prefer the Firestore document ID — a stale/wrong `id` field
+      // breaks partnership request matching between CEO and supplier panels.
+      final legacyId = (data['id'] ?? '').toString().trim();
+      data['id'] = doc.id;
+      if (legacyId.isNotEmpty && legacyId != doc.id) {
+        // Fire-and-forget repair so future reads/writes stay consistent.
+        // ignore: unawaited_futures
+        _repairCompanyIdMismatch(
+          canonicalCompanyId: doc.id,
+          legacyCompanyId: legacyId,
+        );
       }
       return CompanyModel.fromMap(data);
     }
@@ -108,12 +119,55 @@ class FirestoreService {
   Future<List<CompanyModel>> getCompanies() async {
     final snap = await _db.collection('companies').get();
     return snap.docs.map((doc) {
-      final data = doc.data();
-      if (data['id'] == null || (data['id'] as String).isEmpty) {
-        data['id'] = doc.id;
+      final data = Map<String, dynamic>.from(doc.data());
+      final legacyId = (data['id'] ?? '').toString().trim();
+      data['id'] = doc.id;
+      if (legacyId.isNotEmpty && legacyId != doc.id) {
+        // ignore: unawaited_futures
+        _repairCompanyIdMismatch(
+          canonicalCompanyId: doc.id,
+          legacyCompanyId: legacyId,
+        );
       }
       return CompanyModel.fromMap(data);
     }).toList();
+  }
+
+  /// Fixes company docs + partnershipRequests that stored a non-doc `id`.
+  Future<void> _repairCompanyIdMismatch({
+    required String canonicalCompanyId,
+    required String legacyCompanyId,
+  }) async {
+    try {
+      await _db.collection('companies').doc(canonicalCompanyId).set({
+        'id': canonicalCompanyId,
+      }, SetOptions(merge: true));
+
+      final badRequests = await _db
+          .collection('partnershipRequests')
+          .where('companyId', isEqualTo: legacyCompanyId)
+          .get();
+      if (badRequests.docs.isEmpty) return;
+
+      var batch = _db.batch();
+      var ops = 0;
+      for (final doc in badRequests.docs) {
+        batch.update(doc.reference, {'companyId': canonicalCompanyId});
+        ops++;
+        if (ops >= 400) {
+          await batch.commit();
+          batch = _db.batch();
+          ops = 0;
+        }
+      }
+      if (ops > 0) await batch.commit();
+      debugPrint(
+        'Repaired ${badRequests.docs.length} partnershipRequests '
+        'companyId $legacyCompanyId → $canonicalCompanyId',
+      );
+    } catch (e) {
+      debugPrint('Company id repair skipped: $e');
+    }
   }
 
   Future<void> saveCompany(CompanyModel company) async {
@@ -126,10 +180,13 @@ class FirestoreService {
         .collection('suppliers')
         .snapshots()
         .map(
-          (snap) =>
-              snap.docs
-                  .map((doc) => SupplierModel.fromMap(doc.data() as Map<String, dynamic>))
-                  .toList(),
+          (snap) => snap.docs.map((doc) {
+            final data = Map<String, dynamic>.from(
+              doc.data() as Map<String, dynamic>,
+            );
+            data['id'] = doc.id;
+            return SupplierModel.fromMap(data);
+          }).toList(),
         );
   }
 
@@ -141,7 +198,51 @@ class FirestoreService {
     final doc = await _db.collection('suppliers').doc(supplierUid).get();
     if (!doc.exists || doc.data() == null) return null;
     final data = _requireDocData(doc);
+    final legacyId = (data['id'] ?? '').toString().trim();
+    if (legacyId.isNotEmpty && legacyId != doc.id) {
+      // ignore: unawaited_futures
+      _repairSupplierIdMismatch(
+        canonicalSupplierId: doc.id,
+        legacySupplierId: legacyId,
+      );
+    }
     return SupplierModel.fromMap({...data, 'id': doc.id});
+  }
+
+  Future<void> _repairSupplierIdMismatch({
+    required String canonicalSupplierId,
+    required String legacySupplierId,
+  }) async {
+    try {
+      await _db.collection('suppliers').doc(canonicalSupplierId).set({
+        'id': canonicalSupplierId,
+      }, SetOptions(merge: true));
+
+      final badRequests = await _db
+          .collection('partnershipRequests')
+          .where('supplierId', isEqualTo: legacySupplierId)
+          .get();
+      if (badRequests.docs.isEmpty) return;
+
+      var batch = _db.batch();
+      var ops = 0;
+      for (final doc in badRequests.docs) {
+        batch.update(doc.reference, {'supplierId': canonicalSupplierId});
+        ops++;
+        if (ops >= 400) {
+          await batch.commit();
+          batch = _db.batch();
+          ops = 0;
+        }
+      }
+      if (ops > 0) await batch.commit();
+      debugPrint(
+        'Repaired ${badRequests.docs.length} partnershipRequests '
+        'supplierId $legacySupplierId → $canonicalSupplierId',
+      );
+    } catch (e) {
+      debugPrint('Supplier id repair skipped: $e');
+    }
   }
 
   /// Finds a supplier document by email (exact, then lowercase fallback).
@@ -1606,8 +1707,9 @@ class FirestoreService {
     }
   }
 
-  /// Writes a prompt to [ai_jobs] and waits for [onAiJobCreated] to fill it.
-  /// Used instead of the `generateAiText` HTTPS callable, which 403s on Flutter web.
+  /// Uses Firestore [ai_jobs] + [onAiJobCreated] (reliable on web).
+  /// On mobile, tries the Gen2 callable first, then falls back to jobs.
+  /// In [AppConstants.defenseDemoMode], uses a local reply if cloud AI fails.
   Future<String> generateAiText({
     required String uid,
     required String prompt,
@@ -1620,31 +1722,141 @@ class FirestoreService {
       throw AppException('Prompt is too long.', 'invalid-argument');
     }
 
+    if (AppConstants.defenseDemoMode) {
+      // Defence: skip slow cloud wait when Blaze/billing blocks Functions.
+      try {
+        final text = await _generateAiTextViaCallable(trimmed)
+            .timeout(const Duration(seconds: 12));
+        if (text.isNotEmpty) return text;
+      } catch (e) {
+        debugPrint('AI callable skipped for defence demo: $e');
+      }
+      debugPrint('AI defence demo reply (local)');
+      return _defenseDemoAiReply(trimmed);
+    }
+
+    // Web: Gen2 callable often hits Cloud Run IAM ("not authenticated") even
+    // when the user is signed in. Firestore trigger has no public HTTP/IAM.
+    if (kIsWeb) {
+      return _generateAiTextViaJob(uid: uid, prompt: trimmed);
+    }
+
+    try {
+      final text = await _generateAiTextViaCallable(trimmed);
+      if (text.isNotEmpty) return text;
+    } on AppException catch (e) {
+      // Surface real product errors; fall back to ai_jobs for IAM/CORS/network.
+      final code = (e.code ?? '').toLowerCase();
+      final msg = e.message.toLowerCase();
+      final isProductError = code == 'invalid-argument' ||
+          msg.contains('basic plan') ||
+          msg.contains('require the basic') ||
+          msg.contains('prompt is too long') ||
+          msg.contains('missing prompt');
+      if (isProductError) rethrow;
+      debugPrint('AI callable failed (${e.code}): ${e.message} — trying ai_jobs');
+    } catch (e) {
+      debugPrint('AI callable failed: $e — trying ai_jobs');
+    }
+
+    return _generateAiTextViaJob(uid: uid, prompt: trimmed);
+  }
+
+  /// Local assistant text for defence when Cloud Functions cannot run.
+  String _defenseDemoAiReply(String prompt) {
+    final p = prompt.toLowerCase();
+    final looksLikeCompare = p.contains('price') ||
+        p.contains('compare') ||
+        p.contains('supplier') ||
+        p.contains('rs') ||
+        p.contains('pkr') ||
+        p.contains('cement') ||
+        p.contains('steel') ||
+        p.contains('brick');
+    if (looksLikeCompare) {
+      return 'Based on the rates in your prompt, prefer the lowest delivered '
+          'price that still meets quality and delivery needs. Check total cost '
+          '(unit price + delivery), recent price trend, and supplier reliability '
+          'before ordering. If two quotes are close, choose the supplier with '
+          'faster delivery and fewer past disputes.';
+    }
+    if (p.contains('order') || p.contains('approv')) {
+      return 'Review amount against your auto-approval threshold, confirm '
+          'material and quantity match the field request, then approve or '
+          'reject with a clear note for the field user and supplier.';
+    }
+    return 'RateBridge tip: use live supplier rates, compare total landed cost, '
+        'and keep orders within your company approval rules. Ask about a '
+        'specific material or quote for a more detailed recommendation.';
+  }
+
+  Future<String> _generateAiTextViaCallable(String prompt) async {
+    final callable = FirebaseFunctions.instanceFor(region: 'us-central1')
+        .httpsCallable(
+      'generateAiText',
+      options: HttpsCallableOptions(timeout: const Duration(seconds: 90)),
+    );
+    debugPrint('AI callable generateAiText (prompt ${prompt.length} chars)');
+    try {
+      final result = await callable.call(<String, dynamic>{'prompt': prompt});
+      final data = result.data;
+      String text = '';
+      if (data is Map) {
+        text = (data['text'] as String?)?.trim() ?? '';
+      } else if (data is String) {
+        text = data.trim();
+      }
+      if (text.isEmpty) {
+        throw AppException('The assistant returned an empty response.');
+      }
+      debugPrint('AI callable complete (${text.length} chars)');
+      return text;
+    } on FirebaseFunctionsException catch (e) {
+      debugPrint(
+        'AI callable error: code=${e.code} message=${e.message} details=${e.details}',
+      );
+      final details = e.details;
+      String message = (e.message ?? '').trim();
+      if (details is String && details.trim().isNotEmpty) {
+        message = details.trim();
+      } else if (details is Map && details['message'] is String) {
+        final nested = (details['message'] as String).trim();
+        if (nested.isNotEmpty) message = nested;
+      }
+      throw AppException(
+        message.isNotEmpty
+            ? message
+            : 'The assistant could not complete that request.',
+        e.code,
+      );
+    }
+  }
+
+  Future<String> _generateAiTextViaJob({
+    required String uid,
+    required String prompt,
+  }) async {
     final ref = _db.collection('ai_jobs').doc();
-    debugPrint('AI job ${ref.id}: creating (prompt ${trimmed.length} chars)');
+    debugPrint('AI job ${ref.id}: creating (prompt ${prompt.length} chars)');
     await ref.set({
       'uid': uid,
-      'prompt': trimmed,
+      'prompt': prompt,
       'status': 'pending',
       'createdAt': FieldValue.serverTimestamp(),
     });
 
-    final done = await ref.snapshots().firstWhere((snap) {
-      final status = snap.data()?['status']?.toString();
-      return status == 'complete' || status == 'error';
-    }).timeout(
-      const Duration(seconds: 60),
-      onTimeout: () {
-        debugPrint('AI job ${ref.id}: timed out still pending');
-        throw AppException(
-          'The assistant timed out. Please try again.',
-          'deadline-exceeded',
-        );
-      },
-    );
+    // Cold starts + Groq can exceed 60s; poll server in case web snapshots stall.
+    DocumentSnapshot<Map<String, dynamic>> done;
+    try {
+      done = await _waitForAiJobResult(ref)
+          .timeout(const Duration(seconds: 120));
+    } on TimeoutException {
+      debugPrint('AI job ${ref.id}: timed out still pending');
+      done = await ref.get(const GetOptions(source: Source.server));
+    }
 
     final data = done.data() ?? {};
-    final status = data['status']?.toString();
+    final status = data['status']?.toString() ?? 'pending';
     if (status == 'error') {
       final reason = (data['error'] as String?)?.trim();
       debugPrint('AI job ${ref.id}: error ${reason ?? '(no details)'}');
@@ -1654,6 +1866,18 @@ class FirestoreService {
             : 'The assistant could not complete that request.',
       );
     }
+    if (status != 'complete') {
+      if (status == 'processing') {
+        throw AppException(
+          'The assistant is still working on the server. Please try again in a moment.',
+          'deadline-exceeded',
+        );
+      }
+      throw AppException(
+        'The assistant timed out. Please try again.',
+        'deadline-exceeded',
+      );
+    }
 
     final text = (data['text'] as String?)?.trim() ?? '';
     debugPrint('AI job ${ref.id}: complete (${text.length} chars)');
@@ -1661,6 +1885,43 @@ class FirestoreService {
       throw AppException('The assistant returned an empty response.');
     }
     return text;
+  }
+
+  Future<DocumentSnapshot<Map<String, dynamic>>> _waitForAiJobResult(
+    DocumentReference<Map<String, dynamic>> ref,
+  ) async {
+    DocumentSnapshot<Map<String, dynamic>>? result;
+
+    bool isTerminal(DocumentSnapshot<Map<String, dynamic>> snap) {
+      final status = snap.data()?['status']?.toString();
+      return status == 'complete' || status == 'error';
+    }
+
+    final sub = ref.snapshots().listen((snap) {
+      if (isTerminal(snap)) result = snap;
+    });
+
+    try {
+      final first = await ref.get(const GetOptions(source: Source.server));
+      if (isTerminal(first)) return first;
+
+      final deadline = DateTime.now().add(const Duration(seconds: 115));
+      while (DateTime.now().isBefore(deadline)) {
+        if (result != null) return result!;
+        await Future<void>.delayed(const Duration(milliseconds: 1500));
+        if (result != null) return result!;
+        try {
+          final polled = await ref.get(const GetOptions(source: Source.server));
+          if (isTerminal(polled)) return polled;
+        } catch (e) {
+          debugPrint('AI job poll skipped: $e');
+        }
+      }
+      if (result != null) return result!;
+      return await ref.get(const GetOptions(source: Source.server));
+    } finally {
+      await sub.cancel();
+    }
   }
 
   Stream<List<RfqModel>> streamCompanyRfqs(String companyId) {

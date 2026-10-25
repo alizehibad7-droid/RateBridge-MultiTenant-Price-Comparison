@@ -45,7 +45,7 @@ async function callGroqOnce(prompt, apiKey, model) {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
-      timeout: 45000,
+      timeout: 60000,
       validateStatus: () => true,
     },
   );
@@ -210,13 +210,24 @@ async function assertAiAccessForUid(uid) {
 
 // Firestore trigger — no public HTTP/IAM. Flutter writes ai_jobs/{id} and
 // listens for the response. This avoids the 403 on generateAiText.
+// 512MB / 120s reduces cold-start + Groq timeouts the client used to hit at 60s.
 exports.onAiJobCreated = functions
   .region('us-central1')
-  .runWith({ timeoutSeconds: 60, memory: '256MB' })
+  .runWith({ timeoutSeconds: 120, memory: '512MB' })
   .firestore.document('ai_jobs/{jobId}')
   .onCreate(async (snap) => {
     const data = snap.data() || {};
     const prompt = typeof data.prompt === 'string' ? data.prompt.trim() : '';
+
+    try {
+      await snap.ref.update({
+        status: 'processing',
+        startedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      console.warn('Could not mark AI job processing:', e.message || e);
+    }
+
     if (!prompt) {
       await snap.ref.update({ status: 'error', error: 'Missing prompt.' });
       return;
@@ -247,8 +258,8 @@ exports.generateAiText = onCall(
     region: 'us-central1',
     cors: true,
     invoker: 'public',
-    timeoutSeconds: 60,
-    memory: '256MiB',
+    timeoutSeconds: 120,
+    memory: '512MiB',
   },
   async (request) => {
     if (!request.auth) {

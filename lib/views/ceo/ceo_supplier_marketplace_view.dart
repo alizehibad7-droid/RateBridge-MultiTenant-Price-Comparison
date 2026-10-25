@@ -605,21 +605,35 @@ class _SupplierMarketCard extends StatelessWidget {
                       ? null
                       : messageController.text.trim(),
                 );
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      behavior: SnackBarBehavior.floating,
-                      content: Row(
-                        children: [
-                          const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
-                          const SizedBox(width: 12),
-                          Text('Request sent to ${supplier.name}'),
-                        ],
-                      ),
-                      backgroundColor: CeoColors.green,
+                if (!context.mounted) return;
+                final err = ceoVM.errorMessage;
+                final ok = ceoVM.successMessage;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    behavior: SnackBarBehavior.floating,
+                    backgroundColor:
+                        err != null ? CeoColors.red : CeoColors.green,
+                    content: Row(
+                      children: [
+                        Icon(
+                          err != null
+                              ? Icons.error_outline_rounded
+                              : Icons.check_circle_rounded,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            err ??
+                                ok ??
+                                'Request sent to ${supplier.name}',
+                          ),
+                        ),
+                      ],
                     ),
-                  );
-                }
+                  ),
+                );
               },
               icon: const Icon(Icons.send_rounded),
               label: const Text('SEND REQUEST'),

@@ -113,6 +113,7 @@ class SupplierViewModel extends ChangeNotifier {
   StreamSubscription? _statusSubscription;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _partnershipRequestsSub;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _linkedCompaniesSub;
+  String? _partnershipWatchSupplierId;
   List<PartnershipRequestModel> _allPartnershipRequests = [];
   final Map<String, PartnershipRequestModel> _latestPartnershipByCompanyId = {};
   final Map<String, String> _linkedCompanyStatusById = {};
@@ -506,45 +507,74 @@ class SupplierViewModel extends ChangeNotifier {
   void ensurePartnershipStatusWatch() {
     final supplierId = _supplierUid;
     if (supplierId == null || supplierId.isEmpty) return;
-    if (_partnershipRequestsSub != null) return;
+    if (_partnershipRequestsSub != null &&
+        _partnershipWatchSupplierId == supplierId) {
+      return;
+    }
 
-    _partnershipRequestsSub = _db.collection(FirestorePaths.partnershipRequestsCol)
-        .where('supplierId', isEqualTo: supplierId).snapshots().listen((snap) {
-            final all = snap.docs.map((doc) => PartnershipRequestModel.fromMap(doc.id, doc.data())).toList();
-            _latestPartnershipByCompanyId.clear();
-            final grouped = <String, List<PartnershipRequestModel>>{};
-            for (final req in all) { grouped.putIfAbsent(req.companyId, () => []).add(req); }
-            for (final entry in grouped.entries) {
-              entry.value.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-              _latestPartnershipByCompanyId[entry.key] = entry.value.first;
-            }
-            _allPartnershipRequests = _sortPartnershipRequestsNewest(all);
-            _incomingPartnershipRequests = _sortPartnershipRequestsNewest(all.where((r) => r.initiatedBy == 'ceo'));
-            _outgoingPartnershipRequests = _sortPartnershipRequestsNewest(all.where((r) => r.initiatedBy == 'supplier'));
-            _partnershipListsReady = true;
-            _rebuildActivePartnerCompanyIds();
-            _pruneCompaniesWithPendingRequests();
-            notifyListeners();
-          }, onError: (_) {
-            _partnershipListsReady = true;
-            _error = 'Failed to load partnership requests.';
-            notifyListeners();
-          });
+    _partnershipRequestsSub?.cancel();
+    _linkedCompaniesSub?.cancel();
+    _partnershipWatchSupplierId = supplierId;
 
-    _linkedCompaniesSub = _db.collection(FirestorePaths.suppliersCol).doc(supplierId).collection('companies').snapshots().listen((snap) {
-            _linkedCompanyStatusById
-              ..clear()
-              ..addEntries(
-                snap.docs.map((doc) {
-                  final status =
-                      (doc.data()['status'] as String?)?.trim().toLowerCase() ??
-                          '';
-                  return MapEntry(doc.id, status);
-                }),
-              );
-            _rebuildActivePartnerCompanyIds();
-            notifyListeners();
-          }, onError: (_) => notifyListeners());
+    _partnershipRequestsSub = _db
+        .collection(FirestorePaths.partnershipRequestsCol)
+        .where('supplierId', isEqualTo: supplierId)
+        .snapshots()
+        .listen((snap) {
+      final all = snap.docs
+          .map((doc) => PartnershipRequestModel.fromMap(doc.id, doc.data()))
+          .toList();
+      _latestPartnershipByCompanyId.clear();
+      final grouped = <String, List<PartnershipRequestModel>>{};
+      for (final req in all) {
+        grouped.putIfAbsent(req.companyId, () => []).add(req);
+      }
+      for (final entry in grouped.entries) {
+        entry.value.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        _latestPartnershipByCompanyId[entry.key] = entry.value.first;
+      }
+      _allPartnershipRequests = _sortPartnershipRequestsNewest(all);
+      _incomingPartnershipRequests = _sortPartnershipRequestsNewest(
+        all.where((r) => r.isCeoInitiated),
+      );
+      _outgoingPartnershipRequests = _sortPartnershipRequestsNewest(
+        all.where((r) => r.isSupplierInitiated),
+      );
+      _partnershipListsReady = true;
+      _rebuildActivePartnerCompanyIds();
+      _pruneCompaniesWithPendingRequests();
+      notifyListeners();
+    }, onError: (e) {
+      debugPrint('Supplier partnership watch failed: $e');
+      _partnershipRequestsSub?.cancel();
+      _partnershipRequestsSub = null;
+      _partnershipWatchSupplierId = null;
+      _partnershipListsReady = true;
+      _error = 'Failed to load partnership requests.';
+      notifyListeners();
+    });
+
+    _linkedCompaniesSub = _db
+        .collection(FirestorePaths.suppliersCol)
+        .doc(supplierId)
+        .collection('companies')
+        .snapshots()
+        .listen((snap) {
+      _linkedCompanyStatusById
+        ..clear()
+        ..addEntries(
+          snap.docs.map((doc) {
+            final status =
+                (doc.data()['status'] as String?)?.trim().toLowerCase() ?? '';
+            return MapEntry(doc.id, status);
+          }),
+        );
+      _rebuildActivePartnerCompanyIds();
+      notifyListeners();
+    }, onError: (e) {
+      debugPrint('Supplier linked-companies watch failed: $e');
+      notifyListeners();
+    });
   }
 
   /// Active partners only: explicit active/approved link, no pending request.
@@ -631,10 +661,52 @@ class SupplierViewModel extends ChangeNotifier {
     _partnershipHubDataLoaded = false;
     notifyListeners();
     try {
-      await Future.wait([loadLinkedCompanies(), loadCompanyDirectory(), _loadAllSupplierOrders(), _loadAllSupplierTransactions(), _loadAllSupplierRatings()]);
+      await _repairLegacySupplierPartnershipIds();
+      await Future.wait([
+        loadLinkedCompanies(),
+        loadCompanyDirectory(),
+        _loadAllSupplierOrders(),
+        _loadAllSupplierTransactions(),
+        _loadAllSupplierRatings(),
+      ]);
+      // Restart watch after repair so fixed requests appear immediately.
+      _partnershipRequestsSub?.cancel();
+      _partnershipRequestsSub = null;
+      _partnershipWatchSupplierId = null;
+      ensurePartnershipStatusWatch();
     } finally {
       _partnershipHubDataLoaded = true;
       notifyListeners();
+    }
+  }
+
+  /// Fixes partnershipRequests that used a stale suppliers.id field value.
+  Future<void> _repairLegacySupplierPartnershipIds() async {
+    final uid = _supplierUid;
+    if (uid == null || uid.isEmpty) return;
+    try {
+      final doc = await _db.collection('suppliers').doc(uid).get();
+      if (!doc.exists) return;
+      final legacyId = (doc.data()?['id'] ?? '').toString().trim();
+      if (legacyId.isEmpty || legacyId == doc.id) return;
+
+      await doc.reference.set({'id': doc.id}, SetOptions(merge: true));
+      final bad = await _db
+          .collection(FirestorePaths.partnershipRequestsCol)
+          .where('supplierId', isEqualTo: legacyId)
+          .get();
+      if (bad.docs.isEmpty) return;
+      final batch = _db.batch();
+      for (final d in bad.docs) {
+        batch.update(d.reference, {'supplierId': doc.id});
+      }
+      await batch.commit();
+      debugPrint(
+        'Repaired ${bad.docs.length} partnershipRequests supplierId '
+        '$legacyId → ${doc.id}',
+      );
+    } catch (e) {
+      debugPrint('Supplier partnership id repair skipped: $e');
     }
   }
 
@@ -1188,13 +1260,41 @@ class SupplierViewModel extends ChangeNotifier {
 
   Future<bool> sendPartnershipRequest(String companyId, {String? message}) async {
     if (_supplierUid == null) return false;
-    _isLoading = true; notifyListeners();
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
     try {
+      // Touch supplier doc so any legacy id mismatch is repaired before create.
+      await _db.collection('suppliers').doc(_supplierUid!).get();
       final company = await _companyRepo.getCompanyById(companyId);
-      if (company == null) return false;
-      await _partnershipRepo.createRequest(companyId: companyId, companyName: company.name, supplierId: _supplierUid!, supplierName: _profile?.name ?? 'Supplier', initiatedBy: 'supplier', message: message, supplierEmail: _profile?.email, supplierCity: _profile?.city, supplierCategories: [], supplierRating: averageRating);
+      if (company == null) {
+        _error = 'Company not found. Please refresh and try again.';
+        return false;
+      }
+      await _partnershipRepo.createRequest(
+        companyId: company.id,
+        companyName: company.name,
+        supplierId: _supplierUid!,
+        supplierName: _profile?.name ?? 'Supplier',
+        initiatedBy: 'supplier',
+        message: message,
+        supplierEmail: _profile?.email,
+        supplierCity: _profile?.city,
+        supplierCategories: [],
+        supplierRating: averageRating,
+      );
+      ensurePartnershipStatusWatch();
       return true;
-    } catch (e) { _error = e.toString(); return false; } finally { _isLoading = false; notifyListeners(); }
+    } on AppException catch (e) {
+      _error = e.message;
+      return false;
+    } catch (e) {
+      _error = e.toString();
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
   Future<String?> acceptPartnershipRequest(String requestId) async {
@@ -1516,8 +1616,9 @@ class SupplierViewModel extends ChangeNotifier {
     _statusSubscription?.cancel(); _statusSubscription = null;
     _partnershipRequestsSub?.cancel(); _partnershipRequestsSub = null;
     _linkedCompaniesSub?.cancel(); _linkedCompaniesSub = null;
+    _partnershipWatchSupplierId = null;
     _linkedCompanyStatusById.clear();
-    _activePartnerCompanyIds.clear();
+  _activePartnerCompanyIds.clear();
     _companiesSubscription?.cancel(); _companiesSubscription = null;
     _materialsSubscription?.cancel(); _materialsSubscription = null;
     _ordersSubscription?.cancel(); _ordersSubscription = null;

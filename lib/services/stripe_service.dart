@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../constants/app_constants.dart';
 import '../utils/app_exception.dart';
 
 enum StripePayOutcome {
@@ -38,6 +41,14 @@ class StripeService {
     int? amountPKR,
     List<String>? transactionIds,
   }) async {
+    if (AppConstants.defenseDemoMode) {
+      throw AppException(
+        'Stripe needs Firebase Blaze billing (not available for this demo). '
+        'Subscription UI and plans are ready — live checkout after Blaze is enabled.',
+        'unavailable',
+      );
+    }
+
     final uid = _auth.currentUser?.uid;
     if (uid == null || uid.isEmpty) {
       throw AppException('Please sign in again and retry.', 'unauthenticated');
@@ -288,26 +299,36 @@ class StripeService {
       ...payload,
     });
 
-    final done = await ref.snapshots().firstWhere((snap) {
-      final status = snap.data()?['status']?.toString();
-      return status == 'complete' || status == 'error';
-    }).timeout(
-      const Duration(seconds: 60),
-      onTimeout: () {
-        throw AppException(
-          'Payment timed out. Please try again.',
-          'deadline-exceeded',
-        );
-      },
-    );
+    // Wait up to 120s — Cloud Function cold starts can exceed 60s.
+    // Snapshots + periodic server polls (web listeners can stall).
+    DocumentSnapshot<Map<String, dynamic>> done;
+    try {
+      done = await _waitForJobResult(ref)
+          .timeout(const Duration(seconds: 120));
+    } on TimeoutException {
+      done = await ref.get(const GetOptions(source: Source.server));
+    }
 
     final data = done.data() ?? {};
-    if (data['status']?.toString() == 'error') {
+    final status = data['status']?.toString() ?? 'pending';
+    if (status == 'error') {
       final reason = (data['error'] as String?)?.trim();
       throw AppException(
         (reason != null && reason.isNotEmpty)
             ? reason
             : 'Payment failed. Please try again.',
+      );
+    }
+    if (status != 'complete') {
+      if (status == 'processing') {
+        throw AppException(
+          'Payment is still starting on the server. Please try again in a moment.',
+          'deadline-exceeded',
+        );
+      }
+      throw AppException(
+        'Payment timed out before Stripe opened. Please try again.',
+        'deadline-exceeded',
       );
     }
 
@@ -317,6 +338,45 @@ class StripeService {
       throw AppException('Payment could not be started. Please try again.');
     }
     return value;
+  }
+
+  /// Resolves when the job doc reaches complete|error.
+  Future<DocumentSnapshot<Map<String, dynamic>>> _waitForJobResult(
+    DocumentReference<Map<String, dynamic>> ref,
+  ) async {
+    DocumentSnapshot<Map<String, dynamic>>? result;
+
+    bool isTerminal(DocumentSnapshot<Map<String, dynamic>> snap) {
+      final status = snap.data()?['status']?.toString();
+      return status == 'complete' || status == 'error';
+    }
+
+    final sub = ref.snapshots().listen((snap) {
+      if (isTerminal(snap)) result = snap;
+    });
+
+    try {
+      // Immediate server read in case the function already finished.
+      final first = await ref.get(const GetOptions(source: Source.server));
+      if (isTerminal(first)) return first;
+
+      final deadline = DateTime.now().add(const Duration(seconds: 115));
+      while (DateTime.now().isBefore(deadline)) {
+        if (result != null) return result!;
+        await Future<void>.delayed(const Duration(milliseconds: 1500));
+        if (result != null) return result!;
+        try {
+          final polled = await ref.get(const GetOptions(source: Source.server));
+          if (isTerminal(polled)) return polled;
+        } catch (e) {
+          debugPrint('Stripe job poll skipped: $e');
+        }
+      }
+      if (result != null) return result!;
+      return await ref.get(const GetOptions(source: Source.server));
+    } finally {
+      await sub.cancel();
+    }
   }
 
   String _webReturnUrl({

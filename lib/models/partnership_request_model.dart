@@ -96,8 +96,14 @@ class PartnershipRequestModel {
 
   static String _normalizeInitiatedBy(String? value) {
     if (value == null) return 'supplier';
-    final v = value.toLowerCase();
-    if (v == 'company' || v == 'ceo') return 'ceo';
+    final v = value.trim().toLowerCase();
+    if (v == 'company' ||
+        v == 'ceo' ||
+        v == 'company_ceo' ||
+        v == 'ceo_initiated' ||
+        v == 'invite') {
+      return 'ceo';
+    }
     return 'supplier';
   }
 

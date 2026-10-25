@@ -2,6 +2,15 @@
 class AppConstants {
   AppConstants._();
 
+  /// When true, CEO / Supplier / Field User can only use the app on Android
+  /// (phone). Web/desktop redirects those roles away from the main app.
+  static const bool enforcePhoneOnlyRoles = true;
+
+  /// TEMP for project defence: when true, AI uses a local reply if Cloud
+  /// Functions are unavailable (no Blaze / billing). Keep `false` while
+  /// Blaze is active and functions are deployed.
+  static const bool defenseDemoMode = false;
+
   static const double defaultMaxOutstandingCommission = 50000;
   static const int defaultMaxUnsettledAgeDays = 30;
 

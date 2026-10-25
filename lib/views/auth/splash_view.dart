@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../constants/app_colors.dart';
+import '../../constants/app_constants.dart';
 import '../../constants/route_names.dart';
 import '../../viewmodels/auth_viewmodel.dart';
 
@@ -125,7 +126,7 @@ class _SplashViewState extends State<SplashView>
         isAllowed = true;
       }
     } else if (role == 'ceo' || role == 'supplier' || role == 'fielduser') {
-      if (isAndroid) {
+      if (!AppConstants.enforcePhoneOnlyRoles || isAndroid) {
         isAllowed = true;
       }
     } else {

@@ -149,12 +149,23 @@ class PlanLimitService {
     if (plan.maxSuppliers == -1) return;
 
     try {
-      final count =
-          await links
-              .where('status', whereIn: const ['active', 'approved'])
-              .count()
-              .get();
-      if ((count.count ?? 0) >= plan.maxSuppliers) {
+      int activeCount;
+      try {
+        final count = await links
+            .where('status', whereIn: const ['active', 'approved'])
+            .count()
+            .get();
+        activeCount = count.count ?? 0;
+      } catch (_) {
+        // Fallback when count()/index is unavailable (common on web).
+        final snap = await links.get();
+        activeCount = snap.docs.where((doc) {
+          final status =
+              (doc.data()['status'] as String?)?.trim().toLowerCase() ?? '';
+          return status == 'active' || status == 'approved';
+        }).length;
+      }
+      if (activeCount >= plan.maxSuppliers) {
         throw AppException(
           'Supplier limit reached for the ${plan.name} plan '
               '(${plan.maxSuppliers}). Please upgrade to link another supplier.',
@@ -165,12 +176,14 @@ class PlanLimitService {
       rethrow;
     } catch (e) {
       final msg = e.toString().toLowerCase();
-      if (msg.contains('permission') || msg.contains('denied') || msg.contains('insufficient') || msg.contains('missing')) {
+      if (msg.contains('permission') ||
+          msg.contains('denied') ||
+          msg.contains('insufficient') ||
+          msg.contains('missing')) {
         return;
       }
-      throw AppException(
-        'Could not verify supplier capacity.',
-      );
+      debugPrint('ensureSupplierCapacity fallback allow: $e');
+      // Do not block invites on unverifiable capacity — accept path still enforces.
     }
   }
 
