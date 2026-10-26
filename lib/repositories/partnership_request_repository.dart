@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
@@ -183,45 +185,146 @@ class PartnershipRequestRepository {
     if (req.status != 'pending') {
       throw AppException('This request is no longer pending.');
     }
+    if (req.companyId.isEmpty || req.supplierId.isEmpty) {
+      throw AppException(
+        'Partnership request is missing company or supplier.',
+      );
+    }
+
+    // Capacity check before linking (subscription-aware).
+    await PlanLimitService.ensureSupplierCapacity(
+      _db,
+      req.companyId,
+      supplierId: req.supplierId,
+    );
+
+    // Client-first accept: Cloud Function has been unreliable (often never
+    // invoked / not-found). Write links directly, then best-effort CF notify.
+    await _acceptLocally(
+      requestId: requestId,
+      companyId: req.companyId,
+      supplierId: req.supplierId,
+    );
 
     try {
       await _functions
           .httpsCallable('acceptPartnershipRequest')
-          .call(<String, dynamic>{'requestId': requestId});
-      // Cloud Function already updates the request + link docs.
-      return;
-    } on FirebaseFunctionsException catch (e) {
-      final code = e.code.toLowerCase();
-      // Real business errors — do not fake-accept on the client.
-      if (code == 'resource-exhausted' ||
-          code == 'failed-precondition' ||
-          code == 'permission-denied' ||
-          code == 'unauthenticated' ||
-          code == 'not-found' ||
-          code == 'invalid-argument') {
-        throw AppException(
-          (e.message ?? '').trim().isNotEmpty
-              ? e.message!.trim()
-              : 'Could not accept partnership request.',
-          e.code,
-        );
-      }
-      // Transport / cold-start style failures — fall back to client link write.
-      debugPrint(
-        'acceptPartnershipRequest CF failed (${e.code}): ${e.message} — client fallback',
-      );
+          .call(<String, dynamic>{'requestId': requestId})
+          .timeout(const Duration(seconds: 8));
     } catch (e) {
-      debugPrint('acceptPartnershipRequest CF failed: $e — client fallback');
+      // Already accepted locally — ignore callable failures.
+      debugPrint('acceptPartnershipRequest CF skipped after local accept: $e');
+    }
+  }
+
+  /// Marks the request accepted and creates both-side partnership link docs.
+  Future<void> _acceptLocally({
+    required String requestId,
+    required String companyId,
+    required String supplierId,
+  }) async {
+    final supplierSnap =
+        await _db.collection(FirestorePaths.suppliersCol).doc(supplierId).get();
+    if (!supplierSnap.exists) {
+      throw AppException(
+        'Supplier profile not found. Partnership could not be linked.',
+      );
+    }
+    final supplierData = supplierSnap.data()!;
+    final displayName =
+        (supplierData['name'] ?? supplierData['businessName'] ?? 'Supplier')
+            .toString();
+
+    final companySnap =
+        await _db.collection(FirestorePaths.companiesCol).doc(companyId).get();
+    if (!companySnap.exists) {
+      throw AppException(
+        'Company profile not found. Partnership could not be linked.',
+      );
+    }
+    final companyName =
+        (companySnap.data()?['name'] ?? companySnap.data()?['companyName'] ?? '')
+            .toString();
+
+    final existingLink = await _db
+        .collection(FirestorePaths.companiesCol)
+        .doc(companyId)
+        .collection('suppliers')
+        .doc(supplierId)
+        .get();
+    final existingStatus =
+        (existingLink.data()?['status'] as String?)?.trim().toLowerCase() ?? '';
+    final alreadyLinked = existingLink.exists &&
+        (existingStatus == 'active' || existingStatus == 'approved');
+
+    final batch = _db.batch();
+    batch.update(
+      _db.collection(FirestorePaths.partnershipRequestsCol).doc(requestId),
+      {
+        'status': 'accepted',
+        'respondedAt': FieldValue.serverTimestamp(),
+      },
+    );
+    batch.set(
+      _db
+          .collection(FirestorePaths.companiesCol)
+          .doc(companyId)
+          .collection('suppliers')
+          .doc(supplierId),
+      {
+        'id': supplierId,
+        'supplierUid': supplierId,
+        'name': displayName,
+        'businessName':
+            supplierData['businessName'] ?? supplierData['name'] ?? displayName,
+        'supplierName':
+            supplierData['businessName'] ?? supplierData['name'] ?? displayName,
+        'city': supplierData['city'] ?? '',
+        'materialType':
+            supplierData['businessType'] ??
+            supplierData['materialType'] ??
+            'General',
+        'email': supplierData['email'] ?? '',
+        'status': 'active',
+        'linkedAt': FieldValue.serverTimestamp(),
+        'joinedAt': FieldValue.serverTimestamp(),
+      },
+      SetOptions(merge: true),
+    );
+    batch.set(
+      _db
+          .collection(FirestorePaths.suppliersCol)
+          .doc(supplierId)
+          .collection('companies')
+          .doc(companyId),
+      {
+        'id': companyId,
+        'name': companyName,
+        'status': 'active',
+        'joinedAt': FieldValue.serverTimestamp(),
+        'onboardingComplete': false,
+      },
+      SetOptions(merge: true),
+    );
+    if (!alreadyLinked) {
+      batch.set(
+        _db.collection(FirestorePaths.suppliersCol).doc(supplierId),
+        {'totalCompanies': FieldValue.increment(1)},
+        SetOptions(merge: true),
+      );
     }
 
-    await reqRef.update({
-      'status': 'accepted',
-      'respondedAt': FieldValue.serverTimestamp(),
-    });
-    await enrichAcceptedLinkDocs(
-      companyId: req.companyId,
-      supplierId: req.supplierId,
-    );
+    try {
+      await batch.commit();
+    } on FirebaseException catch (e) {
+      debugPrint(
+        'acceptLocally batch failed: code=${e.code} message=${e.message}',
+      );
+      throw AppException(
+        e.message ?? 'Failed to accept partnership request.',
+        e.code,
+      );
+    }
   }
 
   Future<void> withdrawRequest(String requestId) async {

@@ -1298,7 +1298,9 @@ class SupplierViewModel extends ChangeNotifier {
   }
 
   Future<String?> acceptPartnershipRequest(String requestId) async {
-    _isLoading = true; notifyListeners();
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
     try {
       final req = _allPartnershipRequests.cast<PartnershipRequestModel?>().firstWhere(
         (r) => r?.requestId == requestId,
@@ -1312,8 +1314,11 @@ class SupplierViewModel extends ChangeNotifier {
         );
       }
       return req?.companyName;
+    } on AppException catch (e) {
+      _error = e.message;
+      return null;
     } catch (e) {
-      _error = e.toString();
+      _error = e.toString().replaceFirst('Exception: ', '');
       return null;
     } finally {
       _isLoading = false;

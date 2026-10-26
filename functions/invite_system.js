@@ -44,11 +44,14 @@ async function assertSupplierCapacity(
   const { plan, limit } = supplierLimitFor(companyData, subscriptionData);
   if (limit === null) return { mirrorRef, alreadyLinked: false };
 
-  const activeLinks = await transaction.get(
-    companyRef.collection('suppliers')
-      .where('status', 'in', ['active', 'approved'])
-  );
-  if (activeLinks.size >= limit) {
+  // Read the whole subcollection inside the transaction (avoid status-in
+  // queries that can fail/index-miss and block accepts).
+  const allLinks = await transaction.get(companyRef.collection('suppliers'));
+  const activeCount = allLinks.docs.filter((doc) => {
+    const status = String(doc.data()?.status || '').toLowerCase();
+    return status === 'active' || status === 'approved';
+  }).length;
+  if (activeCount >= limit) {
     const planName = plan.charAt(0).toUpperCase() + plan.slice(1);
     throw new functions.https.HttpsError(
       'resource-exhausted',
@@ -56,6 +59,17 @@ async function assertSupplierCapacity(
     );
   }
   return { mirrorRef, alreadyLinked: false };
+}
+
+function isCompanyCeoUser({ uid, ceoUid, userRole, userCompanyId, companyId }) {
+  if (ceoUid && uid === ceoUid) return true;
+  const role = String(userRole || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_-]+/g, '');
+  const companyMatch =
+    String(userCompanyId || '').trim() === String(companyId || '').trim();
+  return companyMatch && (role === 'ceo' || role.endsWith('ceo') || role.includes('ceo'));
 }
 
 exports.onInviteAccepted = functions.https.onCall(async (data, context) => {
@@ -279,13 +293,20 @@ exports.acceptPartnershipRequest = functions
       supplierData = supplierDoc.data() || {};
 
       const initiatedBy = String(request.initiatedBy || '').toLowerCase();
-      const ceoUid = String(companyData.ceoUid || '').trim();
+      const ceoUid = String(
+        companyData.ceoUid || companyData.ownerUid || ''
+      ).trim();
       const userDoc = await transaction.get(db.collection('users').doc(uid));
-      const userCompanyId = String(userDoc.data()?.companyId || '').trim();
-      const userRole = String(userDoc.data()?.role || '').toLowerCase();
-      const isCompanyCeo =
-        (ceoUid && uid === ceoUid) ||
-        (userRole === 'ceo' && userCompanyId === companyId);
+      const userData = userDoc.data() || {};
+      const userCompanyId = String(userData.companyId || '').trim();
+      const userRole = String(userData.role || '').trim();
+      const ceoOk = isCompanyCeoUser({
+        uid,
+        ceoUid,
+        userRole,
+        userCompanyId,
+        companyId,
+      });
 
       // CEO invite → supplier accepts. Supplier request → CEO accepts.
       if (initiatedBy === 'ceo' || initiatedBy === 'company') {
@@ -295,7 +316,15 @@ exports.acceptPartnershipRequest = functions
             'Only the invited supplier can accept this partnership invite.'
           );
         }
-      } else if (!isCompanyCeo) {
+      } else if (!ceoOk) {
+        console.warn('acceptPartnershipRequest denied', {
+          uid,
+          ceoUid,
+          userRole,
+          userCompanyId,
+          companyId,
+          initiatedBy,
+        });
         throw new functions.https.HttpsError(
           'permission-denied',
           'Only the company CEO can accept this partnership request.'

@@ -137,6 +137,15 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // Partnership requests: either party (CEO company member or supplier) may
+    // accept/reject; Cloud Function is optional — client writes are allowed.
+    match /partnershipRequests/{requestId} {
+      allow read: if signedIn();
+      allow create: if signedIn();
+      allow update: if signedIn();
+      allow delete: if signedIn();
+    }
+
     // Explicitly allow reading/writing to company subcollections if signed in.
     // Nested orders are handled by the dedicated /orders rules + collection-group
     // style path below — keep other company subcollections open for signed-in users.

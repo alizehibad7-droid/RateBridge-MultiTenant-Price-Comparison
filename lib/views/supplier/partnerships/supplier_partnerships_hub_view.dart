@@ -619,13 +619,18 @@ class _InvitationCard extends StatelessWidget {
                   onPressed: () async {
                     final name =
                         await vm.acceptPartnershipRequest(request.requestId);
-                    if (context.mounted && name != null) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Partnership accepted with $name'),
+                    if (!context.mounted) return;
+                    final err = vm.error;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          err ??
+                              (name != null
+                                  ? 'Partnership accepted with $name'
+                                  : 'Failed to accept partnership.'),
                         ),
-                      );
-                    }
+                      ),
+                    );
                   },
                   style: ElevatedButton.styleFrom(minimumSize: const Size(0, 36)),
                   child: const Text('Accept'),

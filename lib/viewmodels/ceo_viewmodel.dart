@@ -1189,11 +1189,8 @@ class CeoViewModel extends ChangeNotifier {
 
     final company = _company;
     if (company != null) {
-      final plan = await PlanLimitService.companyPlan(
-        _db,
-        company.id,
-        planKey: company.plan,
-      );
+      // Always resolve via subscriptions doc (source of truth), not stale planKey.
+      final plan = await PlanLimitService.companyPlan(_db, company.id);
       if (plan.maxSuppliers != -1 &&
           _activePartnerSupplierIds.length >= plan.maxSuppliers) {
         _errorMessage =
@@ -1209,6 +1206,7 @@ class CeoViewModel extends ChangeNotifier {
           .doc(reqId)
           .get();
       final reqData = reqSnap.data();
+      debugPrint('CEO accepting partnership request $reqId');
       await _partnershipRepo.acceptRequest(reqId);
       if (reqData != null) {
         final model = PartnershipRequestModel.fromMap(reqId, reqData);
@@ -1229,10 +1227,14 @@ class CeoViewModel extends ChangeNotifier {
       }
       _successMessage = 'Partnership accepted.';
     } on AppException catch (e) {
+      debugPrint('acceptPartnershipRequest AppException: ${e.message}');
       _errorMessage = e.message;
     } catch (e) {
       debugPrint('acceptPartnershipRequest failed: $e');
-      _errorMessage = 'Failed to accept partnership. Please try again.';
+      _errorMessage = e.toString().replaceFirst('Exception: ', '');
+      if (_errorMessage == null || _errorMessage!.isEmpty) {
+        _errorMessage = 'Failed to accept partnership. Please try again.';
+      }
     }
     notifyListeners();
   }

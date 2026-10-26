@@ -32,23 +32,22 @@ class PlanLimitService {
     String companyId, {
     String? planKey,
   }) async {
-    // 1. Use pre-fetched plan if available (avoids permission issues during registration/guest flow)
-    if (planKey != null && planKey.isNotEmpty) {
-      return planForKey(planKey);
-    }
-
     try {
       final company = await db.collection('companies').doc(companyId).get();
       if (!company.exists) {
+        // Registration/guest flows may only know the intended plan key.
+        if (planKey != null && planKey.isNotEmpty) {
+          return planForKey(planKey);
+        }
         throw AppException(
           'Company not found. Please verify your invite or account.',
         );
       }
 
       final companyData = company.data();
-      Object? finalPlanKey = companyData?['plan'] ?? 'free';
+      // Prefer live subscription over a possibly stale companies.plan field.
+      Object? finalPlanKey = companyData?['plan'] ?? planKey ?? 'free';
 
-      // Try to get subscription data (source of truth for active plans)
       try {
         final subscription =
             await db.collection('subscriptions').doc(companyId).get();
@@ -63,6 +62,8 @@ class PlanLimitService {
               (status == 'active' || status == 'admin_granted') && !isExpired;
           if (isActive && data != null && data['plan'] != null) {
             finalPlanKey = data['plan'];
+          } else if (!isActive) {
+            finalPlanKey = 'free';
           }
         }
       } catch (_) {
@@ -71,12 +72,16 @@ class PlanLimitService {
 
       return planForKey(finalPlanKey);
     } catch (e) {
+      if (e is AppException) rethrow;
       final msg = e.toString().toLowerCase();
       // Broad permission check to handle various SDK error formats
-      if (msg.contains('permission') || 
-          msg.contains('denied') || 
+      if (msg.contains('permission') ||
+          msg.contains('denied') ||
           msg.contains('insufficient') ||
           msg.contains('missing')) {
+        if (planKey != null && planKey.isNotEmpty) {
+          return planForKey(planKey);
+        }
         return planForKey('free');
       }
       rethrow;
